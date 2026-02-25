@@ -144,3 +144,28 @@ Commits follow the pattern: `type(scope): description` (e.g., `feat(batching):`,
 1.  **Time Savings:** Reduce the time spent preparing Authorizer "Annual Performance Reports" by 80%.
 2.  **Accuracy:** Zero discrepancies between Emisint-calculated SGP and official MDE-reported growth.
 3.  **Proactive Intervention:** Identify schools "At Risk" of non-compliance at least 4 months before state index scores are released.
+
+
+## VERY IMPORTANT
+First, analyze the codebase and create a PLAN.md with:
+1. A brief summary of the approach
+2. Each task as a checkbox: - [ ] Task description
+3. Any risks or dependencies noted
+
+Do NOT write any code yet. Present the plan and wait for me to select which tasks to start with by saying "proceed with tasks X, Y, Z".
+
+Example PLAN.md
+# Plan
+
+## Approach
+[Brief description]
+
+## Tasks
+- [ ] Set up project structure
+- [ ] Create database schema
+- [ ] Build API endpoints
+- [ ] Add authentication
+- [ ] Write tests
+
+## Notes
+- Task 3 depends on Task 2
