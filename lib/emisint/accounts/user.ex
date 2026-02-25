@@ -222,11 +222,26 @@ defmodule Emisint.Accounts.User do
       # Generates an authentication token for the user
       change AshAuthentication.GenerateTokenChange
     end
+
+    update :assign_organization do
+      require_atomic? false
+      accept [:organization_id, :role]
+    end
   end
 
   policies do
     bypass AshAuthentication.Checks.AshAuthenticationInteraction do
       authorize_if always()
+    end
+
+    policy action_type(:read) do
+      authorize_if expr(id == ^actor(:id))
+      authorize_if actor_attribute_equals(:role, :emo_admin)
+      authorize_if actor_attribute_equals(:role, :system_admin)
+    end
+
+    policy action(:assign_organization) do
+      authorize_if actor_attribute_equals(:role, :system_admin)
     end
   end
 
@@ -244,6 +259,21 @@ defmodule Emisint.Accounts.User do
     end
 
     attribute :confirmed_at, :utc_datetime_usec
+
+    attribute :role, :atom do
+      allow_nil? false
+      default :school_leader
+      public? true
+      constraints one_of: [:emo_admin, :school_leader, :authorizer_liaison, :system_admin]
+    end
+  end
+
+  relationships do
+    belongs_to :organization, Emisint.Accounts.Organization do
+      allow_nil? true
+      attribute_writable? true
+      public? true
+    end
   end
 
   identities do
