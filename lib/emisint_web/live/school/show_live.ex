@@ -43,43 +43,50 @@ defmodule EmisintWeb.School.ShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="space-y-6">
+      <div class="max-w-5xl mx-auto space-y-8">
         <%!-- Header --%>
-        <div class="flex items-center gap-3">
-          <.link navigate={~p"/dashboard"} class="btn btn-ghost btn-sm btn-circle">
+        <div class="flex items-start gap-3">
+          <.link
+            navigate={~p"/dashboard"}
+            class="mt-1 p-2 rounded-xl hover:bg-base-200 transition-colors text-base-content/60 hover:text-base-content shrink-0"
+          >
             <.icon name="hero-arrow-left" class="size-5" />
           </.link>
-          <div>
-            <h1 class="text-2xl font-bold">{@school.name}</h1>
-            <p class="text-base-content/60 text-sm">
+          <div class="flex-1 min-w-0">
+            <h1 class="text-2xl font-bold tracking-tight truncate">{@school.name}</h1>
+            <p class="text-sm text-base-content/50 mt-0.5">
               {@school.city} · MDE {@school.mde_building_code}
             </p>
           </div>
-        </div>
-
-        <%!-- Quick-link buttons to detail pages --%>
-        <div class="flex flex-wrap gap-2">
-          <.link
-            navigate={~p"/compliance/#{@school.id}"}
-            class="btn btn-outline btn-sm gap-1"
-          >
-            <.icon name="hero-clipboard-document-check" class="size-4" /> Schedule 7-1 Tracker
-          </.link>
-          <.link
-            navigate={~p"/growth/#{@school.id}"}
-            class="btn btn-outline btn-sm gap-1"
-          >
-            <.icon name="hero-arrow-trending-up" class="size-4" /> Growth Monitor
-          </.link>
+          <%!-- Quick links --%>
+          <div class="flex gap-2 shrink-0">
+            <.link
+              navigate={~p"/compliance/#{@school.id}"}
+              class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-base-300 text-xs font-medium text-base-content/60 hover:border-primary/40 hover:text-primary transition-all"
+            >
+              <.icon name="hero-clipboard-document-check" class="size-3.5" /> Schedule 7-1
+            </.link>
+            <.link
+              navigate={~p"/growth/#{@school.id}"}
+              class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-base-300 text-xs font-medium text-base-content/60 hover:border-primary/40 hover:text-primary transition-all"
+            >
+              <.icon name="hero-arrow-trending-up" class="size-3.5" /> Growth
+            </.link>
+          </div>
         </div>
 
         <%!-- Tab bar --%>
-        <div role="tablist" class="tabs tabs-bordered">
+        <div class="flex gap-1 p-1 rounded-xl bg-base-200 w-fit">
           <.link
             :for={tab <- @tabs}
             patch={~p"/schools/#{@school.id}?tab=#{tab}"}
-            role="tab"
-            class={["tab", @active_tab == tab && "tab-active"]}
+            class={[
+              "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              @active_tab == tab &&
+                "bg-base-100 text-base-content shadow-sm",
+              @active_tab != tab &&
+                "text-base-content/50 hover:text-base-content"
+            ]}
           >
             {tab_label(tab)}
           </.link>
@@ -113,34 +120,40 @@ defmodule EmisintWeb.School.ShowLive do
     assigns = assign(assigns, :subjects, subjects)
 
     ~H"""
-    <div class="space-y-4">
-      <h2 class="text-lg font-semibold">Proficiency Rates by Subject</h2>
-
-      <div :if={@snapshots == []} class="card bg-base-200">
-        <div class="card-body items-center py-8 text-center">
-          <p class="text-base-content/60">No proficiency data available yet.</p>
-          <p class="text-sm text-base-content/40">Upload assessment data to populate this view.</p>
+    <div class="space-y-5">
+      <div
+        :if={@snapshots == []}
+        class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
+      >
+        <div class="p-3 rounded-2xl bg-base-200 mb-3">
+          <.icon name="hero-chart-bar" class="size-6 text-base-content/25" />
         </div>
+        <p class="text-sm font-medium text-base-content/40">No proficiency data yet</p>
+        <p class="text-xs text-base-content/30 mt-1">Upload assessment data to populate this view.</p>
       </div>
 
       <div :if={@snapshots != []} class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div :for={subject <- @subjects} class="card bg-base-100 shadow-sm border border-base-200">
-          <div class="card-body p-4">
-            <h3 class="font-semibold capitalize">{subject}</h3>
-            <div
-              :for={snap <- Enum.filter(@snapshots, &(&1.subject == subject))}
-              class="mt-2"
-            >
-              <div class="flex justify-between items-center text-sm mb-1">
-                <span class="capitalize text-base-content/70">{snap.testing_window}</span>
-                <span class="font-bold">{format_pct(snap.proficiency_rate)}</span>
-              </div>
-              <progress
-                class={["progress w-full", proficiency_color(snap.proficiency_rate)]}
-                value={snap.proficiency_rate && Decimal.to_float(snap.proficiency_rate)}
-                max="1"
+        <div
+          :for={subject <- @subjects}
+          class="rounded-2xl bg-base-100 border border-base-200 shadow-sm p-5"
+        >
+          <h3 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider capitalize mb-4">
+            {subject}
+          </h3>
+          <div
+            :for={snap <- Enum.filter(@snapshots, &(&1.subject == subject))}
+            class="mb-3 last:mb-0"
+          >
+            <div class="flex justify-between items-baseline mb-1.5">
+              <span class="text-xs capitalize text-base-content/50">{snap.testing_window}</span>
+              <span class="text-sm font-bold">{format_pct(snap.proficiency_rate)}</span>
+            </div>
+            <div class="w-full bg-base-200 rounded-full h-1.5">
+              <div
+                class={["h-1.5 rounded-full transition-all", proficiency_color(snap.proficiency_rate)]}
+                style={"width: #{snap.proficiency_rate && Float.round(Decimal.to_float(snap.proficiency_rate) * 100, 1)}%"}
               >
-              </progress>
+              </div>
             </div>
           </div>
         </div>
@@ -160,45 +173,69 @@ defmodule EmisintWeb.School.ShowLive do
     assigns = assign(assigns, :grade_levels, grade_levels)
 
     ~H"""
-    <div class="space-y-4">
-      <h2 class="text-lg font-semibold">Growth by Grade Level</h2>
-
-      <div :if={@snapshots == []} class="card bg-base-200">
-        <div class="card-body items-center py-8 text-center">
-          <p class="text-base-content/60">No growth data available yet.</p>
-          <p class="text-sm text-base-content/40">
-            Upload assessment data with SGP scores to populate this view.
-          </p>
+    <div class="space-y-5">
+      <div
+        :if={@snapshots == []}
+        class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
+      >
+        <div class="p-3 rounded-2xl bg-base-200 mb-3">
+          <.icon name="hero-arrow-trending-up" class="size-6 text-base-content/25" />
         </div>
+        <p class="text-sm font-medium text-base-content/40">No growth data yet</p>
+        <p class="text-xs text-base-content/30 mt-1">
+          Upload assessment data with SGP scores to populate this view.
+        </p>
       </div>
 
-      <div :if={@snapshots != []} class="overflow-x-auto">
-        <table class="table table-sm table-zebra">
-          <thead>
-            <tr>
-              <th>Grade</th>
-              <th>Subject</th>
-              <th>Window</th>
-              <th class="text-right">Median SGP</th>
-              <th class="text-right">Avg SGP</th>
-              <th class="text-right">Students</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={snap <- Enum.sort_by(@snapshots, &{&1.grade_level, &1.subject})}>
-              <td class="font-medium">{format_grade(snap.grade_level)}</td>
-              <td class="capitalize">{snap.subject}</td>
-              <td class="capitalize">{snap.testing_window}</td>
-              <td class="text-right">
-                <span class={["font-bold", sgp_color(snap.median_sgp)]}>
-                  {format_sgp(snap.median_sgp)}
-                </span>
-              </td>
-              <td class="text-right text-base-content/70">{format_sgp(snap.average_sgp)}</td>
-              <td class="text-right text-base-content/70">{snap.student_count}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div
+        :if={@snapshots != []}
+        class="rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden"
+      >
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-base-200 bg-base-50/50">
+                <th class="text-left px-5 py-3 text-xs font-medium text-base-content/40 uppercase tracking-wider">
+                  Grade
+                </th>
+                <th class="text-left px-5 py-3 text-xs font-medium text-base-content/40 uppercase tracking-wider">
+                  Subject
+                </th>
+                <th class="text-left px-5 py-3 text-xs font-medium text-base-content/40 uppercase tracking-wider">
+                  Window
+                </th>
+                <th class="text-right px-5 py-3 text-xs font-medium text-base-content/40 uppercase tracking-wider">
+                  Median SGP
+                </th>
+                <th class="text-right px-5 py-3 text-xs font-medium text-base-content/40 uppercase tracking-wider">
+                  Avg SGP
+                </th>
+                <th class="text-right px-5 py-3 text-xs font-medium text-base-content/40 uppercase tracking-wider">
+                  Students
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-base-200">
+              <tr
+                :for={snap <- Enum.sort_by(@snapshots, &{&1.grade_level, &1.subject})}
+                class="hover:bg-base-50 transition-colors"
+              >
+                <td class="px-5 py-3 font-medium">{format_grade(snap.grade_level)}</td>
+                <td class="px-5 py-3 capitalize text-base-content/70">{snap.subject}</td>
+                <td class="px-5 py-3 capitalize text-base-content/70">{snap.testing_window}</td>
+                <td class="px-5 py-3 text-right">
+                  <span class={["font-bold", sgp_color(snap.median_sgp)]}>
+                    {format_sgp(snap.median_sgp)}
+                  </span>
+                </td>
+                <td class="px-5 py-3 text-right text-base-content/50">
+                  {format_sgp(snap.average_sgp)}
+                </td>
+                <td class="px-5 py-3 text-right text-base-content/50">{snap.student_count}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
     """
@@ -206,35 +243,40 @@ defmodule EmisintWeb.School.ShowLive do
 
   def compliance_tab(assigns) do
     ~H"""
-    <div class="space-y-4">
+    <div class="space-y-5">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Schedule 7-1 Goals</h2>
-        <.link navigate={~p"/compliance/#{@school.id}"} class="btn btn-primary btn-sm gap-1">
-          <.icon name="hero-arrow-right" class="size-4" /> Full Tracker
+        <h2 class="font-semibold">Schedule 7-1 Goals</h2>
+        <.link
+          navigate={~p"/compliance/#{@school.id}"}
+          class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-content text-xs font-medium hover:opacity-90 transition-opacity"
+        >
+          Full Tracker <.icon name="hero-arrow-right" class="size-3.5" />
         </.link>
       </div>
 
-      <div :if={@goals_with_evals == []} class="card bg-base-200">
-        <div class="card-body items-center py-8 text-center">
-          <p class="text-base-content/60">No compliance goals configured for this school.</p>
+      <div
+        :if={@goals_with_evals == []}
+        class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
+      >
+        <div class="p-3 rounded-2xl bg-base-200 mb-3">
+          <.icon name="hero-clipboard-document-list" class="size-6 text-base-content/25" />
         </div>
+        <p class="text-sm font-medium text-base-content/40">No goals configured</p>
       </div>
 
       <div :if={@goals_with_evals != []} class="space-y-2">
         <div
           :for={{goal, eval} <- @goals_with_evals}
-          class="card bg-base-100 shadow-sm border border-base-200"
+          class="flex items-center gap-4 p-4 rounded-xl bg-base-100 border border-base-200 hover:bg-base-50 transition-colors"
         >
-          <div class="card-body p-4 flex-row items-center gap-4">
-            <div class="flex-1 min-w-0">
-              <div class="font-medium truncate">{goal.title}</div>
-              <div class="text-sm text-base-content/60 capitalize mt-0.5">
-                {goal.goal_type |> to_string() |> String.replace("_", " ")} · {goal.subject}
-              </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-sm truncate">{goal.title}</div>
+            <div class="text-xs text-base-content/50 capitalize mt-0.5">
+              {goal.goal_type |> to_string() |> String.replace("_", " ")} · {goal.subject}
             </div>
-            <div class="shrink-0">
-              <.status_badge status={eval && eval.status} />
-            </div>
+          </div>
+          <div class="shrink-0">
+            <.status_pill status={eval && eval.status} />
           </div>
         </div>
       </div>
@@ -247,17 +289,26 @@ defmodule EmisintWeb.School.ShowLive do
     assigns = assign(assigns, :active_triggers, active)
 
     ~H"""
-    <div class="space-y-4">
+    <div class="space-y-5">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Active Interventions</h2>
-        <span :if={@active_triggers != []} class="badge badge-error">{length(@active_triggers)}</span>
+        <h2 class="font-semibold">Active Interventions</h2>
+        <span
+          :if={@active_triggers != []}
+          class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-error/10 text-error text-xs font-medium"
+        >
+          <.icon name="hero-bell-alert" class="size-3" /> {length(@active_triggers)}
+        </span>
       </div>
 
-      <div :if={@active_triggers == []} class="card bg-base-200">
-        <div class="card-body items-center py-8 text-center">
-          <.icon name="hero-check-circle" class="size-12 text-success" />
-          <p class="text-base-content/60 mt-2">No active intervention triggers. Keep it up!</p>
+      <div
+        :if={@active_triggers == []}
+        class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
+      >
+        <div class="p-3 rounded-2xl bg-success/10 mb-3">
+          <.icon name="hero-check-circle" class="size-6 text-success" />
         </div>
+        <p class="text-sm font-medium text-base-content/50">No active interventions</p>
+        <p class="text-xs text-base-content/30 mt-1">Keep it up!</p>
       </div>
 
       <div :if={@active_triggers != []} class="space-y-2">
@@ -266,22 +317,23 @@ defmodule EmisintWeb.School.ShowLive do
             trigger <-
               Enum.sort_by(@active_triggers, &{severity_order(&1.severity), &1.triggered_at}, :asc)
           }
-          class="card bg-base-100 shadow-sm border border-base-200"
+          class="flex items-start gap-3 p-4 rounded-xl bg-base-100 border border-base-200 hover:bg-base-50 transition-colors"
         >
-          <div class="card-body p-4 flex-row items-start gap-3">
-            <div class={["badge badge-sm mt-0.5 shrink-0", severity_badge_class(trigger.severity)]}>
-              {trigger.severity}
+          <div class={[
+            "px-2.5 py-1 rounded-full text-xs font-medium shrink-0 mt-0.5 capitalize",
+            severity_pill_class(trigger.severity)
+          ]}>
+            {trigger.severity}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium capitalize">
+              {trigger.trigger_type |> to_string() |> String.replace("_", " ")}
             </div>
-            <div class="flex-1 min-w-0">
-              <div class="font-medium capitalize">
-                {trigger.trigger_type |> to_string() |> String.replace("_", " ")}
-              </div>
-              <div class="text-sm text-base-content/60 mt-0.5">
-                Triggered {Calendar.strftime(trigger.triggered_at, "%b %d, %Y")}
-              </div>
-              <div :if={trigger.notes} class="text-sm mt-1 italic text-base-content/70">
-                {trigger.notes}
-              </div>
+            <div class="text-xs text-base-content/50 mt-0.5">
+              Triggered {Calendar.strftime(trigger.triggered_at, "%b %d, %Y")}
+            </div>
+            <div :if={trigger.notes} class="text-xs mt-1.5 italic text-base-content/60">
+              {trigger.notes}
             </div>
           </div>
         </div>
@@ -290,26 +342,31 @@ defmodule EmisintWeb.School.ShowLive do
     """
   end
 
-  def status_badge(assigns) do
+  def status_pill(assigns) do
     ~H"""
-    <span :if={is_nil(@status)} class="badge badge-ghost badge-sm">No data</span>
-    <span :if={@status == :exceeds} class="badge badge-success gap-1">
+    <span :if={is_nil(@status)} class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40">
+      No data
+    </span>
+    <span :if={@status == :exceeds} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/15 text-success">
       <.icon name="hero-check-circle" class="size-3" /> Exceeds
     </span>
-    <span :if={@status == :meets} class="badge badge-success badge-outline gap-1">
+    <span :if={@status == :meets} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/8 text-success border border-success/20">
       <.icon name="hero-check" class="size-3" /> Meets
     </span>
-    <span :if={@status == :approaching} class="badge badge-warning gap-1">
+    <span :if={@status == :approaching} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/15 text-warning">
       <.icon name="hero-exclamation-triangle" class="size-3" /> Approaching
     </span>
-    <span :if={@status == :below} class="badge badge-error gap-1">
+    <span :if={@status == :below} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error/15 text-error">
       <.icon name="hero-x-circle" class="size-3" /> Below
     </span>
-    <span :if={@status == :insufficient_data} class="badge badge-ghost badge-sm">
+    <span :if={@status == :insufficient_data} class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40">
       Insufficient Data
     </span>
     """
   end
+
+  # Keep old name as alias
+  def status_badge(assigns), do: status_pill(assigns)
 
   # --- Private helpers ---
 
@@ -366,15 +423,15 @@ defmodule EmisintWeb.School.ShowLive do
   defp format_grade("all"), do: "All"
   defp format_grade(g), do: String.upcase(g)
 
-  defp proficiency_color(nil), do: "progress-primary"
+  defp proficiency_color(nil), do: "bg-primary"
 
   defp proficiency_color(d) do
     val = Decimal.to_float(d)
 
     cond do
-      val >= 0.6 -> "progress-success"
-      val >= 0.4 -> "progress-warning"
-      true -> "progress-error"
+      val >= 0.6 -> "bg-success"
+      val >= 0.4 -> "bg-warning"
+      true -> "bg-error"
     end
   end
 
@@ -394,7 +451,7 @@ defmodule EmisintWeb.School.ShowLive do
   defp severity_order(:medium), do: 1
   defp severity_order(:low), do: 2
 
-  defp severity_badge_class(:high), do: "badge-error"
-  defp severity_badge_class(:medium), do: "badge-warning"
-  defp severity_badge_class(:low), do: "badge-info"
+  defp severity_pill_class(:high), do: "bg-error/15 text-error"
+  defp severity_pill_class(:medium), do: "bg-warning/15 text-warning"
+  defp severity_pill_class(:low), do: "bg-info/15 text-info"
 end

@@ -74,26 +74,34 @@ defmodule EmisintWeb.Growth.MonitorLive do
 
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="space-y-6">
+      <div class="max-w-5xl mx-auto space-y-8">
         <%!-- Header --%>
-        <div class="flex items-center gap-3 flex-wrap">
-          <.link navigate={~p"/schools/#{@school.id}"} class="btn btn-ghost btn-sm btn-circle">
+        <div class="flex items-center gap-3">
+          <.link
+            navigate={~p"/schools/#{@school.id}"}
+            class="p-2 rounded-xl hover:bg-base-200 transition-colors text-base-content/60 hover:text-base-content"
+          >
             <.icon name="hero-arrow-left" class="size-5" />
           </.link>
-          <div>
-            <h1 class="text-2xl font-bold">Growth Monitor</h1>
-            <p class="text-base-content/60 text-sm">{@school.name}</p>
+          <div class="flex items-center gap-4">
+            <div class="p-2.5 rounded-2xl bg-primary/10 border border-primary/20">
+              <.icon name="hero-arrow-trending-up" class="size-6 text-primary" />
+            </div>
+            <div>
+              <h1 class="text-2xl font-bold tracking-tight">Growth Monitor</h1>
+              <p class="text-sm text-base-content/50 mt-0.5">{@school.name}</p>
+            </div>
           </div>
         </div>
 
-        <%!-- Selectors --%>
+        <%!-- Controls row --%>
         <div class="flex flex-wrap gap-4 items-end">
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text font-medium">Academic Year</span>
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-base-content/50 uppercase tracking-wider">
+              Academic Year
             </label>
             <select
-              class="select select-bordered select-sm"
+              class="rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
               phx-change="select_year"
               name="year_id"
             >
@@ -107,16 +115,22 @@ defmodule EmisintWeb.Growth.MonitorLive do
             </select>
           </div>
 
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text font-medium">Testing Window</span>
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-base-content/50 uppercase tracking-wider">
+              Testing Window
             </label>
-            <div class="btn-group">
+            <div class="flex rounded-xl border border-base-300 overflow-hidden bg-base-100">
               <button
                 :for={window <- @windows}
                 phx-click="select_window"
                 phx-value-window={window}
-                class={["btn btn-sm", @selected_window == window && "btn-active"]}
+                class={[
+                  "px-4 py-2 text-sm font-medium transition-colors",
+                  @selected_window == window &&
+                    "bg-primary text-primary-content",
+                  @selected_window != window &&
+                    "text-base-content/60 hover:bg-base-200"
+                ]}
               >
                 {String.capitalize(to_string(window))}
               </button>
@@ -124,37 +138,53 @@ defmodule EmisintWeb.Growth.MonitorLive do
           </div>
         </div>
 
-        <%!-- SGP at-a-glance cards --%>
-        <div :if={@subjects != []} class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <.subject_sgp_card :for={subject <- @subjects} subject={subject} snapshots={@window_snaps} />
+        <%!-- SGP subject cards --%>
+        <div :if={@subjects != []} class="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <.subject_sgp_card
+            :for={subject <- @subjects}
+            subject={subject}
+            snapshots={@window_snaps}
+          />
         </div>
 
-        <%!-- No data state --%>
-        <div :if={@window_snaps == []} class="card bg-base-200">
-          <div class="card-body items-center py-12 text-center">
-            <.icon name="hero-arrow-trending-up" class="size-12 text-base-content/30" />
-            <p class="text-base-content/60 mt-2">No growth data for the selected window.</p>
-            <p class="text-sm text-base-content/40">
-              Upload assessment data with SGP scores to populate this view.
-            </p>
+        <%!-- No data --%>
+        <div
+          :if={@window_snaps == []}
+          class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-16 text-center"
+        >
+          <div class="p-3 rounded-2xl bg-base-200 mb-3">
+            <.icon name="hero-arrow-trending-up" class="size-7 text-base-content/25" />
           </div>
+          <p class="text-sm font-medium text-base-content/40">No growth data for this window</p>
+          <p class="text-xs text-base-content/30 mt-1">
+            Upload assessment data with SGP scores to populate this view.
+          </p>
         </div>
 
-        <%!-- Grade-by-grade breakdown table --%>
-        <div :if={@grade_levels != []} class="space-y-2">
-          <h2 class="text-lg font-semibold">Growth by Grade</h2>
+        <%!-- Grade breakdown table --%>
+        <div :if={@grade_levels != []} class="rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-base-200">
+            <h2 class="font-semibold">Growth by Grade</h2>
+          </div>
           <div class="overflow-x-auto">
-            <table class="table table-sm table-zebra bg-base-100 rounded-lg shadow-sm">
+            <table class="w-full text-sm">
               <thead>
-                <tr>
-                  <th>Grade</th>
-                  <th :for={subject <- @subjects} class="text-center capitalize">{subject}</th>
+                <tr class="border-b border-base-200 bg-base-50/50">
+                  <th class="text-left px-6 py-3 text-xs font-medium text-base-content/40 uppercase tracking-wider">
+                    Grade
+                  </th>
+                  <th
+                    :for={subject <- @subjects}
+                    class="text-center px-4 py-3 text-xs font-medium text-base-content/40 uppercase tracking-wider capitalize"
+                  >
+                    {subject}
+                  </th>
                 </tr>
               </thead>
-              <tbody>
-                <tr :for={grade <- @grade_levels}>
-                  <td class="font-medium">{format_grade(grade)}</td>
-                  <td :for={subject <- @subjects} class="text-center">
+              <tbody class="divide-y divide-base-200">
+                <tr :for={grade <- @grade_levels} class="hover:bg-base-50 transition-colors">
+                  <td class="px-6 py-3 font-medium">{format_grade(grade)}</td>
+                  <td :for={subject <- @subjects} class="px-4 py-3 text-center">
                     <.sgp_cell
                       value={get_sgp(grade, subject, @window_snaps)}
                       count={get_count(grade, subject, @window_snaps)}
@@ -166,23 +196,26 @@ defmodule EmisintWeb.Growth.MonitorLive do
           </div>
         </div>
 
-        <%!-- SGP Benchmark legend --%>
-        <div class="card bg-base-200 shadow-sm">
-          <div class="card-body p-4">
-            <h3 class="text-sm font-semibold mb-2">SGP Benchmark Guide</h3>
-            <div class="flex flex-wrap gap-3 text-sm">
-              <span class="flex items-center gap-1.5">
-                <span class="w-3 h-3 rounded-full bg-success inline-block"></span>
-                ≥ 50th — At/Above Target
-              </span>
-              <span class="flex items-center gap-1.5">
-                <span class="w-3 h-3 rounded-full bg-warning inline-block"></span> 40–49 — Approaching
-              </span>
-              <span class="flex items-center gap-1.5">
-                <span class="w-3 h-3 rounded-full bg-error inline-block"></span>
+        <%!-- SGP Legend --%>
+        <div class="rounded-xl border border-base-200 bg-base-50/50 px-5 py-4">
+          <h3 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider mb-3">
+            SGP Benchmark Guide
+          </h3>
+          <div class="flex flex-wrap gap-4 text-sm">
+            <span class="flex items-center gap-2">
+              <span class="size-2.5 rounded-full bg-success inline-block shrink-0"></span>
+              <span class="text-base-content/60">≥ 50th — At/Above Target</span>
+            </span>
+            <span class="flex items-center gap-2">
+              <span class="size-2.5 rounded-full bg-warning inline-block shrink-0"></span>
+              <span class="text-base-content/60">40–49 — Approaching</span>
+            </span>
+            <span class="flex items-center gap-2">
+              <span class="size-2.5 rounded-full bg-error inline-block shrink-0"></span>
+              <span class="text-base-content/60">
                 &lt; 40 — Below Target
               </span>
-            </div>
+            </span>
           </div>
         </div>
       </div>
@@ -203,17 +236,23 @@ defmodule EmisintWeb.Growth.MonitorLive do
     assigns = assign(assigns, :median_sgp, median)
 
     ~H"""
-    <div class="card bg-base-100 shadow-sm border border-base-200">
-      <div class="card-body p-4 items-center text-center">
-        <h3 class="font-semibold capitalize">{@subject}</h3>
-        <div :if={@median_sgp} class={["text-3xl font-bold mt-1", sgp_text_color(@median_sgp)]}>
-          {Decimal.round(@median_sgp, 0) |> Decimal.to_string()}
-        </div>
-        <div :if={@median_sgp} class="text-xs text-base-content/60">Median SGP</div>
-        <div :if={is_nil(@median_sgp)} class="text-2xl font-bold text-base-content/30 mt-1">—</div>
-        <div :if={@median_sgp} class={["badge badge-sm mt-1", sgp_badge_class(@median_sgp)]}>
-          {sgp_label(@median_sgp)}
-        </div>
+    <div class="rounded-2xl bg-base-100 border border-base-200 shadow-sm p-5 flex flex-col items-center text-center">
+      <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider capitalize mb-3">
+        {@subject}
+      </span>
+      <div :if={@median_sgp} class={["text-4xl font-bold tracking-tight", sgp_text_color(@median_sgp)]}>
+        {Decimal.round(@median_sgp, 0) |> Decimal.to_string()}
+      </div>
+      <div :if={@median_sgp} class="text-xs text-base-content/40 mt-1">Median SGP</div>
+      <div :if={is_nil(@median_sgp)} class="text-3xl font-bold text-base-content/20 mt-1">—</div>
+      <div
+        :if={@median_sgp}
+        class={[
+          "mt-3 px-2.5 py-1 rounded-full text-xs font-medium",
+          sgp_pill_class(@median_sgp)
+        ]}
+      >
+        {sgp_label(@median_sgp)}
       </div>
     </div>
     """
@@ -221,13 +260,13 @@ defmodule EmisintWeb.Growth.MonitorLive do
 
   def sgp_cell(assigns) do
     ~H"""
-    <div :if={@value} class="flex flex-col items-center">
-      <span class={["font-bold text-sm", sgp_text_color(@value)]}>
+    <div :if={@value} class="flex flex-col items-center gap-0.5">
+      <span class={["font-bold", sgp_text_color(@value)]}>
         {Decimal.round(@value, 0) |> Decimal.to_string()}
       </span>
-      <span class="text-xs text-base-content/40">n={@count}</span>
+      <span class="text-xs text-base-content/30">n={@count}</span>
     </div>
-    <span :if={is_nil(@value)} class="text-base-content/30 text-sm">—</span>
+    <span :if={is_nil(@value)} class="text-base-content/25">—</span>
     """
   end
 
@@ -270,13 +309,13 @@ defmodule EmisintWeb.Growth.MonitorLive do
     end
   end
 
-  defp sgp_badge_class(d) do
+  defp sgp_pill_class(d) do
     val = Decimal.to_float(d)
 
     cond do
-      val >= 50 -> "badge-success"
-      val >= 40 -> "badge-warning"
-      true -> "badge-error"
+      val >= 50 -> "bg-success/15 text-success"
+      val >= 40 -> "bg-warning/15 text-warning"
+      true -> "bg-error/15 text-error"
     end
   end
 
