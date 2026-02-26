@@ -26,50 +26,111 @@ defmodule EmisintWeb.Layouts do
 
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"
-
-  attr :current_scope, :map,
-    default: nil,
-    doc: "the current [scope](https://hexdocs.pm/phoenix/scopes.html)"
+  attr :current_user, :any, default: nil, doc: "the authenticated user struct, if any"
 
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
-      </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://hexdocs.pm/phoenix/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
-        </ul>
-      </div>
-    </header>
+    <div class="drawer lg:drawer-open min-h-screen">
+      <input id="main-drawer" type="checkbox" class="drawer-toggle" />
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
-        {render_slot(@inner_block)}
+      <%!-- Page content --%>
+      <div class="drawer-content flex flex-col">
+        <%!-- Mobile top navbar --%>
+        <div class="navbar bg-base-300 shadow-sm lg:hidden sticky top-0 z-20">
+          <label for="main-drawer" class="btn btn-square btn-ghost drawer-button">
+            <.icon name="hero-bars-3" class="size-6" />
+          </label>
+          <span class="font-bold ml-2 text-lg">Emisint APM</span>
+        </div>
+
+        <%!-- Main content area --%>
+        <main class="flex-1 p-4 sm:p-6 lg:p-8">
+          {render_slot(@inner_block)}
+        </main>
       </div>
-    </main>
+
+      <%!-- Sidebar --%>
+      <div class="drawer-side z-30">
+        <label for="main-drawer" class="drawer-overlay" aria-label="close sidebar"></label>
+        <aside class="w-64 min-h-full bg-base-200 flex flex-col border-r border-base-300">
+          <%!-- Logo --%>
+          <div class="p-4 border-b border-base-300">
+            <.link navigate={~p"/dashboard"} class="flex items-center gap-2">
+              <.icon name="hero-academic-cap" class="size-7 text-primary" />
+              <div>
+                <div class="font-bold text-base leading-tight">Emisint APM</div>
+                <div class="text-xs text-base-content/50">Academic Performance</div>
+              </div>
+            </.link>
+          </div>
+
+          <%!-- Navigation --%>
+          <nav class="flex-1 p-3">
+            <ul class="menu menu-sm gap-0.5">
+              <li>
+                <.link navigate={~p"/dashboard"} class="flex items-center gap-2">
+                  <.icon name="hero-squares-2x2" class="size-4" />
+                  Portfolio
+                </.link>
+              </li>
+              <li :if={@current_user && @current_user.role in [:emo_admin, :system_admin]}>
+                <.link navigate={~p"/admin/import"} class="flex items-center gap-2">
+                  <.icon name="hero-arrow-up-tray" class="size-4" />
+                  Data Import
+                </.link>
+              </li>
+            </ul>
+          </nav>
+
+          <%!-- User info + sign-out + theme --%>
+          <div class="p-3 border-t border-base-300 space-y-2">
+            <div :if={@current_user} class="flex items-center gap-2 px-2 py-1">
+              <div class="avatar placeholder shrink-0">
+                <div class="bg-primary text-primary-content rounded-full w-8">
+                  <span class="text-xs font-bold">
+                    {String.first(String.upcase(@current_user.email || "?"))}
+                  </span>
+                </div>
+              </div>
+              <div class="overflow-hidden flex-1 min-w-0">
+                <div class="text-sm font-medium truncate">{@current_user.email}</div>
+                <div class="text-xs text-base-content/60">
+                  {format_role(@current_user.role)}
+                </div>
+              </div>
+            </div>
+
+            <.link
+              href={~p"/sign-out"}
+              method="delete"
+              class="btn btn-ghost btn-sm w-full justify-start gap-2"
+            >
+              <.icon name="hero-arrow-right-on-rectangle" class="size-4" />
+              Sign Out
+            </.link>
+
+            <div class="flex justify-center pt-1">
+              <.theme_toggle />
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
 
     <.flash_group flash={@flash} />
     """
+  end
+
+  defp format_role(nil), do: ""
+
+  defp format_role(role) when is_atom(role) do
+    role
+    |> to_string()
+    |> String.split("_")
+    |> Enum.map(&String.capitalize/1)
+    |> Enum.join(" ")
   end
 
   @doc """
