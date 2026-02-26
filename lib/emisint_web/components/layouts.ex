@@ -82,33 +82,35 @@ defmodule EmisintWeb.Layouts do
             </ul>
           </nav>
 
-          <%!-- User info + sign-out + theme --%>
-          <div class="p-3 border-t border-base-300 space-y-2">
-            <div :if={@current_user} class="flex items-center gap-2 px-2 py-1">
-              <div class="avatar placeholder shrink-0">
-                <div class="bg-primary text-primary-content rounded-full w-8">
-                  <span class="text-xs font-bold">
-                    {String.first(String.upcase(@current_user.email || "?"))}
-                  </span>
+          <%!-- User profile + sign-out + theme --%>
+          <div class="border-t border-base-300">
+            <%!-- Profile card --%>
+            <div :if={@current_user} class="p-3">
+              <div class="flex items-center gap-3 p-3 rounded-xl bg-base-300/50">
+                <div class="size-9 rounded-full bg-primary text-primary-content flex items-center justify-center shrink-0 text-xs font-bold">
+                  {String.first(String.upcase(@current_user.email |> to_string() || "?"))}
                 </div>
-              </div>
-              <div class="overflow-hidden flex-1 min-w-0">
-                <div class="text-sm font-medium truncate">{@current_user.email}</div>
-                <div class="text-xs text-base-content/60">
-                  {format_role(@current_user.role)}
+                <div class="overflow-hidden flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">{@current_user.email |> to_string()}</div>
+                  <div class="text-xs text-base-content/50 mt-0.5">
+                    {format_role(@current_user.role)}
+                  </div>
                 </div>
               </div>
             </div>
 
-            <.link
-              href={~p"/sign-out"}
-              class="btn btn-ghost btn-sm w-full justify-start gap-2"
-            >
-              <.icon name="hero-arrow-right-on-rectangle" class="size-4" /> Sign Out
-            </.link>
+            <%!-- Sign out + theme --%>
+            <div class="px-3 pb-3 space-y-1">
+              <.link
+                href={~p"/sign-out"}
+                class="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-base-content/60 hover:text-base-content hover:bg-base-300/50 transition-colors"
+              >
+                <.icon name="hero-arrow-right-on-rectangle" class="size-4" /> Sign Out
+              </.link>
 
-            <div class="flex justify-center pt-1">
-              <.theme_toggle />
+              <div class="flex justify-center pt-2">
+                <.theme_toggle />
+              </div>
             </div>
           </div>
         </aside>

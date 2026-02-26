@@ -35,7 +35,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
       assign(assigns, :filtered, filter_goals(assigns.goals_with_evals, assigns.filter_status))
 
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-4xl mx-auto space-y-8">
         <%!-- Header --%>
         <div class="flex items-center gap-3">
@@ -238,22 +238,40 @@ defmodule EmisintWeb.Compliance.TrackerLive do
 
   def eval_status_pill(assigns) do
     ~H"""
-    <span :if={is_nil(@eval)} class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40">
+    <span
+      :if={is_nil(@eval)}
+      class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40"
+    >
       No data
     </span>
-    <span :if={@eval && @eval.status == :exceeds} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/15 text-success">
+    <span
+      :if={@eval && @eval.status == :exceeds}
+      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/15 text-success"
+    >
       <.icon name="hero-check-circle" class="size-3" /> Exceeds
     </span>
-    <span :if={@eval && @eval.status == :meets} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/8 text-success border border-success/20">
+    <span
+      :if={@eval && @eval.status == :meets}
+      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/8 text-success border border-success/20"
+    >
       <.icon name="hero-check" class="size-3" /> Meets
     </span>
-    <span :if={@eval && @eval.status == :approaching} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/15 text-warning">
+    <span
+      :if={@eval && @eval.status == :approaching}
+      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/15 text-warning"
+    >
       <.icon name="hero-exclamation-triangle" class="size-3" /> Approaching
     </span>
-    <span :if={@eval && @eval.status == :below} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error/15 text-error">
+    <span
+      :if={@eval && @eval.status == :below}
+      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error/15 text-error"
+    >
       <.icon name="hero-x-circle" class="size-3" /> Below
     </span>
-    <span :if={@eval && @eval.status == :insufficient_data} class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40">
+    <span
+      :if={@eval && @eval.status == :insufficient_data}
+      class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40"
+    >
       Insufficient Data
     </span>
     """

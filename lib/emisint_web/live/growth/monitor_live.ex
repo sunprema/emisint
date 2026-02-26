@@ -73,7 +73,7 @@ defmodule EmisintWeb.Growth.MonitorLive do
       |> assign(:grade_levels, grade_levels)
 
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-5xl mx-auto space-y-8">
         <%!-- Header --%>
         <div class="flex items-center gap-3">
@@ -162,7 +162,10 @@ defmodule EmisintWeb.Growth.MonitorLive do
         </div>
 
         <%!-- Grade breakdown table --%>
-        <div :if={@grade_levels != []} class="rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden">
+        <div
+          :if={@grade_levels != []}
+          class="rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden"
+        >
           <div class="px-6 py-4 border-b border-base-200">
             <h2 class="font-semibold">Growth by Grade</h2>
           </div>
@@ -240,7 +243,10 @@ defmodule EmisintWeb.Growth.MonitorLive do
       <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider capitalize mb-3">
         {@subject}
       </span>
-      <div :if={@median_sgp} class={["text-4xl font-bold tracking-tight", sgp_text_color(@median_sgp)]}>
+      <div
+        :if={@median_sgp}
+        class={["text-4xl font-bold tracking-tight", sgp_text_color(@median_sgp)]}
+      >
         {Decimal.round(@median_sgp, 0) |> Decimal.to_string()}
       </div>
       <div :if={@median_sgp} class="text-xs text-base-content/40 mt-1">Median SGP</div>

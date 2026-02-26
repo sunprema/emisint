@@ -117,7 +117,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
     assigns = assign(assigns, :providers, @providers)
 
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-6xl mx-auto space-y-8">
         <%!-- Page header --%>
         <div class="flex items-center gap-4">
@@ -362,7 +362,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <span :if={log.records_failed && log.records_failed > 0} class="text-error">
                     <span>✗</span> {log.records_failed} failed
                   </span>
-                  <span :if={log.metadata["provider_code"]} class="uppercase tracking-wide font-medium">
+                  <span
+                    :if={log.metadata["provider_code"]}
+                    class="uppercase tracking-wide font-medium"
+                  >
                     {log.metadata["provider_code"] |> to_string() |> String.replace("_", " ")}
                   </span>
                 </div>

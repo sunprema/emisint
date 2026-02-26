@@ -41,7 +41,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-6xl mx-auto space-y-8">
         <%!-- Header --%>
         <div class="flex items-center gap-4">
@@ -156,7 +156,10 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             <h2 class="font-semibold text-base truncate">{@school.name}</h2>
             <p class="text-sm text-base-content/50 mt-0.5">{@school.city || @school.county}</p>
           </div>
-          <div :if={@trigger_count > 0} class="flex items-center gap-1 px-2 py-1 rounded-lg bg-error/10 text-error text-xs font-medium shrink-0">
+          <div
+            :if={@trigger_count > 0}
+            class="flex items-center gap-1 px-2 py-1 rounded-lg bg-error/10 text-error text-xs font-medium shrink-0"
+          >
             <.icon name="hero-bell-alert" class="size-3" /> {@trigger_count}
           </div>
         </div>

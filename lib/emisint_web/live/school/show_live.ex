@@ -42,7 +42,7 @@ defmodule EmisintWeb.School.ShowLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-5xl mx-auto space-y-8">
         <%!-- Header --%>
         <div class="flex items-start gap-3">
@@ -344,22 +344,40 @@ defmodule EmisintWeb.School.ShowLive do
 
   def status_pill(assigns) do
     ~H"""
-    <span :if={is_nil(@status)} class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40">
+    <span
+      :if={is_nil(@status)}
+      class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40"
+    >
       No data
     </span>
-    <span :if={@status == :exceeds} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/15 text-success">
+    <span
+      :if={@status == :exceeds}
+      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/15 text-success"
+    >
       <.icon name="hero-check-circle" class="size-3" /> Exceeds
     </span>
-    <span :if={@status == :meets} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/8 text-success border border-success/20">
+    <span
+      :if={@status == :meets}
+      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-success/8 text-success border border-success/20"
+    >
       <.icon name="hero-check" class="size-3" /> Meets
     </span>
-    <span :if={@status == :approaching} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/15 text-warning">
+    <span
+      :if={@status == :approaching}
+      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/15 text-warning"
+    >
       <.icon name="hero-exclamation-triangle" class="size-3" /> Approaching
     </span>
-    <span :if={@status == :below} class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error/15 text-error">
+    <span
+      :if={@status == :below}
+      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error/15 text-error"
+    >
       <.icon name="hero-x-circle" class="size-3" /> Below
     </span>
-    <span :if={@status == :insufficient_data} class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40">
+    <span
+      :if={@status == :insufficient_data}
+      class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-base-200 text-base-content/40"
+    >
       Insufficient Data
     </span>
     """
