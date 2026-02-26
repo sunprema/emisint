@@ -72,6 +72,14 @@ defmodule EmisintWeb.School.ShowLive do
             >
               <.icon name="hero-arrow-trending-up" class="size-3.5" /> Growth
             </.link>
+
+            <.link
+              navigate={~p"/schools/#{@school.id}/report.pdf"}
+              target="_blank"
+              class="flex items-center gap-1.5 px-3 py-2 border border-base-300 text-xs font-medium text-base-content/60 hover:border-primary/40 hover:text-primary transition-all"
+            >
+              <.icon name="hero-document" class="size-3.5" /> View Report
+            </.link>
           </div>
         </div>
 
