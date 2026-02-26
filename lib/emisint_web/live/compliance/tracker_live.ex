@@ -19,7 +19,8 @@ defmodule EmisintWeb.Compliance.TrackerLive do
      |> assign(:page_title, "#{school.name} — Schedule 7-1")
      |> assign(:school, school)
      |> assign(:goals_with_evals, goals_with_evals)
-     |> assign(:filter_status, :all)}
+     |> assign(:filter_status, :all)
+     |> assign(:status_filters, @status_filters)}
   end
 
   def handle_event("filter_status", %{"status" => status}, socket) do
@@ -33,61 +34,93 @@ defmodule EmisintWeb.Compliance.TrackerLive do
   end
 
   def render(assigns) do
-    assigns = assign(assigns, :filtered, filter_goals(assigns.goals_with_evals, assigns.filter_status))
+    assigns =
+      assign(assigns, :filtered, filter_goals(assigns.goals_with_evals, assigns.filter_status))
 
     ~H"""
-    <div class="space-y-6">
-      <%!-- Header --%>
-      <div class="flex items-center gap-3 flex-wrap">
-        <.link navigate={~p"/schools/#{@school.id}"} class="btn btn-ghost btn-sm btn-circle">
-          <.icon name="hero-arrow-left" class="size-5" />
-        </.link>
-        <div>
-          <h1 class="text-2xl font-bold">Schedule 7-1 Tracker</h1>
-          <p class="text-base-content/60 text-sm">{@school.name}</p>
+    <Layouts.app flash={@flash}>
+      <div class="space-y-6">
+        <%!-- Header --%>
+        <div class="flex items-center gap-3 flex-wrap">
+          <.link navigate={~p"/schools/#{@school.id}"} class="btn btn-ghost btn-sm btn-circle">
+            <.icon name="hero-arrow-left" class="size-5" />
+          </.link>
+          <div>
+            <h1 class="text-2xl font-bold">Schedule 7-1 Tracker</h1>
+            <p class="text-base-content/60 text-sm">{@school.name}</p>
+          </div>
+        </div>
+
+        <%!-- Summary badges --%>
+        <div class="flex flex-wrap gap-2">
+          <.status_count_badge
+            goals_with_evals={@goals_with_evals}
+            status={:exceeds}
+            label="Exceeds"
+            class="badge-success"
+          />
+          <.status_count_badge
+            goals_with_evals={@goals_with_evals}
+            status={:meets}
+            label="Meets"
+            class="badge-success badge-outline"
+          />
+          <.status_count_badge
+            goals_with_evals={@goals_with_evals}
+            status={:approaching}
+            label="Approaching"
+            class="badge-warning"
+          />
+          <.status_count_badge
+            goals_with_evals={@goals_with_evals}
+            status={:below}
+            label="Below"
+            class="badge-error"
+          />
+          <.status_count_badge
+            goals_with_evals={@goals_with_evals}
+            status={:insufficient_data}
+            label="Insufficient Data"
+            class="badge-ghost"
+          />
+        </div>
+
+        <%!-- Filter buttons --%>
+        <div class="flex flex-wrap gap-2">
+          <button
+            :for={status <- @status_filters}
+            phx-click="filter_status"
+            phx-value-status={status}
+            class={[
+              "btn btn-sm",
+              @filter_status == status && "btn-primary",
+              @filter_status != status && "btn-ghost"
+            ]}
+          >
+            {filter_label(status)}
+          </button>
+        </div>
+
+        <%!-- Empty state --%>
+        <div :if={@goals_with_evals == []} class="card bg-base-200">
+          <div class="card-body items-center py-12 text-center">
+            <.icon name="hero-clipboard-document-list" class="size-12 text-base-content/30" />
+            <p class="text-base-content/60 mt-2">No Schedule 7-1 goals configured for this school.</p>
+          </div>
+        </div>
+
+        <div :if={@filtered == [] and @goals_with_evals != []} class="card bg-base-200">
+          <div class="card-body items-center py-8 text-center">
+            <p class="text-base-content/60">No goals match the selected filter.</p>
+          </div>
+        </div>
+
+        <%!-- Goals list --%>
+        <div class="space-y-3">
+          <.goal_card :for={{goal, eval} <- @filtered} goal={goal} eval={eval} />
         </div>
       </div>
-
-      <%!-- Summary badges --%>
-      <div class="flex flex-wrap gap-2">
-        <.status_count_badge goals_with_evals={@goals_with_evals} status={:exceeds} label="Exceeds" class="badge-success" />
-        <.status_count_badge goals_with_evals={@goals_with_evals} status={:meets} label="Meets" class="badge-success badge-outline" />
-        <.status_count_badge goals_with_evals={@goals_with_evals} status={:approaching} label="Approaching" class="badge-warning" />
-        <.status_count_badge goals_with_evals={@goals_with_evals} status={:below} label="Below" class="badge-error" />
-        <.status_count_badge goals_with_evals={@goals_with_evals} status={:insufficient_data} label="Insufficient Data" class="badge-ghost" />
-      </div>
-
-      <%!-- Filter buttons --%>
-      <div class="flex flex-wrap gap-2">
-        <button
-          :for={status <- @status_filters}
-          phx-click="filter_status"
-          phx-value-status={status}
-          class={["btn btn-sm", @filter_status == status && "btn-primary", @filter_status != status && "btn-ghost"]}
-        >
-          {filter_label(status)}
-        </button>
-      </div>
-
-      <%!-- Empty state --%>
-      <div :if={@goals_with_evals == []} class="card bg-base-200">
-        <div class="card-body items-center py-12 text-center">
-          <.icon name="hero-clipboard-document-list" class="size-12 text-base-content/30" />
-          <p class="text-base-content/60 mt-2">No Schedule 7-1 goals configured for this school.</p>
-        </div>
-      </div>
-
-      <div :if={@filtered == [] and @goals_with_evals != []} class="card bg-base-200">
-        <div class="card-body items-center py-8 text-center">
-          <p class="text-base-content/60">No goals match the selected filter.</p>
-        </div>
-      </div>
-
-      <%!-- Goals list --%>
-      <div class="space-y-3">
-        <.goal_card :for={{goal, eval} <- @filtered} goal={goal} eval={eval} />
-      </div>
-    </div>
+    </Layouts.app>
     """
   end
 
@@ -136,8 +169,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
           <div class="shrink-0 text-right">
             <.eval_status_badge eval={@eval} />
             <div :if={@eval} class="mt-2 text-xs text-base-content/50">
-              Target: {format_value(@goal.goal_type, @eval.target_value)}
-              ·
+              Target: {format_value(@goal.goal_type, @eval.target_value)} ·
               Actual: {format_value(@goal.goal_type, @eval.actual_value)}
             </div>
           </div>
@@ -147,7 +179,12 @@ defmodule EmisintWeb.Compliance.TrackerLive do
         <div :if={@eval && @eval.actual_value && @eval.target_value} class="mt-3">
           <div class="flex justify-between text-xs text-base-content/60 mb-1">
             <span>Progress toward target</span>
-            <span>{format_value(@goal.goal_type, @eval.actual_value)} / {format_value(@goal.goal_type, @eval.target_value)}</span>
+            <span>
+              {format_value(@goal.goal_type, @eval.actual_value)} / {format_value(
+                @goal.goal_type,
+                @eval.target_value
+              )}
+            </span>
           </div>
           <progress
             class={["progress w-full", eval_progress_color(@eval.status)]}
@@ -157,9 +194,11 @@ defmodule EmisintWeb.Compliance.TrackerLive do
           </progress>
         </div>
 
-        <div :if={@eval && @eval.data_points_count == 0} class="mt-2 text-xs text-warning flex items-center gap-1">
-          <.icon name="hero-exclamation-triangle" class="size-3" />
-          No assessment data available yet
+        <div
+          :if={@eval && @eval.data_points_count == 0}
+          class="mt-2 text-xs text-warning flex items-center gap-1"
+        >
+          <.icon name="hero-exclamation-triangle" class="size-3" /> No assessment data available yet
         </div>
       </div>
     </div>
@@ -181,7 +220,9 @@ defmodule EmisintWeb.Compliance.TrackerLive do
     <span :if={@eval && @eval.status == :below} class="badge badge-error gap-1">
       <.icon name="hero-x-circle" class="size-3" /> Below
     </span>
-    <span :if={@eval && @eval.status == :insufficient_data} class="badge badge-ghost badge-sm">Insufficient Data</span>
+    <span :if={@eval && @eval.status == :insufficient_data} class="badge badge-ghost badge-sm">
+      Insufficient Data
+    </span>
     """
   end
 
@@ -242,8 +283,8 @@ defmodule EmisintWeb.Compliance.TrackerLive do
     if Decimal.compare(target, Decimal.new(0)) == :eq do
       0
     else
-    ratio = Decimal.div(actual, target)
-    min(Decimal.mult(ratio, 100) |> Decimal.to_integer(), 100)
+      ratio = Decimal.div(actual, target)
+      min(Decimal.mult(ratio, 100) |> Decimal.to_integer(), 100)
     end
   end
 
@@ -252,5 +293,4 @@ defmodule EmisintWeb.Compliance.TrackerLive do
   defp eval_progress_color(:approaching), do: "progress-warning"
   defp eval_progress_color(:below), do: "progress-error"
   defp eval_progress_color(_), do: "progress-primary"
-
 end

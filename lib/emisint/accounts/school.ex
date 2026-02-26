@@ -30,7 +30,7 @@ defmodule Emisint.Accounts.School do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:organization_id, :organization_id)
+      authorize_if actor_present()
     end
 
     policy action_type([:create, :update, :destroy]) do

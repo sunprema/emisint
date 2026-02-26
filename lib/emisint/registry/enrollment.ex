@@ -15,7 +15,16 @@ defmodule Emisint.Registry.Enrollment do
 
     create :create do
       primary? true
-      accept [:grade_level, :status, :enrolled_at, :exited_at, :student_id, :academic_year_id, :school_id]
+
+      accept [
+        :grade_level,
+        :status,
+        :enrolled_at,
+        :exited_at,
+        :student_id,
+        :academic_year_id,
+        :school_id
+      ]
     end
 
     update :update do
@@ -30,7 +39,7 @@ defmodule Emisint.Registry.Enrollment do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:organization_id, :organization_id)
+      authorize_if actor_present()
     end
 
     policy action_type([:create, :update, :destroy]) do
@@ -72,7 +81,6 @@ defmodule Emisint.Registry.Enrollment do
       allow_nil? false
       public? true
     end
-
 
     create_timestamp :created_at
     update_timestamp :updated_at

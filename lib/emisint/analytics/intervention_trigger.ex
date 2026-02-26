@@ -28,7 +28,16 @@ defmodule Emisint.Analytics.InterventionTrigger do
 
     create :create do
       primary? true
-      accept [:trigger_type, :severity, :triggered_at, :notes, :school_id, :academic_year_id, :schedule71_goal_id]
+
+      accept [
+        :trigger_type,
+        :severity,
+        :triggered_at,
+        :notes,
+        :school_id,
+        :academic_year_id,
+        :schedule71_goal_id
+      ]
     end
 
     update :resolve do
@@ -58,7 +67,7 @@ defmodule Emisint.Analytics.InterventionTrigger do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:organization_id, :organization_id)
+      authorize_if actor_present()
     end
 
     policy action_type([:create, :update, :destroy]) do
@@ -77,7 +86,13 @@ defmodule Emisint.Analytics.InterventionTrigger do
     attribute :trigger_type, :atom do
       allow_nil? false
       public? true
-      constraints one_of: [:proficiency_declining, :sgp_below_target, :growth_at_risk, :goal_at_risk]
+
+      constraints one_of: [
+                    :proficiency_declining,
+                    :sgp_below_target,
+                    :growth_at_risk,
+                    :goal_at_risk
+                  ]
     end
 
     attribute :severity, :atom do

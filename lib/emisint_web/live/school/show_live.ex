@@ -31,7 +31,8 @@ defmodule EmisintWeb.School.ShowLive do
      |> assign(:tabs, [:proficiency, :growth, :compliance, :interventions])}
   end
 
-  def handle_params(%{"tab" => tab}, _url, socket) when tab in ["proficiency", "growth", "compliance", "interventions"] do
+  def handle_params(%{"tab" => tab}, _url, socket)
+      when tab in ["proficiency", "growth", "compliance", "interventions"] do
     {:noreply, assign(socket, :active_tab, String.to_existing_atom(tab))}
   end
 
@@ -41,67 +42,67 @@ defmodule EmisintWeb.School.ShowLive do
 
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <%!-- Header --%>
-      <div class="flex items-center gap-3">
-        <.link navigate={~p"/dashboard"} class="btn btn-ghost btn-sm btn-circle">
-          <.icon name="hero-arrow-left" class="size-5" />
-        </.link>
-        <div>
-          <h1 class="text-2xl font-bold">{@school.name}</h1>
-          <p class="text-base-content/60 text-sm">
-            {@school.city} · MDE {@school.mde_building_code}
-          </p>
+    <Layouts.app flash={@flash}>
+      <div class="space-y-6">
+        <%!-- Header --%>
+        <div class="flex items-center gap-3">
+          <.link navigate={~p"/dashboard"} class="btn btn-ghost btn-sm btn-circle">
+            <.icon name="hero-arrow-left" class="size-5" />
+          </.link>
+          <div>
+            <h1 class="text-2xl font-bold">{@school.name}</h1>
+            <p class="text-base-content/60 text-sm">
+              {@school.city} · MDE {@school.mde_building_code}
+            </p>
+          </div>
+        </div>
+
+        <%!-- Quick-link buttons to detail pages --%>
+        <div class="flex flex-wrap gap-2">
+          <.link
+            navigate={~p"/compliance/#{@school.id}"}
+            class="btn btn-outline btn-sm gap-1"
+          >
+            <.icon name="hero-clipboard-document-check" class="size-4" /> Schedule 7-1 Tracker
+          </.link>
+          <.link
+            navigate={~p"/growth/#{@school.id}"}
+            class="btn btn-outline btn-sm gap-1"
+          >
+            <.icon name="hero-arrow-trending-up" class="size-4" /> Growth Monitor
+          </.link>
+        </div>
+
+        <%!-- Tab bar --%>
+        <div role="tablist" class="tabs tabs-bordered">
+          <.link
+            :for={tab <- @tabs}
+            patch={~p"/schools/#{@school.id}?tab=#{tab}"}
+            role="tab"
+            class={["tab", @active_tab == tab && "tab-active"]}
+          >
+            {tab_label(tab)}
+          </.link>
+        </div>
+
+        <%!-- Tab panels --%>
+        <div :if={@active_tab == :proficiency}>
+          <.proficiency_tab snapshots={school_wide_snapshots(@all_snapshots)} />
+        </div>
+
+        <div :if={@active_tab == :growth}>
+          <.growth_tab snapshots={by_grade_snapshots(@all_snapshots)} />
+        </div>
+
+        <div :if={@active_tab == :compliance}>
+          <.compliance_tab goals_with_evals={@goals_with_evals} school={@school} />
+        </div>
+
+        <div :if={@active_tab == :interventions}>
+          <.interventions_tab triggers={@triggers} />
         </div>
       </div>
-
-      <%!-- Quick-link buttons to detail pages --%>
-      <div class="flex flex-wrap gap-2">
-        <.link
-          navigate={~p"/compliance/#{@school.id}"}
-          class="btn btn-outline btn-sm gap-1"
-        >
-          <.icon name="hero-clipboard-document-check" class="size-4" />
-          Schedule 7-1 Tracker
-        </.link>
-        <.link
-          navigate={~p"/growth/#{@school.id}"}
-          class="btn btn-outline btn-sm gap-1"
-        >
-          <.icon name="hero-arrow-trending-up" class="size-4" />
-          Growth Monitor
-        </.link>
-      </div>
-
-      <%!-- Tab bar --%>
-      <div role="tablist" class="tabs tabs-bordered">
-        <.link
-          :for={tab <- @tabs}
-          patch={~p"/schools/#{@school.id}?tab=#{tab}"}
-          role="tab"
-          class={["tab", @active_tab == tab && "tab-active"]}
-        >
-          {tab_label(tab)}
-        </.link>
-      </div>
-
-      <%!-- Tab panels --%>
-      <div :if={@active_tab == :proficiency}>
-        <.proficiency_tab snapshots={school_wide_snapshots(@all_snapshots)} />
-      </div>
-
-      <div :if={@active_tab == :growth}>
-        <.growth_tab snapshots={by_grade_snapshots(@all_snapshots)} />
-      </div>
-
-      <div :if={@active_tab == :compliance}>
-        <.compliance_tab goals_with_evals={@goals_with_evals} school={@school} />
-      </div>
-
-      <div :if={@active_tab == :interventions}>
-        <.interventions_tab triggers={@triggers} />
-      </div>
-    </div>
+    </Layouts.app>
     """
   end
 
@@ -150,7 +151,11 @@ defmodule EmisintWeb.School.ShowLive do
 
   def growth_tab(assigns) do
     grade_levels =
-      assigns.snapshots |> Enum.map(& &1.grade_level) |> Enum.uniq() |> Enum.reject(&(&1 == "all")) |> Enum.sort()
+      assigns.snapshots
+      |> Enum.map(& &1.grade_level)
+      |> Enum.uniq()
+      |> Enum.reject(&(&1 == "all"))
+      |> Enum.sort()
 
     assigns = assign(assigns, :grade_levels, grade_levels)
 
@@ -161,7 +166,9 @@ defmodule EmisintWeb.School.ShowLive do
       <div :if={@snapshots == []} class="card bg-base-200">
         <div class="card-body items-center py-8 text-center">
           <p class="text-base-content/60">No growth data available yet.</p>
-          <p class="text-sm text-base-content/40">Upload assessment data with SGP scores to populate this view.</p>
+          <p class="text-sm text-base-content/40">
+            Upload assessment data with SGP scores to populate this view.
+          </p>
         </div>
       </div>
 
@@ -214,7 +221,10 @@ defmodule EmisintWeb.School.ShowLive do
       </div>
 
       <div :if={@goals_with_evals != []} class="space-y-2">
-        <div :for={{goal, eval} <- @goals_with_evals} class="card bg-base-100 shadow-sm border border-base-200">
+        <div
+          :for={{goal, eval} <- @goals_with_evals}
+          class="card bg-base-100 shadow-sm border border-base-200"
+        >
           <div class="card-body p-4 flex-row items-center gap-4">
             <div class="flex-1 min-w-0">
               <div class="font-medium truncate">{goal.title}</div>
@@ -252,7 +262,10 @@ defmodule EmisintWeb.School.ShowLive do
 
       <div :if={@active_triggers != []} class="space-y-2">
         <div
-          :for={trigger <- Enum.sort_by(@active_triggers, &{severity_order(&1.severity), &1.triggered_at}, :asc)}
+          :for={
+            trigger <-
+              Enum.sort_by(@active_triggers, &{severity_order(&1.severity), &1.triggered_at}, :asc)
+          }
           class="card bg-base-100 shadow-sm border border-base-200"
         >
           <div class="card-body p-4 flex-row items-start gap-3">
@@ -292,7 +305,9 @@ defmodule EmisintWeb.School.ShowLive do
     <span :if={@status == :below} class="badge badge-error gap-1">
       <.icon name="hero-x-circle" class="size-3" /> Below
     </span>
-    <span :if={@status == :insufficient_data} class="badge badge-ghost badge-sm">Insufficient Data</span>
+    <span :if={@status == :insufficient_data} class="badge badge-ghost badge-sm">
+      Insufficient Data
+    </span>
     """
   end
 
@@ -355,6 +370,7 @@ defmodule EmisintWeb.School.ShowLive do
 
   defp proficiency_color(d) do
     val = Decimal.to_float(d)
+
     cond do
       val >= 0.6 -> "progress-success"
       val >= 0.4 -> "progress-warning"
@@ -366,6 +382,7 @@ defmodule EmisintWeb.School.ShowLive do
 
   defp sgp_color(d) do
     val = Decimal.to_float(d)
+
     cond do
       val >= 50 -> "text-success"
       val >= 40 -> "text-warning"
@@ -380,5 +397,4 @@ defmodule EmisintWeb.School.ShowLive do
   defp severity_badge_class(:high), do: "badge-error"
   defp severity_badge_class(:medium), do: "badge-warning"
   defp severity_badge_class(:low), do: "badge-info"
-
 end

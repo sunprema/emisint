@@ -63,7 +63,7 @@ defmodule Emisint.Analytics.PerformanceSnapshot do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:organization_id, :organization_id)
+      authorize_if actor_present()
     end
 
     policy action_type([:create, :update, :destroy]) do
@@ -102,7 +102,13 @@ defmodule Emisint.Analytics.PerformanceSnapshot do
       allow_nil? false
       default :all
       public? true
-      constraints one_of: [:all, :economically_disadvantaged, :english_learner, :special_education]
+
+      constraints one_of: [
+                    :all,
+                    :economically_disadvantaged,
+                    :english_learner,
+                    :special_education
+                  ]
     end
 
     attribute :testing_window, :atom do

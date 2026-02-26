@@ -40,64 +40,66 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
 
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <div>
-        <h1 class="text-2xl font-bold">Portfolio Overview</h1>
-        <p class="text-base-content/60 text-sm mt-1">
-          Schedule 7-1 compliance and performance across all academies
-        </p>
-      </div>
+    <Layouts.app flash={@flash}>
+      <div class="space-y-6">
+        <div>
+          <h1 class="text-2xl font-bold">Portfolio Overview</h1>
+          <p class="text-base-content/60 text-sm mt-1">
+            Schedule 7-1 compliance and performance across all academies
+          </p>
+        </div>
 
-      <%!-- Stats bar --%>
-      <div class="stats stats-horizontal shadow w-full overflow-x-auto">
-        <div class="stat">
-          <div class="stat-figure text-primary">
-            <.icon name="hero-building-office" class="size-8" />
+        <%!-- Stats bar --%>
+        <div class="stats stats-horizontal shadow w-full overflow-x-auto">
+          <div class="stat">
+            <div class="stat-figure text-primary">
+              <.icon name="hero-building-office" class="size-8" />
+            </div>
+            <div class="stat-title">Schools</div>
+            <div class="stat-value text-primary">{length(@schools)}</div>
           </div>
-          <div class="stat-title">Schools</div>
-          <div class="stat-value text-primary">{length(@schools)}</div>
-        </div>
-        <div class="stat">
-          <div class="stat-figure text-success">
-            <.icon name="hero-check-badge" class="size-8" />
+          <div class="stat">
+            <div class="stat-figure text-success">
+              <.icon name="hero-check-badge" class="size-8" />
+            </div>
+            <div class="stat-title">On Track</div>
+            <div class="stat-value text-success">{@goal_counts.on_track}</div>
           </div>
-          <div class="stat-title">On Track</div>
-          <div class="stat-value text-success">{@goal_counts.on_track}</div>
-        </div>
-        <div class="stat">
-          <div class="stat-figure text-warning">
-            <.icon name="hero-exclamation-triangle" class="size-8" />
+          <div class="stat">
+            <div class="stat-figure text-warning">
+              <.icon name="hero-exclamation-triangle" class="size-8" />
+            </div>
+            <div class="stat-title">Approaching</div>
+            <div class="stat-value text-warning">{@goal_counts.approaching}</div>
           </div>
-          <div class="stat-title">Approaching</div>
-          <div class="stat-value text-warning">{@goal_counts.approaching}</div>
-        </div>
-        <div class="stat">
-          <div class="stat-figure text-error">
-            <.icon name="hero-x-circle" class="size-8" />
+          <div class="stat">
+            <div class="stat-figure text-error">
+              <.icon name="hero-x-circle" class="size-8" />
+            </div>
+            <div class="stat-title">Below Target</div>
+            <div class="stat-value text-error">{@goal_counts.below}</div>
           </div>
-          <div class="stat-title">Below Target</div>
-          <div class="stat-value text-error">{@goal_counts.below}</div>
         </div>
-      </div>
 
-      <%!-- Empty state --%>
-      <div :if={@schools == []} class="card bg-base-200 shadow-sm">
-        <div class="card-body items-center text-center py-12">
-          <.icon name="hero-building-office" class="size-12 text-base-content/30" />
-          <p class="text-base-content/60 mt-2">No schools found. Add a school to get started.</p>
+        <%!-- Empty state --%>
+        <div :if={@schools == []} class="card bg-base-200 shadow-sm">
+          <div class="card-body items-center text-center py-12">
+            <.icon name="hero-building-office" class="size-12 text-base-content/30" />
+            <p class="text-base-content/60 mt-2">No schools found. Add a school to get started.</p>
+          </div>
+        </div>
+
+        <%!-- Schools grid --%>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <.school_card
+            :for={school <- @schools}
+            school={school}
+            evaluations={Map.get(@evals_by_school, school.id, [])}
+            trigger_count={Map.get(@trigger_count_by_school, school.id, 0)}
+          />
         </div>
       </div>
-
-      <%!-- Schools grid --%>
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <.school_card
-          :for={school <- @schools}
-          school={school}
-          evaluations={Map.get(@evals_by_school, school.id, [])}
-          trigger_count={Map.get(@trigger_count_by_school, school.id, 0)}
-        />
-      </div>
-    </div>
+    </Layouts.app>
     """
   end
 

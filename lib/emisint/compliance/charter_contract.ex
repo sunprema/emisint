@@ -11,17 +11,38 @@ defmodule Emisint.Compliance.CharterContract do
     repo Emisint.Repo
   end
 
+  paper_trail do
+    change_tracking_mode(:changes_only)
+    store_action_name?(true)
+    attributes_as_attributes([:organization_id])
+  end
+
   actions do
     defaults [:read, :destroy]
 
     create :create do
       primary? true
-      accept [:authorizer_name, :contract_start_date, :contract_end_date, :reauthorization_date, :status, :school_id]
+
+      accept [
+        :authorizer_name,
+        :contract_start_date,
+        :contract_end_date,
+        :reauthorization_date,
+        :status,
+        :school_id
+      ]
     end
 
     update :update do
       primary? true
-      accept [:authorizer_name, :contract_start_date, :contract_end_date, :reauthorization_date, :status]
+
+      accept [
+        :authorizer_name,
+        :contract_start_date,
+        :contract_end_date,
+        :reauthorization_date,
+        :status
+      ]
     end
   end
 
@@ -31,7 +52,7 @@ defmodule Emisint.Compliance.CharterContract do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:organization_id, :organization_id)
+      authorize_if actor_present()
     end
 
     policy action_type([:create, :update, :destroy]) do
@@ -88,11 +109,5 @@ defmodule Emisint.Compliance.CharterContract do
       attribute_writable? true
       public? true
     end
-  end
-
-  paper_trail do
-    change_tracking_mode :changes_only
-    store_action_name? true
-    attributes_as_attributes [:organization_id]
   end
 end

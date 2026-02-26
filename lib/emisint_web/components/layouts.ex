@@ -71,14 +71,12 @@ defmodule EmisintWeb.Layouts do
             <ul class="menu menu-sm gap-0.5">
               <li>
                 <.link navigate={~p"/dashboard"} class="flex items-center gap-2">
-                  <.icon name="hero-squares-2x2" class="size-4" />
-                  Portfolio
+                  <.icon name="hero-squares-2x2" class="size-4" /> Portfolio
                 </.link>
               </li>
               <li :if={@current_user && @current_user.role in [:emo_admin, :system_admin]}>
                 <.link navigate={~p"/admin/import"} class="flex items-center gap-2">
-                  <.icon name="hero-arrow-up-tray" class="size-4" />
-                  Data Import
+                  <.icon name="hero-arrow-up-tray" class="size-4" /> Data Import
                 </.link>
               </li>
             </ul>
@@ -104,11 +102,9 @@ defmodule EmisintWeb.Layouts do
 
             <.link
               href={~p"/sign-out"}
-              method="delete"
               class="btn btn-ghost btn-sm w-full justify-start gap-2"
             >
-              <.icon name="hero-arrow-right-on-rectangle" class="size-4" />
-              Sign Out
+              <.icon name="hero-arrow-right-on-rectangle" class="size-4" /> Sign Out
             </.link>
 
             <div class="flex justify-center pt-1">

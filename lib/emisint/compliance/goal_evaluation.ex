@@ -11,6 +11,12 @@ defmodule Emisint.Compliance.GoalEvaluation do
     repo Emisint.Repo
   end
 
+  paper_trail do
+    change_tracking_mode(:changes_only)
+    store_action_name?(true)
+    attributes_as_attributes([:organization_id])
+  end
+
   actions do
     defaults [:read, :destroy]
 
@@ -52,7 +58,7 @@ defmodule Emisint.Compliance.GoalEvaluation do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:organization_id, :organization_id)
+      authorize_if actor_present()
     end
 
     policy action_type([:create, :update, :destroy]) do
@@ -142,11 +148,5 @@ defmodule Emisint.Compliance.GoalEvaluation do
 
   identities do
     identity :unique_goal_year_evaluation, [:schedule71_goal_id, :academic_year_id]
-  end
-
-  paper_trail do
-    change_tracking_mode :changes_only
-    store_action_name? true
-    attributes_as_attributes [:organization_id]
   end
 end

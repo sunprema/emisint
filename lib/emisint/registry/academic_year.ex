@@ -15,6 +15,7 @@ defmodule Emisint.Registry.AcademicYear do
 
     create :create do
       primary? true
+
       accept [
         :label,
         :start_date,
@@ -31,6 +32,7 @@ defmodule Emisint.Registry.AcademicYear do
 
     update :update do
       primary? true
+
       accept [
         :label,
         :start_date,
@@ -52,7 +54,7 @@ defmodule Emisint.Registry.AcademicYear do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:organization_id, :organization_id)
+      authorize_if actor_present()
     end
 
     policy action_type([:create, :update, :destroy]) do

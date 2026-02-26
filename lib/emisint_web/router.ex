@@ -6,6 +6,11 @@ defmodule EmisintWeb.Router do
 
   import AshAuthentication.Plug.Helpers
 
+  def put_session_timezone(conn, _opts) do
+    timezone = conn.cookies["timezone"]
+    put_session(conn, "timezone", timezone)
+  end
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -14,6 +19,7 @@ defmodule EmisintWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug :load_from_session
+    plug EmisintWeb.SetTenant
   end
 
   pipeline :api do
@@ -25,7 +31,11 @@ defmodule EmisintWeb.Router do
   scope "/", EmisintWeb do
     pipe_through :browser
 
-    ash_authentication_live_session :authenticated_routes do
+    ash_authentication_live_session :authenticated_routes,
+      on_mount: [
+        {EmisintWeb.LiveUserAuth, :live_user_required},
+        EmisintWeb.LiveScope
+      ] do
       live "/dashboard", Dashboard.PortfolioLive, :index
       live "/schools/:id", School.ShowLive, :show
       live "/compliance/:school_id", Compliance.TrackerLive, :index
