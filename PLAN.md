@@ -89,10 +89,10 @@ Build incrementally in 8 phases, each independently testable. Phases 0–5 are p
 - [ ] Manually test all routes and role-based access restrictions
 
 ### Phase 7: Seeds + AshAdmin + Integration Tests
-- [ ] Add all domains to AshAdmin in `router.ex` (`ash_admin "/", domains: [...]`)
-- [ ] Populate `priv/repo/seeds.exs` with sample org, school, academic year, users (EMO Admin + School Leader), sample students, and one Schedule71Goal
-- [ ] Write `test/emisint/integration/data_pipeline_test.exs` — end-to-end: student → enrollment → assessment result → snapshot → goal evaluation
-- [ ] Write `test/emisint/integration/csv_import_test.exs` — CSV upload → worker → snapshot → goal recalculation chain
+- [x] Add all domains to AshAdmin in `router.ex` (`ash_admin "/"` — auto-discovers all registered domains)
+- [x] Populate `priv/repo/seeds.exs` with sample org, 2 schools, academic year, 3 users, 18 students, M-STEP + NWEA MAP results, charter contracts, Schedule71Goals; runs workers inline to populate snapshots + evaluations
+- [x] Write `test/emisint/integration/data_pipeline_test.exs` — end-to-end: student → enrollment → assessment result → snapshot → goal evaluation (11 tests)
+- [x] Write `test/emisint/integration/csv_import_test.exs` — CSV upload → worker → snapshot → goal recalculation chain (14 tests)
 
 ### Phase 8: Reporting & Exports (deferred)
 - [ ] Create `lib/emisint/reporting/reauthorization_packet.ex` — multi-year data aggregation for charter renewal
