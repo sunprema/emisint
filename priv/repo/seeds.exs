@@ -30,7 +30,8 @@ else
   # ── Organization ────────────────────────────────────────────────────────────
 
   org =
-    Ash.create!(Organization,
+    Ash.create!(
+      Organization,
       %{
         name: "Cornerstone Education Management",
         type: :emo,
@@ -46,7 +47,8 @@ else
   # ── Schools ─────────────────────────────────────────────────────────────────
 
   school1 =
-    Ash.create!(School,
+    Ash.create!(
+      School,
       %{
         name: "Great Lakes Academy",
         mde_district_code: "25010",
@@ -60,7 +62,8 @@ else
     )
 
   school2 =
-    Ash.create!(School,
+    Ash.create!(
+      School,
       %{
         name: "Riverside Charter Academy",
         mde_district_code: "25020",
@@ -78,7 +81,8 @@ else
   # ── Academic Year ───────────────────────────────────────────────────────────
 
   year =
-    Ash.create!(AcademicYear,
+    Ash.create!(
+      AcademicYear,
       %{
         label: "2024-2025",
         start_date: ~D[2024-09-03],
@@ -118,10 +122,13 @@ else
     )
 
     # Mark email confirmed so the user can sign in immediately
-    Emisint.Repo.update_all(
-      from(u in "users", where: u.id == ^user.id),
-      set: [confirmed_at: DateTime.utc_now()]
+    user
+    |> Ash.Changeset.for_update(:assign_organization, %{}, authorize?: false)
+    |> Ash.Changeset.force_change_attribute(
+      :confirmed_at,
+      DateTime.utc_now() |> DateTime.truncate(:second)
     )
+    |> Ash.update!()
 
     user
   end
@@ -139,10 +146,28 @@ else
       uic = "GLA#{String.pad_leading(Integer.to_string(i), 4, "0")}"
 
       student =
-        Ash.create!(Student,
+        Ash.create!(
+          Student,
           %{
             uic: uic,
-            first_name: Enum.at(["Ava", "Ben", "Cara", "Dev", "Eva", "Finn", "Grace", "Hiro", "Iris", "Jay", "Kai", "Lena"], i - 1),
+            first_name:
+              Enum.at(
+                [
+                  "Ava",
+                  "Ben",
+                  "Cara",
+                  "Dev",
+                  "Eva",
+                  "Finn",
+                  "Grace",
+                  "Hiro",
+                  "Iris",
+                  "Jay",
+                  "Kai",
+                  "Lena"
+                ],
+                i - 1
+              ),
             last_name: "Demo",
             economically_disadvantaged: i <= 5,
             english_learner: i in [3, 6, 9],
@@ -152,9 +177,11 @@ else
           authorize?: false
         )
 
-      Ash.create!(Enrollment,
+      Ash.create!(
+        Enrollment,
         %{
-          grade_level: Enum.at([:g3, :g4, :g5, :g6, :g7, :g8, :g3, :g4, :g5, :g6, :g7, :g8], i - 1),
+          grade_level:
+            Enum.at([:g3, :g4, :g5, :g6, :g7, :g8, :g3, :g4, :g5, :g6, :g7, :g8], i - 1),
           enrolled_at: ~D[2024-09-03],
           student_id: student.id,
           school_id: school1.id,
@@ -173,7 +200,8 @@ else
       uic = "RCA#{String.pad_leading(Integer.to_string(i), 4, "0")}"
 
       student =
-        Ash.create!(Student,
+        Ash.create!(
+          Student,
           %{
             uic: uic,
             first_name: Enum.at(["Noah", "Mia", "Liam", "Zoe", "Omar", "Pia"], i - 1),
@@ -183,7 +211,8 @@ else
           authorize?: false
         )
 
-      Ash.create!(Enrollment,
+      Ash.create!(
+        Enrollment,
         %{
           grade_level: Enum.at([:g4, :g5, :g6, :g4, :g5, :g6], i - 1),
           enrolled_at: ~D[2024-09-03],
@@ -198,7 +227,9 @@ else
       student
     end)
 
-  IO.puts("  ✓ Students: #{length(school1_students)} (Great Lakes), #{length(school2_students)} (Riverside)")
+  IO.puts(
+    "  ✓ Students: #{length(school1_students)} (Great Lakes), #{length(school2_students)} (Riverside)"
+  )
 
   # ── Assessment Results — School 1 ───────────────────────────────────────────
   # Spring M-STEP: 9 of 12 proficient (75% rate), median SGP = 54
@@ -220,7 +251,8 @@ else
   ]
 
   Enum.each(Enum.zip(school1_students, spring_mstep_data), fn {student, {level, sgp}} ->
-    Ash.create!(AssessmentResult,
+    Ash.create!(
+      AssessmentResult,
       %{
         assessment_type: :m_step,
         subject: "math",
@@ -255,7 +287,8 @@ else
   ]
 
   Enum.each(Enum.zip(school1_students, fall_nwea_data), fn {student, {rit, sgp}} ->
-    Ash.create!(AssessmentResult,
+    Ash.create!(
+      AssessmentResult,
       %{
         assessment_type: :nwea_map,
         subject: "math",
@@ -284,7 +317,8 @@ else
   ]
 
   Enum.each(Enum.zip(school2_students, ela_data_s2), fn {student, {level, sgp}} ->
-    Ash.create!(AssessmentResult,
+    Ash.create!(
+      AssessmentResult,
       %{
         assessment_type: :m_step,
         subject: "ela",
@@ -306,7 +340,8 @@ else
   # ── Charter Contracts ───────────────────────────────────────────────────────
 
   contract1 =
-    Ash.create!(CharterContract,
+    Ash.create!(
+      CharterContract,
       %{
         authorizer_name: "Central Michigan University",
         contract_start_date: ~D[2019-07-01],
@@ -320,7 +355,8 @@ else
     )
 
   contract2 =
-    Ash.create!(CharterContract,
+    Ash.create!(
+      CharterContract,
       %{
         authorizer_name: "Grand Valley State University",
         contract_start_date: ~D[2020-07-01],
@@ -339,7 +375,8 @@ else
 
   # School1 goals (expected to meet)
   _goal1_s1 =
-    Ash.create!(Schedule71Goal,
+    Ash.create!(
+      Schedule71Goal,
       %{
         title: "Math Proficiency ≥ 65% (Spring M-STEP)",
         goal_type: :proficiency_threshold,
@@ -359,7 +396,8 @@ else
     )
 
   _goal2_s1 =
-    Ash.create!(Schedule71Goal,
+    Ash.create!(
+      Schedule71Goal,
       %{
         title: "Median Student Growth Percentile ≥ 50th (Math, Spring M-STEP)",
         goal_type: :sgp_median,
@@ -380,7 +418,8 @@ else
 
   # School2 goals (ELA — expected to be below/approaching)
   _goal1_s2 =
-    Ash.create!(Schedule71Goal,
+    Ash.create!(
+      Schedule71Goal,
       %{
         title: "ELA Proficiency ≥ 60% (Spring M-STEP)",
         goal_type: :proficiency_threshold,
@@ -399,7 +438,8 @@ else
     )
 
   _goal2_s2 =
-    Ash.create!(Schedule71Goal,
+    Ash.create!(
+      Schedule71Goal,
       %{
         title: "Median SGP ≥ 50th (ELA, Spring M-STEP)",
         goal_type: :sgp_median,
