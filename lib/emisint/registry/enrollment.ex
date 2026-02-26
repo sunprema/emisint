@@ -73,12 +73,6 @@ defmodule Emisint.Registry.Enrollment do
       public? true
     end
 
-    # school_id stored as plain UUID for now — converted to belongs_to in Phase 2
-    # when Emisint.Accounts.School is created
-    attribute :school_id, :uuid do
-      allow_nil? false
-      public? true
-    end
 
     create_timestamp :created_at
     update_timestamp :updated_at
@@ -92,6 +86,12 @@ defmodule Emisint.Registry.Enrollment do
     end
 
     belongs_to :academic_year, Emisint.Registry.AcademicYear do
+      allow_nil? false
+      attribute_writable? true
+      public? true
+    end
+
+    belongs_to :school, Emisint.Accounts.School do
       allow_nil? false
       attribute_writable? true
       public? true

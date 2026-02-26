@@ -28,13 +28,13 @@ Build incrementally in 8 phases, each independently testable. Phases 0–5 are p
 - [x] Write `test/emisint/accounts/organization_test.exs`
 
 ### Phase 1: Registry Domain
-- [ ] Create `lib/emisint/registry.ex` (new `Ash.Domain`)
-- [ ] Create `lib/emisint/registry/academic_year.ex` — attrs: `label`, `start_date`, `end_date`, 6 testing window date columns, `active`; multitenancy via `organization_id` attribute
-- [ ] Create `lib/emisint/registry/student.ex` — attrs: `uic` (Michigan UIC, unique per org), demographics, ESSA subgroup booleans (`:economically_disadvantaged`, `:english_learner`, `:special_education`); identity `[:uic, :organization_id]`; `:bulk_upsert` action for CSV import
-- [ ] Create `lib/emisint/registry/enrollment.ex` — attrs: `grade_level` atom, `status` atom, dates; relationships to `Student`, `AcademicYear`, `School` (forward ref resolved in Phase 2)
-- [ ] Append `Emisint.Registry` to `ash_domains` in `config/config.exs`
-- [ ] Run `mix ash.codegen add_registry_domain && mix ash.migrate`
-- [ ] Write tests for all three Registry resources
+- [x] Create `lib/emisint/registry.ex` (new `Ash.Domain`)
+- [x] Create `lib/emisint/registry/academic_year.ex` — attrs: `label`, `start_date`, `end_date`, 6 testing window date columns, `active`; multitenancy via `organization_id` attribute
+- [x] Create `lib/emisint/registry/student.ex` — attrs: `uic` (Michigan UIC, unique per org), demographics, ESSA subgroup booleans (`:economically_disadvantaged`, `:english_learner`, `:special_education`); identity `[:uic, :organization_id]`; `:bulk_upsert` action for CSV import
+- [x] Create `lib/emisint/registry/enrollment.ex` — attrs: `grade_level` atom, `status` atom, dates; relationships to `Student`, `AcademicYear`, `School` (forward ref resolved in Phase 2)
+- [x] Append `Emisint.Registry` to `ash_domains` in `config/config.exs`
+- [x] Run `mix ash.codegen add_registry_domain && mix ash.migrate`
+- [x] Write tests for all three Registry resources
 
 ### Phase 2: School Resource (Accounts Domain)
 - [ ] Create `lib/emisint/accounts/school.ex` — attrs: `name`, `mde_district_code`, `mde_building_code` (critical for MDE data matching), `city`, `county`, `active`; multitenancy via `organization_id`; identity `[:mde_building_code, :organization_id]`
@@ -42,7 +42,7 @@ Build incrementally in 8 phases, each independently testable. Phases 0–5 are p
 - [ ] Add `School` to `lib/emisint/accounts.ex` resources + code interface
 - [ ] Run `mix ash.codegen add_school_resource && mix ash.migrate`
 - [ ] Write `test/emisint/accounts/school_test.exs`
-
+    
 ### Phase 3: Assessments Domain
 - [ ] Create `lib/emisint/assessments.ex` (new `Ash.Domain`)
 - [ ] Create `lib/emisint/assessments/benchmark_provider.ex` — metadata for NWEA/i-Ready (attrs: `name`, `code` unique per org, `scoring_system` atom, `subjects` array)
