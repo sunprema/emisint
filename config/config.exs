@@ -63,7 +63,7 @@ config :spark,
 config :emisint,
   ecto_repos: [Emisint.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Emisint.Accounts, Emisint.Registry]
+  ash_domains: [Emisint.Accounts, Emisint.Registry, Emisint.Assessments]
 
 # Configure the endpoint
 config :emisint, EmisintWeb.Endpoint,
