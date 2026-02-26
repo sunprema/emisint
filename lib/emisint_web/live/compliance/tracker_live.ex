@@ -41,12 +41,12 @@ defmodule EmisintWeb.Compliance.TrackerLive do
         <div class="flex items-center gap-3">
           <.link
             navigate={~p"/schools/#{@school.id}"}
-            class="p-2 rounded-xl hover:bg-base-200 transition-colors text-base-content/60 hover:text-base-content"
+            class="p-2 hover:bg-base-200 transition-colors text-base-content/60 hover:text-base-content"
           >
             <.icon name="hero-arrow-left" class="size-5" />
           </.link>
           <div class="flex items-center gap-4">
-            <div class="p-2.5 rounded-2xl bg-primary/10 border border-primary/20">
+            <div class="p-2.5 bg-primary/10 border border-primary/20">
               <.icon name="hero-clipboard-document-check" class="size-6 text-primary" />
             </div>
             <div>
@@ -104,7 +104,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
             class={[
               "px-3.5 py-1.5 rounded-full text-sm font-medium transition-all border",
               @filter_status == status &&
-                "bg-primary text-primary-content border-primary shadow-sm",
+                "bg-primary text-primary-content border-primary",
               @filter_status != status &&
                 "bg-base-100 text-base-content/60 border-base-200 hover:border-base-300 hover:text-base-content"
             ]}
@@ -116,9 +116,9 @@ defmodule EmisintWeb.Compliance.TrackerLive do
         <%!-- Empty state --%>
         <div
           :if={@goals_with_evals == []}
-          class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-16 text-center"
+          class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-16 text-center"
         >
-          <div class="p-3 rounded-2xl bg-base-200 mb-3">
+          <div class="p-3 bg-base-200 mb-3">
             <.icon name="hero-clipboard-document-list" class="size-7 text-base-content/25" />
           </div>
           <p class="text-sm font-medium text-base-content/40">No goals configured</p>
@@ -129,7 +129,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
 
         <div
           :if={@filtered == [] and @goals_with_evals != []}
-          class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-12 text-center"
+          class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-12 text-center"
         >
           <p class="text-sm text-base-content/40">No goals match the selected filter.</p>
         </div>
@@ -152,7 +152,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
     assigns = assign(assigns, :count, count)
 
     ~H"""
-    <div class={["rounded-xl p-3 text-center border border-transparent", @bg]}>
+    <div class={["p-3 text-center border border-transparent", @bg]}>
       <div class={["text-2xl font-bold", @color]}>{@count}</div>
       <div class="text-xs text-base-content/50 mt-0.5">{@label}</div>
     </div>
@@ -161,7 +161,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
 
   def goal_card(assigns) do
     ~H"""
-    <div class="rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden">
+    <div class="bg-base-100 border border-base-200 overflow-hidden">
       <div class="p-5">
         <div class="flex items-start gap-4 flex-wrap">
           <div class="flex-1 min-w-0">
@@ -226,7 +226,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
 
         <div
           :if={@eval && @eval.data_points_count == 0}
-          class="mt-3 flex items-center gap-1.5 text-xs text-warning bg-warning/5 rounded-lg px-3 py-2"
+          class="mt-3 flex items-center gap-1.5 text-xs text-warning bg-warning/5 px-3 py-2"
         >
           <.icon name="hero-exclamation-triangle" class="size-3.5 shrink-0" />
           No assessment data available yet

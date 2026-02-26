@@ -48,7 +48,7 @@ defmodule EmisintWeb.School.ShowLive do
         <div class="flex items-start gap-3">
           <.link
             navigate={~p"/dashboard"}
-            class="mt-1 p-2 rounded-xl hover:bg-base-200 transition-colors text-base-content/60 hover:text-base-content shrink-0"
+            class="mt-1 p-2 hover:bg-base-200 transition-colors text-base-content/60 hover:text-base-content shrink-0"
           >
             <.icon name="hero-arrow-left" class="size-5" />
           </.link>
@@ -62,13 +62,13 @@ defmodule EmisintWeb.School.ShowLive do
           <div class="flex gap-2 shrink-0">
             <.link
               navigate={~p"/compliance/#{@school.id}"}
-              class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-base-300 text-xs font-medium text-base-content/60 hover:border-primary/40 hover:text-primary transition-all"
+              class="flex items-center gap-1.5 px-3 py-2 border border-base-300 text-xs font-medium text-base-content/60 hover:border-primary/40 hover:text-primary transition-all"
             >
               <.icon name="hero-clipboard-document-check" class="size-3.5" /> Schedule 7-1
             </.link>
             <.link
               navigate={~p"/growth/#{@school.id}"}
-              class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-base-300 text-xs font-medium text-base-content/60 hover:border-primary/40 hover:text-primary transition-all"
+              class="flex items-center gap-1.5 px-3 py-2 border border-base-300 text-xs font-medium text-base-content/60 hover:border-primary/40 hover:text-primary transition-all"
             >
               <.icon name="hero-arrow-trending-up" class="size-3.5" /> Growth
             </.link>
@@ -76,14 +76,14 @@ defmodule EmisintWeb.School.ShowLive do
         </div>
 
         <%!-- Tab bar --%>
-        <div class="flex gap-1 p-1 rounded-xl bg-base-200 w-fit">
+        <div class="flex gap-1 p-1 bg-base-200 w-fit">
           <.link
             :for={tab <- @tabs}
             patch={~p"/schools/#{@school.id}?tab=#{tab}"}
             class={[
-              "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              "px-4 py-2 text-sm font-medium transition-all",
               @active_tab == tab &&
-                "bg-base-100 text-base-content shadow-sm",
+                "bg-base-100 text-base-content",
               @active_tab != tab &&
                 "text-base-content/50 hover:text-base-content"
             ]}
@@ -123,9 +123,9 @@ defmodule EmisintWeb.School.ShowLive do
     <div class="space-y-5">
       <div
         :if={@snapshots == []}
-        class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
+        class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
       >
-        <div class="p-3 rounded-2xl bg-base-200 mb-3">
+        <div class="p-3 bg-base-200 mb-3">
           <.icon name="hero-chart-bar" class="size-6 text-base-content/25" />
         </div>
         <p class="text-sm font-medium text-base-content/40">No proficiency data yet</p>
@@ -135,7 +135,7 @@ defmodule EmisintWeb.School.ShowLive do
       <div :if={@snapshots != []} class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div
           :for={subject <- @subjects}
-          class="rounded-2xl bg-base-100 border border-base-200 shadow-sm p-5"
+          class="bg-base-100 border border-base-200 p-5"
         >
           <h3 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider capitalize mb-4">
             {subject}
@@ -176,9 +176,9 @@ defmodule EmisintWeb.School.ShowLive do
     <div class="space-y-5">
       <div
         :if={@snapshots == []}
-        class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
+        class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
       >
-        <div class="p-3 rounded-2xl bg-base-200 mb-3">
+        <div class="p-3 bg-base-200 mb-3">
           <.icon name="hero-arrow-trending-up" class="size-6 text-base-content/25" />
         </div>
         <p class="text-sm font-medium text-base-content/40">No growth data yet</p>
@@ -189,7 +189,7 @@ defmodule EmisintWeb.School.ShowLive do
 
       <div
         :if={@snapshots != []}
-        class="rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden"
+        class="bg-base-100 border border-base-200 overflow-hidden"
       >
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
@@ -248,7 +248,7 @@ defmodule EmisintWeb.School.ShowLive do
         <h2 class="font-semibold">Schedule 7-1 Goals</h2>
         <.link
           navigate={~p"/compliance/#{@school.id}"}
-          class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-content text-xs font-medium hover:opacity-90 transition-opacity"
+          class="flex items-center gap-1.5 px-3 py-2 bg-primary text-primary-content text-xs font-medium hover:opacity-90 transition-opacity"
         >
           Full Tracker <.icon name="hero-arrow-right" class="size-3.5" />
         </.link>
@@ -256,9 +256,9 @@ defmodule EmisintWeb.School.ShowLive do
 
       <div
         :if={@goals_with_evals == []}
-        class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
+        class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
       >
-        <div class="p-3 rounded-2xl bg-base-200 mb-3">
+        <div class="p-3 bg-base-200 mb-3">
           <.icon name="hero-clipboard-document-list" class="size-6 text-base-content/25" />
         </div>
         <p class="text-sm font-medium text-base-content/40">No goals configured</p>
@@ -267,7 +267,7 @@ defmodule EmisintWeb.School.ShowLive do
       <div :if={@goals_with_evals != []} class="space-y-2">
         <div
           :for={{goal, eval} <- @goals_with_evals}
-          class="flex items-center gap-4 p-4 rounded-xl bg-base-100 border border-base-200 hover:bg-base-50 transition-colors"
+          class="flex items-center gap-4 p-4 bg-base-100 border border-base-200 hover:bg-base-50 transition-colors"
         >
           <div class="flex-1 min-w-0">
             <div class="font-medium text-sm truncate">{goal.title}</div>
@@ -302,9 +302,9 @@ defmodule EmisintWeb.School.ShowLive do
 
       <div
         :if={@active_triggers == []}
-        class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
+        class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-14 text-center"
       >
-        <div class="p-3 rounded-2xl bg-success/10 mb-3">
+        <div class="p-3 bg-success/10 mb-3">
           <.icon name="hero-check-circle" class="size-6 text-success" />
         </div>
         <p class="text-sm font-medium text-base-content/50">No active interventions</p>
@@ -317,7 +317,7 @@ defmodule EmisintWeb.School.ShowLive do
             trigger <-
               Enum.sort_by(@active_triggers, &{severity_order(&1.severity), &1.triggered_at}, :asc)
           }
-          class="flex items-start gap-3 p-4 rounded-xl bg-base-100 border border-base-200 hover:bg-base-50 transition-colors"
+          class="flex items-start gap-3 p-4 bg-base-100 border border-base-200 hover:bg-base-50 transition-colors"
         >
           <div class={[
             "px-2.5 py-1 rounded-full text-xs font-medium shrink-0 mt-0.5 capitalize",

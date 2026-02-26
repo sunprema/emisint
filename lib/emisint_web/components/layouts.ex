@@ -38,7 +38,7 @@ defmodule EmisintWeb.Layouts do
       <%!-- Page content --%>
       <div class="drawer-content flex flex-col">
         <%!-- Mobile top navbar --%>
-        <div class="navbar bg-base-300 shadow-sm lg:hidden sticky top-0 z-20">
+        <div class="navbar bg-base-300 lg:hidden sticky top-0 z-20">
           <label for="main-drawer" class="btn btn-square btn-ghost drawer-button">
             <.icon name="hero-bars-3" class="size-6" />
           </label>
@@ -86,7 +86,7 @@ defmodule EmisintWeb.Layouts do
           <div class="border-t border-base-300">
             <%!-- Profile card --%>
             <div :if={@current_user} class="p-3">
-              <div class="flex items-center gap-3 p-3 rounded-xl bg-base-300/50">
+              <div class="flex items-center gap-3 p-3 bg-base-300/50">
                 <div class="size-9 rounded-full bg-primary text-primary-content flex items-center justify-center shrink-0 text-xs font-bold">
                   {String.first(String.upcase(@current_user.email |> to_string() || "?"))}
                 </div>
@@ -103,7 +103,7 @@ defmodule EmisintWeb.Layouts do
             <div class="px-3 pb-3 space-y-1">
               <.link
                 href={~p"/sign-out"}
-                class="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-base-content/60 hover:text-base-content hover:bg-base-300/50 transition-colors"
+                class="flex items-center gap-2 w-full px-3 py-2 text-sm text-base-content/60 hover:text-base-content hover:bg-base-300/50 transition-colors"
               >
                 <.icon name="hero-arrow-right-on-rectangle" class="size-4" /> Sign Out
               </.link>

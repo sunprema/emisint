@@ -79,12 +79,12 @@ defmodule EmisintWeb.Growth.MonitorLive do
         <div class="flex items-center gap-3">
           <.link
             navigate={~p"/schools/#{@school.id}"}
-            class="p-2 rounded-xl hover:bg-base-200 transition-colors text-base-content/60 hover:text-base-content"
+            class="p-2 hover:bg-base-200 transition-colors text-base-content/60 hover:text-base-content"
           >
             <.icon name="hero-arrow-left" class="size-5" />
           </.link>
           <div class="flex items-center gap-4">
-            <div class="p-2.5 rounded-2xl bg-primary/10 border border-primary/20">
+            <div class="p-2.5 bg-primary/10 border border-primary/20">
               <.icon name="hero-arrow-trending-up" class="size-6 text-primary" />
             </div>
             <div>
@@ -101,7 +101,7 @@ defmodule EmisintWeb.Growth.MonitorLive do
               Academic Year
             </label>
             <select
-              class="rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
+              class="border border-base-300 bg-base-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
               phx-change="select_year"
               name="year_id"
             >
@@ -119,7 +119,7 @@ defmodule EmisintWeb.Growth.MonitorLive do
             <label class="text-xs font-medium text-base-content/50 uppercase tracking-wider">
               Testing Window
             </label>
-            <div class="flex rounded-xl border border-base-300 overflow-hidden bg-base-100">
+            <div class="flex border border-base-300 overflow-hidden bg-base-100">
               <button
                 :for={window <- @windows}
                 phx-click="select_window"
@@ -150,9 +150,9 @@ defmodule EmisintWeb.Growth.MonitorLive do
         <%!-- No data --%>
         <div
           :if={@window_snaps == []}
-          class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-16 text-center"
+          class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-16 text-center"
         >
-          <div class="p-3 rounded-2xl bg-base-200 mb-3">
+          <div class="p-3 bg-base-200 mb-3">
             <.icon name="hero-arrow-trending-up" class="size-7 text-base-content/25" />
           </div>
           <p class="text-sm font-medium text-base-content/40">No growth data for this window</p>
@@ -164,7 +164,7 @@ defmodule EmisintWeb.Growth.MonitorLive do
         <%!-- Grade breakdown table --%>
         <div
           :if={@grade_levels != []}
-          class="rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden"
+          class="bg-base-100 border border-base-200 overflow-hidden"
         >
           <div class="px-6 py-4 border-b border-base-200">
             <h2 class="font-semibold">Growth by Grade</h2>
@@ -200,7 +200,7 @@ defmodule EmisintWeb.Growth.MonitorLive do
         </div>
 
         <%!-- SGP Legend --%>
-        <div class="rounded-xl border border-base-200 bg-base-50/50 px-5 py-4">
+        <div class="border border-base-200 bg-base-50/50 px-5 py-4">
           <h3 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider mb-3">
             SGP Benchmark Guide
           </h3>
@@ -239,7 +239,7 @@ defmodule EmisintWeb.Growth.MonitorLive do
     assigns = assign(assigns, :median_sgp, median)
 
     ~H"""
-    <div class="rounded-2xl bg-base-100 border border-base-200 shadow-sm p-5 flex flex-col items-center text-center">
+    <div class="bg-base-100 border border-base-200 p-5 flex flex-col items-center text-center">
       <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider capitalize mb-3">
         {@subject}
       </span>

@@ -45,7 +45,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       <div class="max-w-6xl mx-auto space-y-8">
         <%!-- Header --%>
         <div class="flex items-center gap-4">
-          <div class="p-2.5 rounded-2xl bg-primary/10 border border-primary/20">
+          <div class="p-2.5 bg-primary/10 border border-primary/20">
             <.icon name="hero-squares-2x2" class="size-6 text-primary" />
           </div>
           <div>
@@ -58,24 +58,24 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
 
         <%!-- Stats row --%>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="rounded-2xl bg-base-100 border border-base-200 shadow-sm p-5">
+          <div class="bg-base-100 border border-base-200 p-5">
             <div class="flex items-center justify-between mb-3">
               <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
                 Schools
               </span>
-              <div class="p-1.5 rounded-lg bg-primary/10">
+              <div class="p-1.5 bg-primary/10">
                 <.icon name="hero-building-office" class="size-4 text-primary" />
               </div>
             </div>
             <div class="text-3xl font-bold tracking-tight">{length(@schools)}</div>
           </div>
 
-          <div class="rounded-2xl bg-base-100 border border-base-200 shadow-sm p-5">
+          <div class="bg-base-100 border border-base-200 p-5">
             <div class="flex items-center justify-between mb-3">
               <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
                 On Track
               </span>
-              <div class="p-1.5 rounded-lg bg-success/10">
+              <div class="p-1.5 bg-success/10">
                 <.icon name="hero-check-badge" class="size-4 text-success" />
               </div>
             </div>
@@ -84,12 +84,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             </div>
           </div>
 
-          <div class="rounded-2xl bg-base-100 border border-base-200 shadow-sm p-5">
+          <div class="bg-base-100 border border-base-200 p-5">
             <div class="flex items-center justify-between mb-3">
               <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
                 Approaching
               </span>
-              <div class="p-1.5 rounded-lg bg-warning/10">
+              <div class="p-1.5 bg-warning/10">
                 <.icon name="hero-exclamation-triangle" class="size-4 text-warning" />
               </div>
             </div>
@@ -98,12 +98,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             </div>
           </div>
 
-          <div class="rounded-2xl bg-base-100 border border-base-200 shadow-sm p-5">
+          <div class="bg-base-100 border border-base-200 p-5">
             <div class="flex items-center justify-between mb-3">
               <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
                 Below Target
               </span>
-              <div class="p-1.5 rounded-lg bg-error/10">
+              <div class="p-1.5 bg-error/10">
                 <.icon name="hero-x-circle" class="size-4 text-error" />
               </div>
             </div>
@@ -114,9 +114,9 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
         <%!-- Empty state --%>
         <div
           :if={@schools == []}
-          class="rounded-2xl bg-base-100 border border-base-200 flex flex-col items-center justify-center py-16 text-center"
+          class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-16 text-center"
         >
-          <div class="p-3 rounded-2xl bg-base-200 mb-3">
+          <div class="p-3 bg-base-200 mb-3">
             <.icon name="hero-building-office" class="size-7 text-base-content/25" />
           </div>
           <p class="text-sm font-medium text-base-content/40">No schools found</p>
@@ -149,7 +149,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       |> assign(:total_goals, length(assigns.evaluations))
 
     ~H"""
-    <div class="rounded-2xl bg-base-100 border border-base-200 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 overflow-hidden">
+    <div class="bg-base-100 border border-base-200 hover:transition-all hover:-translate-y-0.5 overflow-hidden">
       <div class="p-5">
         <div class="flex items-start justify-between gap-2 mb-4">
           <div class="min-w-0 flex-1">
@@ -158,7 +158,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
           </div>
           <div
             :if={@trigger_count > 0}
-            class="flex items-center gap-1 px-2 py-1 rounded-lg bg-error/10 text-error text-xs font-medium shrink-0"
+            class="flex items-center gap-1 px-2 py-1 bg-error/10 text-error text-xs font-medium shrink-0"
           >
             <.icon name="hero-bell-alert" class="size-3" /> {@trigger_count}
           </div>

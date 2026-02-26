@@ -121,7 +121,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
       <div class="max-w-6xl mx-auto space-y-8">
         <%!-- Page header --%>
         <div class="flex items-center gap-4">
-          <div class="p-2.5 rounded-2xl bg-primary/10 border border-primary/20">
+          <div class="p-2.5 bg-primary/10 border border-primary/20">
             <.icon name="hero-arrow-up-tray" class="size-6 text-primary" />
           </div>
           <div>
@@ -135,7 +135,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
         <%!-- Two-column layout --%>
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
           <%!-- Upload form — 3 cols --%>
-          <div class="lg:col-span-3 rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden">
+          <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-base-200">
               <h2 class="font-semibold">Upload Assessment CSV</h2>
               <p class="text-xs text-base-content/40 mt-0.5">
@@ -152,7 +152,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   </label>
                   <select
                     name="school_id"
-                    class="w-full rounded-xl border border-base-300 bg-base-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
+                    class="w-full border border-base-300 bg-base-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
                     phx-change="update_field"
                     phx-value-field="school_id"
                   >
@@ -173,7 +173,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   </label>
                   <select
                     name="year_id"
-                    class="w-full rounded-xl border border-base-300 bg-base-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
+                    class="w-full border border-base-300 bg-base-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
                     phx-change="update_field"
                     phx-value-field="year_id"
                   >
@@ -196,7 +196,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <label
                     :for={{label, value} <- @providers}
                     class={[
-                      "flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all select-none",
+                      "flex-1 flex items-center gap-3 px-4 py-3 border-2 cursor-pointer transition-all select-none",
                       @selected_provider == value &&
                         "border-primary bg-primary/5",
                       @selected_provider != value &&
@@ -235,11 +235,11 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </label>
 
                 <div
-                  class="relative rounded-xl border-2 border-dashed border-base-300 hover:border-primary/40 bg-base-50/50 transition-colors group cursor-pointer"
+                  class="relative border-2 border-dashed border-base-300 hover:border-primary/40 bg-base-50/50 transition-colors group cursor-pointer"
                   phx-drop-target={@uploads.csv_file.ref}
                 >
                   <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
-                    <div class="p-3 rounded-2xl bg-base-200 group-hover:bg-primary/10 transition-colors mb-3">
+                    <div class="p-3 bg-base-200 group-hover:bg-primary/10 transition-colors mb-3">
                       <.icon
                         name="hero-document-text"
                         class="size-7 text-base-content/30 group-hover:text-primary transition-colors"
@@ -257,9 +257,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <%!-- File entry preview --%>
                 <div
                   :for={entry <- @uploads.csv_file.entries}
-                  class="flex items-center gap-3 p-3 rounded-xl border border-base-200 bg-base-50"
+                  class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
                 >
-                  <div class="p-2 rounded-lg bg-primary/10 shrink-0">
+                  <div class="p-2 bg-primary/10 shrink-0">
                     <.icon name="hero-document-text" class="size-4 text-primary" />
                   </div>
                   <div class="flex-1 min-w-0">
@@ -279,7 +279,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     type="button"
                     phx-click="cancel-upload"
                     phx-value-ref={entry.ref}
-                    class="p-1.5 rounded-lg hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
+                    class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
                   >
                     <.icon name="hero-x-mark" class="size-4" />
                   </button>
@@ -288,7 +288,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <%!-- Upload errors --%>
                 <div
                   :for={err <- upload_errors(@uploads.csv_file)}
-                  class="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/10 rounded-xl px-3 py-2.5"
+                  class="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/10 px-3 py-2.5"
                 >
                   <.icon name="hero-exclamation-circle" class="size-4 shrink-0" />
                   {upload_error_msg(err)}
@@ -299,9 +299,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
               <button
                 type="submit"
                 class={[
-                  "w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-sm transition-all",
+                  "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
                   !@importing &&
-                    "bg-primary text-primary-content hover:opacity-90 active:scale-[0.99] shadow-sm shadow-primary/20",
+                    "bg-primary text-primary-content hover:opacity-90 active:scale-[0.99]",
                   @importing && "bg-primary/50 text-primary-content/70 cursor-not-allowed"
                 ]}
                 disabled={@importing}
@@ -314,7 +314,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
           </div>
 
           <%!-- Recent imports — 2 cols --%>
-          <div class="lg:col-span-2 rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden">
+          <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
               <div>
                 <h2 class="font-semibold">Recent Imports</h2>
@@ -330,7 +330,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
               :if={@recent_logs == []}
               class="flex flex-col items-center justify-center py-16 px-6 text-center"
             >
-              <div class="p-3 rounded-2xl bg-base-200 mb-3">
+              <div class="p-3 bg-base-200 mb-3">
                 <.icon name="hero-inbox" class="size-6 text-base-content/25" />
               </div>
               <p class="text-sm font-medium text-base-content/40">No imports yet</p>
