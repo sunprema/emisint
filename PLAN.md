@@ -79,13 +79,13 @@ Build incrementally in 8 phases, each independently testable. Phases 0–5 are p
 - [ ] Write `test/emisint/workers/snapshot_refresh_worker_test.exs`
 
 ### Phase 6: LiveView Dashboard Layer
-- [ ] Create `lib/emisint_web/live/dashboard/portfolio_live.ex` — EMO portfolio overview: all schools with traffic-light goal status grid, DaisyUI stats cards
-- [ ] Create `lib/emisint_web/live/school/show_live.ex` — school drill-down with tabs: Proficiency / Growth / Compliance / Interventions (uses PerformanceSnapshot for speed)
-- [ ] Create `lib/emisint_web/live/compliance/tracker_live.ex` — Schedule 7-1 tracker: all goals for a school with colored status badges (DaisyUI badge-success/warning/error)
-- [ ] Create `lib/emisint_web/live/growth/monitor_live.ex` — SGP and NWEA monitor: median SGP by grade/subject, growth-to-target percentage
-- [ ] Create `lib/emisint_web/live/admin/data_import_live.ex` — CSV upload UI using `Phoenix.LiveView.upload`, real-time DataSyncLog status via PubSub
-- [ ] Update `lib/emisint_web/router.ex` — add authenticated LiveView routes under `ash_authentication_live_session`
-- [ ] Update `lib/emisint_web/components/layouts.ex` — replace boilerplate navbar with Emisint app shell (sidebar nav with DaisyUI drawer for mobile)
+- [x] Create `lib/emisint_web/live/dashboard/portfolio_live.ex` — EMO portfolio overview: all schools with traffic-light goal status grid, DaisyUI stats cards
+- [x] Create `lib/emisint_web/live/school/show_live.ex` — school drill-down with tabs: Proficiency / Growth / Compliance / Interventions (uses PerformanceSnapshot for speed)
+- [x] Create `lib/emisint_web/live/compliance/tracker_live.ex` — Schedule 7-1 tracker: all goals for a school with colored status badges (DaisyUI badge-success/warning/error)
+- [x] Create `lib/emisint_web/live/growth/monitor_live.ex` — SGP and NWEA monitor: median SGP by grade/subject, growth-to-target percentage
+- [x] Create `lib/emisint_web/live/admin/data_import_live.ex` — CSV upload UI using `Phoenix.LiveView.upload`, real-time DataSyncLog status via PubSub
+- [x] Update `lib/emisint_web/router.ex` — add authenticated LiveView routes under `ash_authentication_live_session`
+- [x] Update `lib/emisint_web/components/layouts.ex` — replace boilerplate navbar with Emisint app shell (sidebar nav with DaisyUI drawer for mobile)
 - [ ] Manually test all routes and role-based access restrictions
 
 ### Phase 7: Seeds + AshAdmin + Integration Tests

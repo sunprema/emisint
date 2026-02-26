@@ -90,6 +90,8 @@ defmodule Emisint.Workers.CsvImportWorker do
         authorize?: false
       )
 
+      Phoenix.PubSub.broadcast(Emisint.PubSub, "data_sync:#{org_id}", {:data_sync_updated, org_id})
+
       # 6. Enqueue SnapshotRefreshWorker
       %{
         organization_id: org_id,
@@ -108,6 +110,8 @@ defmodule Emisint.Workers.CsvImportWorker do
           tenant: org_id,
           authorize?: false
         )
+
+        Phoenix.PubSub.broadcast(Emisint.PubSub, "data_sync:#{org_id}", {:data_sync_updated, org_id})
 
         reraise error, __STACKTRACE__
     end
