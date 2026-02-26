@@ -58,9 +58,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
     {:noreply, socket}
   end
 
-  def handle_event("update_field", %{"field" => field, "value" => value}, socket) do
+  def handle_event("update_field", %{"_target" => [field]} = params, socket) do
     key = String.to_existing_atom("selected_#{field}")
-    {:noreply, assign(socket, key, value)}
+    {:noreply, assign(socket, key, params[field])}
   end
 
   def handle_event(
@@ -118,212 +118,289 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="space-y-8">
-        <div>
-          <h1 class="text-2xl font-bold">Data Import</h1>
-          <p class="text-base-content/60 text-sm mt-1">
-            Upload CSV exports from NWEA MAP or i-Ready to populate assessment data.
-          </p>
+      <div class="max-w-6xl mx-auto space-y-8">
+        <%!-- Page header --%>
+        <div class="flex items-center gap-4">
+          <div class="p-2.5 rounded-2xl bg-primary/10 border border-primary/20">
+            <.icon name="hero-arrow-up-tray" class="size-6 text-primary" />
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold tracking-tight">Data Import</h1>
+            <p class="text-sm text-base-content/50 mt-0.5">
+              Upload CSV exports from NWEA MAP or i-Ready to populate assessment data.
+            </p>
+          </div>
         </div>
 
-        <%!-- Upload form --%>
-        <div class="card bg-base-100 shadow-sm border border-base-200">
-          <div class="card-body">
-            <h2 class="card-title text-lg">Upload Assessment CSV</h2>
+        <%!-- Two-column layout --%>
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+          <%!-- Upload form — 3 cols --%>
+          <div class="lg:col-span-3 rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-base-200">
+              <h2 class="font-semibold">Upload Assessment CSV</h2>
+              <p class="text-xs text-base-content/40 mt-0.5">
+                All fields are required before submitting
+              </p>
+            </div>
 
-            <form phx-submit="import" phx-change="validate" class="space-y-4">
-              <%!-- School selector --%>
-              <div class="form-control">
-                <label class="label">
-                  <span class="label-text font-medium">School <span class="text-error">*</span></span>
-                </label>
-                <select
-                  name="school_id"
-                  class="select select-bordered w-full max-w-sm"
-                  phx-change="update_field"
-                  phx-value-field="school_id"
-                >
-                  <option value="">Select a school…</option>
-                  <option
-                    :for={school <- @schools}
-                    value={school.id}
-                    selected={school.id == @selected_school_id}
+            <form phx-submit="import" phx-change="validate" class="p-6 space-y-6">
+              <%!-- School + Year row --%>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                  <label class="text-sm font-medium">
+                    School <span class="text-error text-xs">*</span>
+                  </label>
+                  <select
+                    name="school_id"
+                    class="w-full rounded-xl border border-base-300 bg-base-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
+                    phx-change="update_field"
+                    phx-value-field="school_id"
                   >
-                    {school.name}
-                  </option>
-                </select>
-              </div>
+                    <option value="">Select a school…</option>
+                    <option
+                      :for={school <- @schools}
+                      value={school.id}
+                      selected={school.id == @selected_school_id}
+                    >
+                      {school.name}
+                    </option>
+                  </select>
+                </div>
 
-              <%!-- Academic year selector --%>
-              <div class="form-control">
-                <label class="label">
-                  <span class="label-text font-medium">
-                    Academic Year <span class="text-error">*</span>
-                  </span>
-                </label>
-                <select
-                  name="year_id"
-                  class="select select-bordered w-full max-w-sm"
-                  phx-change="update_field"
-                  phx-value-field="year_id"
-                >
-                  <option value="">Select a year…</option>
-                  <option
-                    :for={year <- @academic_years}
-                    value={year.id}
-                    selected={year.id == @selected_year_id}
+                <div class="space-y-1.5">
+                  <label class="text-sm font-medium">
+                    Academic Year <span class="text-error text-xs">*</span>
+                  </label>
+                  <select
+                    name="year_id"
+                    class="w-full rounded-xl border border-base-300 bg-base-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-all"
+                    phx-change="update_field"
+                    phx-value-field="year_id"
                   >
-                    {year.label}
-                  </option>
-                </select>
+                    <option value="">Select a year…</option>
+                    <option
+                      :for={year <- @academic_years}
+                      value={year.id}
+                      selected={year.id == @selected_year_id}
+                    >
+                      {year.label}
+                    </option>
+                  </select>
+                </div>
               </div>
 
               <%!-- Provider selector --%>
-              <div class="form-control">
-                <label class="label">
-                  <span class="label-text font-medium">Assessment Provider</span>
-                </label>
-                <div class="flex flex-wrap gap-2">
+              <div class="space-y-1.5">
+                <label class="text-sm font-medium">Assessment Provider</label>
+                <div class="flex gap-3">
                   <label
                     :for={{label, value} <- @providers}
                     class={[
-                      "flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer transition-colors",
-                      @selected_provider == value && "border-primary bg-primary/10",
-                      @selected_provider != value && "border-base-300 hover:border-primary/50"
+                      "flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all select-none",
+                      @selected_provider == value &&
+                        "border-primary bg-primary/5",
+                      @selected_provider != value &&
+                        "border-base-200 hover:border-base-300 bg-base-50/50"
                     ]}
                   >
+                    <div class={[
+                      "size-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                      @selected_provider == value && "border-primary",
+                      @selected_provider != value && "border-base-300"
+                    ]}>
+                      <div
+                        :if={@selected_provider == value}
+                        class="size-1.5 rounded-full bg-primary"
+                      >
+                      </div>
+                    </div>
                     <input
                       type="radio"
                       name="provider"
                       value={value}
                       checked={@selected_provider == value}
-                      class="radio radio-sm radio-primary"
+                      class="hidden"
                       phx-change="update_field"
                       phx-value-field="provider"
                     />
-                    {label}
+                    <span class="text-sm font-medium">{label}</span>
                   </label>
                 </div>
               </div>
 
-              <%!-- File upload area --%>
-              <div class="form-control">
-                <label class="label">
-                  <span class="label-text font-medium">
-                    CSV File <span class="text-error">*</span>
-                  </span>
+              <%!-- File upload drop zone --%>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">
+                  CSV File <span class="text-error text-xs">*</span>
                 </label>
+
                 <div
-                  class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center hover:border-primary/50 transition-colors"
+                  class="relative rounded-xl border-2 border-dashed border-base-300 hover:border-primary/40 bg-base-50/50 transition-colors group cursor-pointer"
                   phx-drop-target={@uploads.csv_file.ref}
                 >
-                  <.icon name="hero-document-text" class="size-8 text-base-content/40 mx-auto" />
-                  <p class="mt-2 text-base-content/60 text-sm">
-                    Drag and drop your CSV file here, or
-                  </p>
-                  <label class="mt-2 btn btn-sm btn-outline cursor-pointer">
-                    Browse File <.live_file_input upload={@uploads.csv_file} class="hidden" />
+                  <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
+                    <div class="p-3 rounded-2xl bg-base-200 group-hover:bg-primary/10 transition-colors mb-3">
+                      <.icon
+                        name="hero-document-text"
+                        class="size-7 text-base-content/30 group-hover:text-primary transition-colors"
+                      />
+                    </div>
+                    <p class="text-sm text-base-content/50">
+                      Drag & drop your CSV here, or{" "}
+                      <span class="text-primary font-medium hover:underline">browse</span>
+                    </p>
+                    <p class="text-xs text-base-content/30 mt-1">CSV files up to 10 MB</p>
+                    <.live_file_input upload={@uploads.csv_file} class="hidden" />
                   </label>
-                  <p class="text-xs text-base-content/40 mt-2">CSV files up to 10MB</p>
                 </div>
 
-                <%!-- Upload entry previews --%>
+                <%!-- File entry preview --%>
                 <div
                   :for={entry <- @uploads.csv_file.entries}
-                  class="mt-2 flex items-center gap-2 p-2 bg-base-200 rounded-lg"
+                  class="flex items-center gap-3 p-3 rounded-xl border border-base-200 bg-base-50"
                 >
-                  <.icon name="hero-document-text" class="size-5 text-primary shrink-0" />
+                  <div class="p-2 rounded-lg bg-primary/10 shrink-0">
+                    <.icon name="hero-document-text" class="size-4 text-primary" />
+                  </div>
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium truncate">{entry.client_name}</div>
-                    <div class="text-xs text-base-content/60">{format_bytes(entry.client_size)}</div>
+                    <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
+                      <div
+                        class="bg-primary h-1 rounded-full transition-all duration-300"
+                        style={"width: #{entry.progress}%"}
+                      >
+                      </div>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-2">
-                    <progress class="progress progress-primary w-16" value={entry.progress} max="100">
-                    </progress>
-                    <button
-                      type="button"
-                      phx-click="cancel-upload"
-                      phx-value-ref={entry.ref}
-                      class="btn btn-ghost btn-xs btn-circle"
-                    >
-                      <.icon name="hero-x-mark" class="size-4" />
-                    </button>
-                  </div>
+                  <span class="text-xs text-base-content/40 shrink-0">
+                    {format_bytes(entry.client_size)}
+                  </span>
+                  <button
+                    type="button"
+                    phx-click="cancel-upload"
+                    phx-value-ref={entry.ref}
+                    class="p-1.5 rounded-lg hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
+                  >
+                    <.icon name="hero-x-mark" class="size-4" />
+                  </button>
                 </div>
 
                 <%!-- Upload errors --%>
                 <div
                   :for={err <- upload_errors(@uploads.csv_file)}
-                  class="mt-1 text-sm text-error flex items-center gap-1"
+                  class="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/10 rounded-xl px-3 py-2.5"
                 >
-                  <.icon name="hero-exclamation-circle" class="size-4" />
+                  <.icon name="hero-exclamation-circle" class="size-4 shrink-0" />
                   {upload_error_msg(err)}
                 </div>
               </div>
 
-              <div class="card-actions">
-                <button
-                  type="submit"
-                  class={["btn btn-primary gap-2", @importing && "loading"]}
-                  disabled={@importing}
-                >
-                  <.icon :if={!@importing} name="hero-arrow-up-tray" class="size-4" />
-                  {if @importing, do: "Processing…", else: "Start Import"}
-                </button>
-              </div>
+              <%!-- Submit button --%>
+              <button
+                type="submit"
+                class={[
+                  "w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-sm transition-all",
+                  !@importing &&
+                    "bg-primary text-primary-content hover:opacity-90 active:scale-[0.99] shadow-sm shadow-primary/20",
+                  @importing && "bg-primary/50 text-primary-content/70 cursor-not-allowed"
+                ]}
+                disabled={@importing}
+              >
+                <span :if={@importing} class="loading loading-spinner loading-sm"></span>
+                <.icon :if={!@importing} name="hero-arrow-up-tray" class="size-4" />
+                {if @importing, do: "Processing…", else: "Start Import"}
+              </button>
             </form>
           </div>
-        </div>
 
-        <%!-- Import history --%>
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">Recent Imports</h2>
-            <div :if={@importing} class="flex items-center gap-2 text-sm text-base-content/60">
-              <span class="loading loading-spinner loading-xs"></span> Processing import…
+          <%!-- Recent imports — 2 cols --%>
+          <div class="lg:col-span-2 rounded-2xl bg-base-100 border border-base-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
+              <div>
+                <h2 class="font-semibold">Recent Imports</h2>
+                <p class="text-xs text-base-content/40 mt-0.5">Last 20 jobs</p>
+              </div>
+              <div :if={@importing} class="flex items-center gap-1.5 text-xs text-base-content/40">
+                <span class="loading loading-spinner loading-xs"></span> Processing…
+              </div>
             </div>
-          </div>
 
-          <div :if={@recent_logs == []} class="card bg-base-200">
-            <div class="card-body items-center py-8 text-center">
-              <p class="text-base-content/60">No imports yet. Upload a CSV file to get started.</p>
+            <%!-- Empty state --%>
+            <div
+              :if={@recent_logs == []}
+              class="flex flex-col items-center justify-center py-16 px-6 text-center"
+            >
+              <div class="p-3 rounded-2xl bg-base-200 mb-3">
+                <.icon name="hero-inbox" class="size-6 text-base-content/25" />
+              </div>
+              <p class="text-sm font-medium text-base-content/40">No imports yet</p>
+              <p class="text-xs text-base-content/30 mt-1">Upload a CSV file to get started.</p>
             </div>
-          </div>
 
-          <div :if={@recent_logs != []} class="overflow-x-auto">
-            <table class="table table-sm bg-base-100 rounded-lg shadow-sm">
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Type</th>
-                  <th>Started</th>
-                  <th class="text-right">Processed</th>
-                  <th class="text-right">Failed</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr :for={log <- @recent_logs}>
-                  <td><.sync_status_badge status={log.status} /></td>
-                  <td class="capitalize">
-                    {log.job_type |> to_string() |> String.replace("_", " ")}
-                  </td>
-                  <td class="text-base-content/60 text-xs whitespace-nowrap">
+            <%!-- Log entries --%>
+            <div :if={@recent_logs != []} class="divide-y divide-base-200">
+              <div
+                :for={log <- @recent_logs}
+                class="px-5 py-3.5 hover:bg-base-50 transition-colors"
+              >
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <.sync_status_dot status={log.status} />
+                    <span class="text-sm font-medium capitalize truncate">
+                      {log.job_type |> to_string() |> String.replace("_", " ")}
+                    </span>
+                  </div>
+                  <span class="text-xs text-base-content/35 shrink-0 mt-0.5">
                     {format_datetime(log.inserted_at)}
-                  </td>
-                  <td class="text-right">{log.records_processed || "—"}</td>
-                  <td class="text-right">{log.records_failed || "—"}</td>
-                  <td class="text-xs text-base-content/60 max-w-xs truncate">
-                    {log.error_message ||
-                      (log.metadata["provider_code"] && "Provider: #{log.metadata["provider_code"]}")}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                  </span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 ml-4 text-xs text-base-content/45">
+                  <span :if={log.records_processed}>
+                    <span class="text-success">✓</span> {log.records_processed} rows
+                  </span>
+                  <span :if={log.records_failed && log.records_failed > 0} class="text-error">
+                    <span>✗</span> {log.records_failed} failed
+                  </span>
+                  <span :if={log.metadata["provider_code"]} class="uppercase tracking-wide font-medium">
+                    {log.metadata["provider_code"] |> to_string() |> String.replace("_", " ")}
+                  </span>
+                </div>
+
+                <p :if={log.error_message} class="ml-4 mt-1 text-xs text-error/70 truncate">
+                  {log.error_message}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </Layouts.app>
+    """
+  end
+
+  def sync_status_dot(assigns) do
+    ~H"""
+    <span
+      :if={@status == :pending}
+      class="inline-block size-2 rounded-full bg-base-300 shrink-0 mt-0.5"
+    >
+    </span>
+    <span
+      :if={@status == :running}
+      class="inline-block size-2 rounded-full bg-info animate-pulse shrink-0 mt-0.5"
+    >
+    </span>
+    <span
+      :if={@status == :completed}
+      class="inline-block size-2 rounded-full bg-success shrink-0 mt-0.5"
+    >
+    </span>
+    <span
+      :if={@status == :failed}
+      class="inline-block size-2 rounded-full bg-error shrink-0 mt-0.5"
+    >
+    </span>
     """
   end
 
