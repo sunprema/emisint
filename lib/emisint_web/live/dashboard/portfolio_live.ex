@@ -8,13 +8,14 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
     oid = user.organization_id
+    scope = socket.assigns.scope
 
-    schools = Ash.read!(Emisint.Accounts.School, tenant: oid, actor: user)
+    schools = Ash.read!(Emisint.Accounts.School, scope: scope)
 
     evals_with_goals =
       Emisint.Compliance.GoalEvaluation
       |> Ash.Query.load(:schedule71_goal)
-      |> Ash.read!(tenant: oid, actor: user)
+      |> Ash.read!(scope: scope)
 
     evals_by_school =
       Enum.group_by(evals_with_goals, fn e ->
@@ -24,7 +25,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
     triggers =
       Emisint.Analytics.InterventionTrigger
       |> Ash.Query.filter(status == :active)
-      |> Ash.read!(tenant: oid, actor: user)
+      |> Ash.read!(scope: scope)
 
     trigger_count_by_school = Enum.frequencies_by(triggers, & &1.school_id)
     goal_counts = tally_statuses(evals_with_goals)

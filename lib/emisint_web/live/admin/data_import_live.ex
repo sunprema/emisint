@@ -3,8 +3,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
   require Ash.Query
 
-  on_mount {EmisintWeb.LiveUserAuth, :live_user_required}
-
   @providers [
     {"NWEA MAP", "nwea_map"},
     {"i-Ready", "i_ready"}
@@ -13,13 +11,14 @@ defmodule EmisintWeb.Admin.DataImportLive do
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
     oid = user.organization_id
+    scope = socket.assigns.scope
 
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Emisint.PubSub, "data_sync:#{oid}")
     end
 
-    schools = Ash.read!(Emisint.Accounts.School, tenant: oid, actor: user)
-    academic_years = Emisint.Registry.list_academic_years!(tenant: oid, actor: user)
+    schools = Ash.read!(Emisint.Accounts.School, scope: scope)
+    academic_years = Emisint.Registry.list_academic_years!(scope: scope)
     recent_logs = load_recent_logs(oid, user)
 
     socket =
@@ -32,6 +31,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> assign(:selected_year_id, nil)
       |> assign(:selected_provider, "nwea_map")
       |> assign(:importing, false)
+      |> assign(:providers, @providers)
       |> assign(:import_result, nil)
       |> allow_upload(:csv_file,
         accept: ~w(.csv),
@@ -101,7 +101,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
            socket
            |> assign(:importing, true)
            |> assign(:import_result, %{filename: filename, row_count: row_count})
-           |> put_flash(:info, "Import queued: #{filename} (#{row_count} rows). Processing in background…")}
+           |> put_flash(
+             :info,
+             "Import queued: #{filename} (#{row_count} rows). Processing in background…"
+           )}
       end
     end
   end
@@ -114,191 +117,213 @@ defmodule EmisintWeb.Admin.DataImportLive do
     assigns = assign(assigns, :providers, @providers)
 
     ~H"""
-    <div class="space-y-8">
-      <div>
-        <h1 class="text-2xl font-bold">Data Import</h1>
-        <p class="text-base-content/60 text-sm mt-1">
-          Upload CSV exports from NWEA MAP or i-Ready to populate assessment data.
-        </p>
-      </div>
+    <Layouts.app flash={@flash}>
+      <div class="space-y-8">
+        <div>
+          <h1 class="text-2xl font-bold">Data Import</h1>
+          <p class="text-base-content/60 text-sm mt-1">
+            Upload CSV exports from NWEA MAP or i-Ready to populate assessment data.
+          </p>
+        </div>
 
-      <%!-- Upload form --%>
-      <div class="card bg-base-100 shadow-sm border border-base-200">
-        <div class="card-body">
-          <h2 class="card-title text-lg">Upload Assessment CSV</h2>
+        <%!-- Upload form --%>
+        <div class="card bg-base-100 shadow-sm border border-base-200">
+          <div class="card-body">
+            <h2 class="card-title text-lg">Upload Assessment CSV</h2>
 
-          <form phx-submit="import" phx-change="validate" class="space-y-4">
-            <%!-- School selector --%>
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text font-medium">School <span class="text-error">*</span></span>
-              </label>
-              <select
-                name="school_id"
-                class="select select-bordered w-full max-w-sm"
-                phx-change="update_field"
-                phx-value-field="school_id"
-              >
-                <option value="">Select a school…</option>
-                <option :for={school <- @schools} value={school.id} selected={school.id == @selected_school_id}>
-                  {school.name}
-                </option>
-              </select>
-            </div>
-
-            <%!-- Academic year selector --%>
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text font-medium">Academic Year <span class="text-error">*</span></span>
-              </label>
-              <select
-                name="year_id"
-                class="select select-bordered w-full max-w-sm"
-                phx-change="update_field"
-                phx-value-field="year_id"
-              >
-                <option value="">Select a year…</option>
-                <option :for={year <- @academic_years} value={year.id} selected={year.id == @selected_year_id}>
-                  {year.label}
-                </option>
-              </select>
-            </div>
-
-            <%!-- Provider selector --%>
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text font-medium">Assessment Provider</span>
-              </label>
-              <div class="flex flex-wrap gap-2">
-                <label
-                  :for={{label, value} <- @providers}
-                  class={[
-                    "flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer transition-colors",
-                    @selected_provider == value && "border-primary bg-primary/10",
-                    @selected_provider != value && "border-base-300 hover:border-primary/50"
-                  ]}
+            <form phx-submit="import" phx-change="validate" class="space-y-4">
+              <%!-- School selector --%>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text font-medium">School <span class="text-error">*</span></span>
+                </label>
+                <select
+                  name="school_id"
+                  class="select select-bordered w-full max-w-sm"
+                  phx-change="update_field"
+                  phx-value-field="school_id"
                 >
-                  <input
-                    type="radio"
-                    name="provider"
-                    value={value}
-                    checked={@selected_provider == value}
-                    class="radio radio-sm radio-primary"
-                    phx-change="update_field"
-                    phx-value-field="provider"
-                  />
-                  {label}
-                </label>
-              </div>
-            </div>
-
-            <%!-- File upload area --%>
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text font-medium">CSV File <span class="text-error">*</span></span>
-              </label>
-              <div
-                class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center hover:border-primary/50 transition-colors"
-                phx-drop-target={@uploads.csv_file.ref}
-              >
-                <.icon name="hero-document-text" class="size-8 text-base-content/40 mx-auto" />
-                <p class="mt-2 text-base-content/60 text-sm">
-                  Drag and drop your CSV file here, or
-                </p>
-                <label class="mt-2 btn btn-sm btn-outline cursor-pointer">
-                  Browse File
-                  <.live_file_input upload={@uploads.csv_file} class="hidden" />
-                </label>
-                <p class="text-xs text-base-content/40 mt-2">CSV files up to 10MB</p>
-              </div>
-
-              <%!-- Upload entry previews --%>
-              <div :for={entry <- @uploads.csv_file.entries} class="mt-2 flex items-center gap-2 p-2 bg-base-200 rounded-lg">
-                <.icon name="hero-document-text" class="size-5 text-primary shrink-0" />
-                <div class="flex-1 min-w-0">
-                  <div class="text-sm font-medium truncate">{entry.client_name}</div>
-                  <div class="text-xs text-base-content/60">{format_bytes(entry.client_size)}</div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <progress class="progress progress-primary w-16" value={entry.progress} max="100"></progress>
-                  <button
-                    type="button"
-                    phx-click="cancel-upload"
-                    phx-value-ref={entry.ref}
-                    class="btn btn-ghost btn-xs btn-circle"
+                  <option value="">Select a school…</option>
+                  <option
+                    :for={school <- @schools}
+                    value={school.id}
+                    selected={school.id == @selected_school_id}
                   >
-                    <.icon name="hero-x-mark" class="size-4" />
-                  </button>
+                    {school.name}
+                  </option>
+                </select>
+              </div>
+
+              <%!-- Academic year selector --%>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text font-medium">
+                    Academic Year <span class="text-error">*</span>
+                  </span>
+                </label>
+                <select
+                  name="year_id"
+                  class="select select-bordered w-full max-w-sm"
+                  phx-change="update_field"
+                  phx-value-field="year_id"
+                >
+                  <option value="">Select a year…</option>
+                  <option
+                    :for={year <- @academic_years}
+                    value={year.id}
+                    selected={year.id == @selected_year_id}
+                  >
+                    {year.label}
+                  </option>
+                </select>
+              </div>
+
+              <%!-- Provider selector --%>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text font-medium">Assessment Provider</span>
+                </label>
+                <div class="flex flex-wrap gap-2">
+                  <label
+                    :for={{label, value} <- @providers}
+                    class={[
+                      "flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer transition-colors",
+                      @selected_provider == value && "border-primary bg-primary/10",
+                      @selected_provider != value && "border-base-300 hover:border-primary/50"
+                    ]}
+                  >
+                    <input
+                      type="radio"
+                      name="provider"
+                      value={value}
+                      checked={@selected_provider == value}
+                      class="radio radio-sm radio-primary"
+                      phx-change="update_field"
+                      phx-value-field="provider"
+                    />
+                    {label}
+                  </label>
                 </div>
               </div>
 
-              <%!-- Upload errors --%>
-              <div :for={err <- upload_errors(@uploads.csv_file)} class="mt-1 text-sm text-error flex items-center gap-1">
-                <.icon name="hero-exclamation-circle" class="size-4" />
-                {upload_error_msg(err)}
+              <%!-- File upload area --%>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text font-medium">
+                    CSV File <span class="text-error">*</span>
+                  </span>
+                </label>
+                <div
+                  class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center hover:border-primary/50 transition-colors"
+                  phx-drop-target={@uploads.csv_file.ref}
+                >
+                  <.icon name="hero-document-text" class="size-8 text-base-content/40 mx-auto" />
+                  <p class="mt-2 text-base-content/60 text-sm">
+                    Drag and drop your CSV file here, or
+                  </p>
+                  <label class="mt-2 btn btn-sm btn-outline cursor-pointer">
+                    Browse File <.live_file_input upload={@uploads.csv_file} class="hidden" />
+                  </label>
+                  <p class="text-xs text-base-content/40 mt-2">CSV files up to 10MB</p>
+                </div>
+
+                <%!-- Upload entry previews --%>
+                <div
+                  :for={entry <- @uploads.csv_file.entries}
+                  class="mt-2 flex items-center gap-2 p-2 bg-base-200 rounded-lg"
+                >
+                  <.icon name="hero-document-text" class="size-5 text-primary shrink-0" />
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate">{entry.client_name}</div>
+                    <div class="text-xs text-base-content/60">{format_bytes(entry.client_size)}</div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <progress class="progress progress-primary w-16" value={entry.progress} max="100">
+                    </progress>
+                    <button
+                      type="button"
+                      phx-click="cancel-upload"
+                      phx-value-ref={entry.ref}
+                      class="btn btn-ghost btn-xs btn-circle"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <%!-- Upload errors --%>
+                <div
+                  :for={err <- upload_errors(@uploads.csv_file)}
+                  class="mt-1 text-sm text-error flex items-center gap-1"
+                >
+                  <.icon name="hero-exclamation-circle" class="size-4" />
+                  {upload_error_msg(err)}
+                </div>
               </div>
-            </div>
 
-            <div class="card-actions">
-              <button
-                type="submit"
-                class={["btn btn-primary gap-2", @importing && "loading"]}
-                disabled={@importing}
-              >
-                <.icon :if={!@importing} name="hero-arrow-up-tray" class="size-4" />
-                {if @importing, do: "Processing…", else: "Start Import"}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <%!-- Import history --%>
-      <div class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">Recent Imports</h2>
-          <div :if={@importing} class="flex items-center gap-2 text-sm text-base-content/60">
-            <span class="loading loading-spinner loading-xs"></span>
-            Processing import…
+              <div class="card-actions">
+                <button
+                  type="submit"
+                  class={["btn btn-primary gap-2", @importing && "loading"]}
+                  disabled={@importing}
+                >
+                  <.icon :if={!@importing} name="hero-arrow-up-tray" class="size-4" />
+                  {if @importing, do: "Processing…", else: "Start Import"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
 
-        <div :if={@recent_logs == []} class="card bg-base-200">
-          <div class="card-body items-center py-8 text-center">
-            <p class="text-base-content/60">No imports yet. Upload a CSV file to get started.</p>
+        <%!-- Import history --%>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">Recent Imports</h2>
+            <div :if={@importing} class="flex items-center gap-2 text-sm text-base-content/60">
+              <span class="loading loading-spinner loading-xs"></span> Processing import…
+            </div>
+          </div>
+
+          <div :if={@recent_logs == []} class="card bg-base-200">
+            <div class="card-body items-center py-8 text-center">
+              <p class="text-base-content/60">No imports yet. Upload a CSV file to get started.</p>
+            </div>
+          </div>
+
+          <div :if={@recent_logs != []} class="overflow-x-auto">
+            <table class="table table-sm bg-base-100 rounded-lg shadow-sm">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Type</th>
+                  <th>Started</th>
+                  <th class="text-right">Processed</th>
+                  <th class="text-right">Failed</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={log <- @recent_logs}>
+                  <td><.sync_status_badge status={log.status} /></td>
+                  <td class="capitalize">
+                    {log.job_type |> to_string() |> String.replace("_", " ")}
+                  </td>
+                  <td class="text-base-content/60 text-xs whitespace-nowrap">
+                    {format_datetime(log.inserted_at)}
+                  </td>
+                  <td class="text-right">{log.records_processed || "—"}</td>
+                  <td class="text-right">{log.records_failed || "—"}</td>
+                  <td class="text-xs text-base-content/60 max-w-xs truncate">
+                    {log.error_message ||
+                      (log.metadata["provider_code"] && "Provider: #{log.metadata["provider_code"]}")}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-
-        <div :if={@recent_logs != []} class="overflow-x-auto">
-          <table class="table table-sm bg-base-100 rounded-lg shadow-sm">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Type</th>
-                <th>Started</th>
-                <th class="text-right">Processed</th>
-                <th class="text-right">Failed</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={log <- @recent_logs}>
-                <td><.sync_status_badge status={log.status} /></td>
-                <td class="capitalize">{log.job_type |> to_string() |> String.replace("_", " ")}</td>
-                <td class="text-base-content/60 text-xs whitespace-nowrap">
-                  {format_datetime(log.inserted_at)}
-                </td>
-                <td class="text-right">{log.records_processed || "—"}</td>
-                <td class="text-right">{log.records_failed || "—"}</td>
-                <td class="text-xs text-base-content/60 max-w-xs truncate">
-                  {log.error_message || (log.metadata["provider_code"] && "Provider: #{log.metadata["provider_code"]}")}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </div>
-    </div>
+    </Layouts.app>
     """
   end
 
@@ -317,7 +342,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
   defp load_recent_logs(oid, user) do
     Emisint.Analytics.DataSyncLog
-    |> Ash.Query.sort(inserted_at: :desc)
+    |> Ash.Query.sort(updated_at: :desc)
     |> Ash.Query.limit(20)
     |> Ash.read!(tenant: oid, actor: user)
   end

@@ -3,16 +3,13 @@ defmodule EmisintWeb.Compliance.TrackerLive do
 
   require Ash.Query
 
-  on_mount {EmisintWeb.LiveUserAuth, :live_user_required}
-
   @status_filters [:all, :exceeds, :meets, :approaching, :below, :insufficient_data]
 
   def mount(%{"school_id" => school_id}, _session, socket) do
-    user = socket.assigns.current_user
-    oid = user.organization_id
+    scope = socket.assigns.scope
 
-    school = Emisint.Accounts.get_school!(school_id, tenant: oid, actor: user)
-    goals_with_evals = load_goals_with_evals(school_id, oid, user)
+    school = Emisint.Accounts.get_school!(school_id, scope: scope)
+    goals_with_evals = load_goals_with_evals(school_id, scope)
 
     {:ok,
      socket
@@ -228,15 +225,15 @@ defmodule EmisintWeb.Compliance.TrackerLive do
 
   # --- Helpers ---
 
-  defp load_goals_with_evals(school_id, oid, user) do
+  defp load_goals_with_evals(school_id, scope) do
     goals =
       Emisint.Compliance.Schedule71Goal
       |> Ash.Query.filter(school_id == ^school_id)
-      |> Ash.read!(tenant: oid, actor: user)
+      |> Ash.read!(scope: scope)
 
     evaluations =
       Emisint.Compliance.GoalEvaluation
-      |> Ash.read!(tenant: oid, actor: user)
+      |> Ash.read!(scope: scope)
 
     eval_by_goal = Map.new(evaluations, fn e -> {e.schedule71_goal_id, e} end)
 
@@ -283,7 +280,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
     if Decimal.compare(target, Decimal.new(0)) == :eq do
       0
     else
-      ratio = Decimal.div(actual, target)
+      ratio = Decimal.div(actual, target) |> Decimal.round(2)
       min(Decimal.mult(ratio, 100) |> Decimal.to_integer(), 100)
     end
   end

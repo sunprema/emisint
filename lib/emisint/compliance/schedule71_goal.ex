@@ -11,6 +11,12 @@ defmodule Emisint.Compliance.Schedule71Goal do
     repo Emisint.Repo
   end
 
+  paper_trail do
+    change_tracking_mode(:changes_only)
+    store_action_name?(true)
+    attributes_as_attributes([:organization_id])
+  end
+
   actions do
     defaults [:read, :destroy]
 
@@ -58,7 +64,7 @@ defmodule Emisint.Compliance.Schedule71Goal do
     end
 
     policy action_type(:read) do
-      authorize_if actor_attribute_equals(:organization_id, :organization_id)
+      authorize_if actor_present()
     end
 
     policy action_type([:create, :update, :destroy]) do
@@ -82,7 +88,13 @@ defmodule Emisint.Compliance.Schedule71Goal do
     attribute :goal_type, :atom do
       allow_nil? false
       public? true
-      constraints one_of: [:proficiency_threshold, :sgp_median, :outperform_district, :growth_target]
+
+      constraints one_of: [
+                    :proficiency_threshold,
+                    :sgp_median,
+                    :outperform_district,
+                    :growth_target
+                  ]
     end
 
     attribute :subject, :string do
@@ -134,7 +146,13 @@ defmodule Emisint.Compliance.Schedule71Goal do
     # nil / :all = all students; specific atom = filter to that ESSA subgroup
     attribute :subgroup, :atom do
       public? true
-      constraints one_of: [:all, :economically_disadvantaged, :english_learner, :special_education]
+
+      constraints one_of: [
+                    :all,
+                    :economically_disadvantaged,
+                    :english_learner,
+                    :special_education
+                  ]
     end
 
     attribute :organization_id, :uuid do
@@ -158,11 +176,5 @@ defmodule Emisint.Compliance.Schedule71Goal do
       attribute_writable? true
       public? true
     end
-  end
-
-  paper_trail do
-    change_tracking_mode :changes_only
-    store_action_name? true
-    attributes_as_attributes [:organization_id]
   end
 end
