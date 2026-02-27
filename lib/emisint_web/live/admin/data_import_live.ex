@@ -467,7 +467,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
         </div>
 
         <%!-- ── Section 2: MDE State Assessment Data (system_admin only) ────────── --%>
-        <div :if={@current_user.role == :system_admin} class="space-y-4">
+        <div class="divider"></div>
+        <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
           <div class="flex items-center gap-3">
             <div>
               <div class="flex items-center gap-2">
@@ -561,7 +562,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                 <%!-- Expected format hint --%>
                 <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
-                  <.icon name="hero-information-circle" class="size-4 shrink-0 mt-0.5 text-base-content/35" />
+                  <.icon
+                    name="hero-information-circle"
+                    class="size-4 shrink-0 mt-0.5 text-base-content/35"
+                  />
                   <div>
                     <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
                     <p class="font-mono leading-relaxed">
