@@ -29,5 +29,32 @@ defmodule Emisint.Assessments do
       define :list_competitor_data, action: :read
       define :update_competitor_data, action: :update
     end
+
+    resource Emisint.Assessments.MdePublicAssessment do
+      define :list_mde_public_assessments, action: :read
+    end
+
+    resource Emisint.Assessments.MdeIsd do
+      define :upsert_mde_isd, action: :upsert
+      define :list_mde_isds, action: :read
+      define :get_mde_isd_by_code, action: :read, get_by: [:isd_code]
+    end
+
+    resource Emisint.Assessments.MdeDistrict do
+      define :upsert_mde_district, action: :upsert
+      define :list_mde_districts, action: :read
+      define :get_mde_district_by_code, action: :read, get_by: [:district_code]
+    end
+
+    resource Emisint.Assessments.MdeBuilding do
+      define :upsert_mde_building, action: :upsert
+      define :list_mde_buildings, action: :read
+      define :get_mde_building_by_code, action: :read, get_by: [:building_code]
+    end
+
+    resource Emisint.Assessments.MdeStateAssessmentResult do
+      define :upsert_mde_state_assessment_result, action: :upsert
+      define :list_mde_state_assessment_results, action: :read
+    end
   end
 end

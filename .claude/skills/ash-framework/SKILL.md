@@ -26,6 +26,7 @@ metadata:
 - [ash_admin](references/ash_admin.md)
 - [ash_authentication](references/ash_authentication.md)
 - [ash_authentication_phoenix](references/ash_authentication_phoenix.md)
+- [ash_csv](references/ash_csv.md)
 - [ash_oban](references/ash_oban.md)
 - [ash_paper_trail](references/ash_paper_trail.md)
 - [ash_phoenix](references/ash_phoenix.md)
@@ -35,7 +36,7 @@ metadata:
 ## Searching Documentation
 
 ```sh
-mix usage_rules.search_docs "search term" -p ash -p ash_admin -p ash_authentication -p ash_authentication_phoenix -p ash_oban -p ash_paper_trail -p ash_phoenix -p ash_postgres -p ash_state_machine
+mix usage_rules.search_docs "search term" -p ash -p ash_admin -p ash_authentication -p ash_authentication_phoenix -p ash_csv -p ash_oban -p ash_paper_trail -p ash_phoenix -p ash_postgres -p ash_state_machine
 ```
 
 ## Available Mix Tasks

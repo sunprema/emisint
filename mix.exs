@@ -115,7 +115,8 @@ defmodule Emisint.MixProject do
       {:bandit, "~> 1.5"},
       {:rustler, "~> 0.37.1"},
       {:imprintor, "~> 0.1.0"},
-      {:ash_csv, "~> 0.9.7-rc.0"}
+      {:ash_csv, "~> 0.9.7-rc.0"},
+      {:nimble_csv, "~> 1.3"}
     ]
   end
 
