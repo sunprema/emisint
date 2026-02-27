@@ -6,9 +6,14 @@ defmodule Emisint.Workers.MdeImportWorker do
   into the normalized dimension + fact tables. Because MDE data is not
   tenant-scoped, no `organization_id` is required in the job args.
 
+  On completion (success or failure) it:
+    1. Broadcasts the result on the `"mde_import"` PubSub topic so any
+       subscribed LiveView can update without polling.
+    2. Deletes the temporary upload file from disk.
+
   ## Enqueuing
 
-      %{file_path: "/path/to/mde_assessment_results.csv"}
+      %{file_path: "/tmp/mde_import_12345.csv"}
       |> Emisint.Workers.MdeImportWorker.new()
       |> Oban.insert!()
 
@@ -20,34 +25,46 @@ defmodule Emisint.Workers.MdeImportWorker do
 
   use Oban.Worker, queue: :data_ingestion, max_attempts: 2
 
+  require Logger
+
   alias Emisint.Assessments.MdeImporter
+
+  @pubsub_topic "mde_import"
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"file_path" => file_path}}) do
-    case MdeImporter.import_file(file_path) do
+    result = MdeImporter.import_file(file_path)
+
+    case result do
       {:ok, stats} ->
-        log_success(file_path, stats)
+        Logger.info(
+          "[MdeImportWorker] Completed #{Path.basename(file_path)} — " <>
+            "ISDs: #{stats.isds}, Districts: #{stats.districts}, " <>
+            "Buildings: #{stats.buildings}, Results: #{stats.results}, " <>
+            "Errors: #{stats.errors}"
+        )
+
+        Phoenix.PubSub.broadcast(
+          Emisint.PubSub,
+          @pubsub_topic,
+          {:mde_import_completed, stats}
+        )
+
         :ok
 
       {:error, reason} ->
-        log_failure(file_path, reason)
+        Logger.error("[MdeImportWorker] Failed #{Path.basename(file_path)}: #{reason}")
+
+        Phoenix.PubSub.broadcast(
+          Emisint.PubSub,
+          @pubsub_topic,
+          {:mde_import_failed, reason}
+        )
+
         {:error, reason}
     end
-  end
-
-  defp log_success(path, stats) do
-    require Logger
-
-    Logger.info(
-      "[MdeImportWorker] Completed import of #{Path.basename(path)} — " <>
-        "ISDs: #{stats.isds}, Districts: #{stats.districts}, " <>
-        "Buildings: #{stats.buildings}, Results: #{stats.results}, " <>
-        "Errors: #{stats.errors}"
-    )
-  end
-
-  defp log_failure(path, reason) do
-    require Logger
-    Logger.error("[MdeImportWorker] Failed to import #{Path.basename(path)}: #{reason}")
+  after
+    # Always clean up the temp file regardless of outcome
+    File.rm(file_path)
   end
 end
