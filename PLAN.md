@@ -37,46 +37,46 @@ Build incrementally in 8 phases, each independently testable. Phases 0–5 are p
 - [x] Write tests for all three Registry resources
 
 ### Phase 2: School Resource (Accounts Domain)
-- [ ] Create `lib/emisint/accounts/school.ex` — attrs: `name`, `mde_district_code`, `mde_building_code` (critical for MDE data matching), `city`, `county`, `active`; multitenancy via `organization_id`; identity `[:mde_building_code, :organization_id]`
-- [ ] Extend `lib/emisint/accounts/user.ex` — add `school_id` FK + `belongs_to :school` (for School Leader scoping)
-- [ ] Add `School` to `lib/emisint/accounts.ex` resources + code interface
-- [ ] Run `mix ash.codegen add_school_resource && mix ash.migrate`
-- [ ] Write `test/emisint/accounts/school_test.exs`
+- [x] Create `lib/emisint/accounts/school.ex` — attrs: `name`, `mde_district_code`, `mde_building_code` (critical for MDE data matching), `city`, `county`, `active`; multitenancy via `organization_id`; identity `[:mde_building_code, :organization_id]`
+- [x] Extend `lib/emisint/accounts/user.ex` — add `school_id` FK + `belongs_to :school` (for School Leader scoping)
+- [x] Add `School` to `lib/emisint/accounts.ex` resources + code interface
+- [x] Run `mix ash.codegen add_school_resource && mix ash.migrate`
+- [x] Write `test/emisint/accounts/school_test.exs`
     
 ### Phase 3: Assessments Domain
-- [ ] Create `lib/emisint/assessments.ex` (new `Ash.Domain`)
-- [ ] Create `lib/emisint/assessments/benchmark_provider.ex` — metadata for NWEA/i-Ready (attrs: `name`, `code` unique per org, `scoring_system` atom, `subjects` array)
-- [ ] Create `lib/emisint/assessments/assessment_result.ex` — attrs: `assessment_type` atom (`:m_step|:psat_8_9|:psat_10|:sat|:nwea_map|:i_ready`), `subject`, `testing_window`, `raw_score`, `scale_score`, `proficiency_level`, `sgp`, `growth_target`, `percentile`, `test_date`, `source`; identity `[:student_id, :academic_year_id, :assessment_type, :subject, :testing_window]`; `:bulk_upsert` action
-- [ ] Create `lib/emisint/assessments/competitor_data.ex` — pre-aggregated MDE public district data (attrs: `district_name`, `mde_district_code`, `subject`, `grade_level`, `proficiency_rate`, `average_sgp`, `student_count`, `academic_year_label`)
-- [ ] Append `Emisint.Assessments` to `ash_domains`
-- [ ] Run `mix ash.codegen add_assessments_domain && mix ash.migrate`
-- [ ] Write `test/emisint/assessments/assessment_result_test.exs` (test upsert identity)
+- [x] Create `lib/emisint/assessments.ex` (new `Ash.Domain`)
+- [x] Create `lib/emisint/assessments/benchmark_provider.ex` — metadata for NWEA/i-Ready (attrs: `name`, `code` unique per org, `scoring_system` atom, `subjects` array)
+- [x] Create `lib/emisint/assessments/assessment_result.ex` — attrs: `assessment_type` atom (`:m_step|:psat_8_9|:psat_10|:sat|:nwea_map|:i_ready`), `subject`, `testing_window`, `raw_score`, `scale_score`, `proficiency_level`, `sgp`, `growth_target`, `percentile`, `test_date`, `source`; identity `[:student_id, :academic_year_id, :assessment_type, :subject, :testing_window]`; `:bulk_upsert` action
+- [x] Create `lib/emisint/assessments/competitor_data.ex` — pre-aggregated MDE public district data (attrs: `district_name`, `mde_district_code`, `subject`, `grade_level`, `proficiency_rate`, `average_sgp`, `student_count`, `academic_year_label`)
+- [x] Append `Emisint.Assessments` to `ash_domains`
+- [x] Run `mix ash.codegen add_assessments_domain && mix ash.migrate`
+- [x] Write `test/emisint/assessments/assessment_result_test.exs` (test upsert identity)
 
 ### Phase 4: Compliance Domain
-- [ ] Create `lib/emisint/compliance.ex` (new `Ash.Domain`)
-- [ ] Create `lib/emisint/compliance/charter_contract.ex` — attrs: `authorizer_name`, `contract_start_date`, `contract_end_date`, `reauthorization_date`, `status` atom; `belongs_to :school`; AshPaperTrail extension
-- [ ] Create `lib/emisint/compliance/schedule71_goal.ex` — attrs: `title`, `goal_type` atom (`:proficiency_threshold|:sgp_median|:outperform_district|:growth_target`), `subject`, `grade_levels` array, `testing_window`, `target_value` decimal, `comparison_operator` atom, `exceeds_threshold`, `approaching_threshold`, `subgroup` atom; AshPaperTrail extension
-- [ ] Create `lib/emisint/compliance/goal_evaluation.ex` — stored snapshot resource; attrs: `status` atom (`:exceeds|:meets|:approaching|:below|:insufficient_data`), `actual_value`, `target_value`, `data_points_count`, `evaluated_at`; AshPaperTrail extension
-- [ ] Create `lib/emisint/compliance/changes/compute_goal_actual_value.ex` — custom `Ash.Resource.Change` that queries `AssessmentResult` aggregates per goal type (SGP median, proficiency rate, district comparison)
-- [ ] Create `lib/emisint/compliance/calculations/evaluate_goal_status.ex` — `Ash.Calculation` mapping actual vs threshold values → status atom
-- [ ] Append `Emisint.Compliance` to `ash_domains`
-- [ ] Run `mix ash.codegen add_compliance_domain && mix ash.migrate`
-- [ ] Write `test/emisint/compliance/goal_evaluation_test.exs` (test each goal_type branch in ComputeGoalActualValue)
-- [ ] Verify PaperTrail version records created on Schedule71Goal update
+- [x] Create `lib/emisint/compliance.ex` (new `Ash.Domain`)
+- [x] Create `lib/emisint/compliance/charter_contract.ex` — attrs: `authorizer_name`, `contract_start_date`, `contract_end_date`, `reauthorization_date`, `status` atom; `belongs_to :school`; AshPaperTrail extension
+- [x] Create `lib/emisint/compliance/schedule71_goal.ex` — attrs: `title`, `goal_type` atom (`:proficiency_threshold|:sgp_median|:outperform_district|:growth_target`), `subject`, `grade_levels` array, `testing_window`, `target_value` decimal, `comparison_operator` atom, `exceeds_threshold`, `approaching_threshold`, `subgroup` atom; AshPaperTrail extension
+- [x] Create `lib/emisint/compliance/goal_evaluation.ex` — stored snapshot resource; attrs: `status` atom (`:exceeds|:meets|:approaching|:below|:insufficient_data`), `actual_value`, `target_value`, `data_points_count`, `evaluated_at`; AshPaperTrail extension
+- [x] Create `lib/emisint/compliance/changes/compute_goal_actual_value.ex` — custom `Ash.Resource.Change` that queries `AssessmentResult` aggregates per goal type (SGP median, proficiency rate, district comparison)
+- [x] Create `lib/emisint/compliance/calculations/evaluate_goal_status.ex` — `Ash.Calculation` mapping actual vs threshold values → status atom
+- [x] Append `Emisint.Compliance` to `ash_domains`
+- [x] Run `mix ash.codegen add_compliance_domain && mix ash.migrate`
+- [x] Write `test/emisint/compliance/goal_evaluation_test.exs` (test each goal_type branch in ComputeGoalActualValue)
+- [x] Verify PaperTrail version records created on Schedule71Goal update
 
 ### Phase 5: Analytics Domain + Oban Workers
-- [ ] Create `lib/emisint/analytics.ex` (new `Ash.Domain`)
-- [ ] Create `lib/emisint/analytics/data_sync_log.ex` — attrs: `job_type` atom, `status` atom (`:pending|:running|:completed|:failed`), `records_processed`, `records_failed`, `error_message`, `started_at`, `completed_at`, `metadata` map
-- [ ] Create `lib/emisint/analytics/performance_snapshot.ex` — pre-aggregated cache; attrs: `snapshot_type` atom, `subject`, `grade_level`, `subgroup`, `testing_window`, `proficiency_rate`, `average_sgp`, `median_sgp`, `student_count`; identity on `[:school_id, :academic_year_id, :snapshot_type, :subject, :grade_level, :subgroup, :testing_window]`; `:upsert` action
-- [ ] Create `lib/emisint/analytics/intervention_trigger.ex` — attrs: `trigger_type` atom, `severity` atom, `triggered_at`, `status` atom; AshStateMachine for `active → resolved/dismissed` transitions
-- [ ] Create `lib/emisint/workers/csv_import_worker.ex` — Oban worker (queue: `:data_ingestion`): parse CSV, map columns by `provider_code`, bulk upsert AssessmentResults, update DataSyncLog, enqueue SnapshotRefreshWorker
-- [ ] Create `lib/emisint/workers/snapshot_refresh_worker.ex` — Oban worker (queue: `:analytics`): aggregate AssessmentResults by school/grade/subject/subgroup, upsert PerformanceSnapshots, enqueue GoalRecalculationWorker
-- [ ] Create `lib/emisint/workers/goal_recalculation_worker.ex` — Oban worker (queue: `:analytics`): call GoalEvaluation `:recalculate` action for each active Schedule71Goal, update InterventionTriggers
-- [ ] Add `data_ingestion: 5, analytics: 5` queues to Oban config in `config/config.exs`
-- [ ] Append `Emisint.Analytics` to `ash_domains`
-- [ ] Run `mix ash.codegen add_analytics_domain && mix ash.migrate`
-- [ ] Write `test/emisint/workers/csv_import_worker_test.exs` with fixture NWEA CSV
-- [ ] Write `test/emisint/workers/snapshot_refresh_worker_test.exs`
+- [x] Create `lib/emisint/analytics.ex` (new `Ash.Domain`)
+- [x] Create `lib/emisint/analytics/data_sync_log.ex` — attrs: `job_type` atom, `status` atom (`:pending|:running|:completed|:failed`), `records_processed`, `records_failed`, `error_message`, `started_at`, `completed_at`, `metadata` map
+- [x] Create `lib/emisint/analytics/performance_snapshot.ex` — pre-aggregated cache; attrs: `snapshot_type` atom, `subject`, `grade_level`, `subgroup`, `testing_window`, `proficiency_rate`, `average_sgp`, `median_sgp`, `student_count`; identity on `[:school_id, :academic_year_id, :snapshot_type, :subject, :grade_level, :subgroup, :testing_window]`; `:upsert` action
+- [x] Create `lib/emisint/analytics/intervention_trigger.ex` — attrs: `trigger_type` atom, `severity` atom, `triggered_at`, `status` atom; AshStateMachine for `active → resolved/dismissed` transitions
+- [x] Create `lib/emisint/workers/csv_import_worker.ex` — Oban worker (queue: `:data_ingestion`): parse CSV, map columns by `provider_code`, bulk upsert AssessmentResults, update DataSyncLog, enqueue SnapshotRefreshWorker
+- [x] Create `lib/emisint/workers/snapshot_refresh_worker.ex` — Oban worker (queue: `:analytics`): aggregate AssessmentResults by school/grade/subject/subgroup, upsert PerformanceSnapshots, enqueue GoalRecalculationWorker
+- [x] Create `lib/emisint/workers/goal_recalculation_worker.ex` — Oban worker (queue: `:analytics`): call GoalEvaluation `:recalculate` action for each active Schedule71Goal, update InterventionTriggers
+- [x] Add `data_ingestion: 5, analytics: 5` queues to Oban config in `config/config.exs`
+- [x] Append `Emisint.Analytics` to `ash_domains`
+- [x] Run `mix ash.codegen add_analytics_domain && mix ash.migrate`
+- [x] Write `test/emisint/workers/csv_import_worker_test.exs` with fixture NWEA CSV
+- [x] Write `test/emisint/workers/snapshot_refresh_worker_test.exs`
 
 ### Phase 6: LiveView Dashboard Layer
 - [x] Create `lib/emisint_web/live/dashboard/portfolio_live.ex` — EMO portfolio overview: all schools with traffic-light goal status grid, DaisyUI stats cards

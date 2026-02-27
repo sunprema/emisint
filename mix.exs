@@ -114,7 +114,8 @@ defmodule Emisint.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:rustler, "~> 0.37.1"},
-      {:imprintor, "~> 0.1.0"}
+      {:imprintor, "~> 0.1.0"},
+      {:ash_csv, "~> 0.9.7-rc.0"}
     ]
   end
 
