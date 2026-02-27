@@ -21,7 +21,7 @@ defmodule EmisintWeb.SchoolReportController do
         Logger.error("Comprehensive PDF generation failed: #{inspect(reason)}")
 
         conn
-        |> put_flash(:error, "Failed to generate invoice: #{inspect(reason)}")
+        |> put_flash(:error, "Failed to generate report: #{inspect(reason)}")
         |> redirect(to: ~p"/schools/#{school_id}")
     end
   rescue
