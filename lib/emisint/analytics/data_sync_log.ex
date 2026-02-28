@@ -8,6 +8,11 @@ defmodule Emisint.Analytics.DataSyncLog do
   postgres do
     table "data_sync_logs"
     repo Emisint.Repo
+
+    custom_indexes do
+      index [:organization_id, :job_type]
+      index [:organization_id, :created_at]
+    end
   end
 
   actions do

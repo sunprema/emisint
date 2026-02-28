@@ -144,6 +144,22 @@ defmodule Emisint.Compliance.GoalEvaluation do
   calculations do
     # Re-derives status from stored snapshot data — useful for verification / display
     calculate :derived_status, :atom, Emisint.Compliance.Calculations.EvaluateGoalStatus
+
+    calculate :status_label, :string, expr(
+      cond do
+        status == :exceeds -> "Exceeds"
+        status == :meets -> "Meets"
+        status == :approaching -> "Approaching"
+        status == :below -> "Below"
+        true -> "Insufficient Data"
+      end
+    ) do
+      public? true
+    end
+
+    calculate :is_at_risk, :boolean, expr(status in [:below, :approaching]) do
+      public? true
+    end
   end
 
   identities do

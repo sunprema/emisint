@@ -9,6 +9,10 @@ defmodule Emisint.Compliance.Schedule71Goal do
   postgres do
     table "schedule71_goals"
     repo Emisint.Repo
+
+    custom_indexes do
+      index [:organization_id, :school_id]
+    end
   end
 
   paper_trail do
@@ -164,6 +168,12 @@ defmodule Emisint.Compliance.Schedule71Goal do
     update_timestamp :updated_at
   end
 
+  aggregates do
+    count :evaluations_count, :goal_evaluations do
+      public? true
+    end
+  end
+
   relationships do
     belongs_to :school, Emisint.Accounts.School do
       allow_nil? false
@@ -174,6 +184,10 @@ defmodule Emisint.Compliance.Schedule71Goal do
     belongs_to :charter_contract, Emisint.Compliance.CharterContract do
       allow_nil? true
       attribute_writable? true
+      public? true
+    end
+
+    has_many :goal_evaluations, Emisint.Compliance.GoalEvaluation do
       public? true
     end
   end

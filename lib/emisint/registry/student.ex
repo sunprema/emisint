@@ -138,6 +138,29 @@ defmodule Emisint.Registry.Student do
     update_timestamp :updated_at
   end
 
+  calculations do
+    calculate :is_essa_subgroup, :boolean,
+                expr(economically_disadvantaged or english_learner or special_education) do
+      public? true
+    end
+  end
+
+  aggregates do
+    count :enrollment_count, :enrollments do
+      public? true
+    end
+  end
+
+  relationships do
+    has_many :enrollments, Emisint.Registry.Enrollment do
+      public? true
+    end
+
+    has_many :assessment_results, Emisint.Assessments.AssessmentResult do
+      public? true
+    end
+  end
+
   identities do
     identity :unique_uic_per_org, [:uic, :organization_id]
   end

@@ -45,14 +45,12 @@ defmodule Emisint.Workers.SnapshotRefreshWorker do
     if student_ids == [] do
       :ok
     else
-      # 2. Fetch all assessment results for those students/year
-      student_id_set = MapSet.new(student_ids)
-
+      # 2. Fetch assessment results for enrolled students in this year (DB-level filter)
       results =
         AssessmentResult
+        |> Ash.Query.for_read(:by_student_ids, %{student_ids: student_ids})
         |> Ash.Query.filter(academic_year_id == ^academic_year_id)
         |> Ash.read!(tenant: org_id, authorize?: false)
-        |> Enum.filter(fn r -> MapSet.member?(student_id_set, r.student_id) end)
 
       # 3. Build and upsert snapshots
       snapshots = build_snapshots(results, enrollment_by_student, school_id, academic_year_id)

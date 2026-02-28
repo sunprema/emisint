@@ -283,18 +283,11 @@ defmodule EmisintWeb.Compliance.TrackerLive do
   # --- Helpers ---
 
   defp load_goals_with_evals(school_id, scope) do
-    goals =
-      Emisint.Compliance.Schedule71Goal
-      |> Ash.Query.filter(school_id == ^school_id)
-      |> Ash.read!(scope: scope)
-
-    evaluations =
-      Emisint.Compliance.GoalEvaluation
-      |> Ash.read!(scope: scope)
-
-    eval_by_goal = Map.new(evaluations, fn e -> {e.schedule71_goal_id, e} end)
-
-    Enum.map(goals, fn goal -> {goal, Map.get(eval_by_goal, goal.id)} end)
+    Emisint.Compliance.Schedule71Goal
+    |> Ash.Query.filter(school_id == ^school_id)
+    |> Ash.Query.load(:goal_evaluations)
+    |> Ash.read!(scope: scope)
+    |> Enum.map(fn goal -> {goal, List.first(goal.goal_evaluations)} end)
   end
 
   defp filter_goals(goals_with_evals, :all), do: goals_with_evals

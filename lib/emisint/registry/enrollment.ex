@@ -8,6 +8,12 @@ defmodule Emisint.Registry.Enrollment do
   postgres do
     table "enrollments"
     repo Emisint.Repo
+
+    custom_indexes do
+      index [:organization_id, :school_id]
+      index [:school_id, :academic_year_id]
+      index [:student_id, :academic_year_id]
+    end
   end
 
   actions do

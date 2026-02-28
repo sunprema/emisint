@@ -8,6 +8,12 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
   postgres do
     table "mde_state_assessment_results"
     repo Emisint.Repo
+
+    custom_indexes do
+      index [:mde_building_id, :school_year]
+      index [:mde_district_id, :school_year]
+      index [:rollup_level, :school_year, :subject]
+    end
   end
 
   actions do

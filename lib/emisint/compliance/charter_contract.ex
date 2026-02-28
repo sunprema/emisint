@@ -9,6 +9,11 @@ defmodule Emisint.Compliance.CharterContract do
   postgres do
     table "charter_contracts"
     repo Emisint.Repo
+
+    custom_indexes do
+      index [:organization_id, :school_id]
+      index [:organization_id, :status]
+    end
   end
 
   paper_trail do

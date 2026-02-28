@@ -8,6 +8,11 @@ defmodule Emisint.Analytics.PerformanceSnapshot do
   postgres do
     table "performance_snapshots"
     repo Emisint.Repo
+
+    custom_indexes do
+      index [:organization_id, :school_id, :academic_year_id]
+      index [:school_id, :snapshot_type]
+    end
   end
 
   actions do

@@ -403,18 +403,11 @@ defmodule EmisintWeb.School.ShowLive do
   end
 
   defp load_goals_with_evals(school_id, oid, user) do
-    goals =
-      Emisint.Compliance.Schedule71Goal
-      |> Ash.Query.filter(school_id == ^school_id)
-      |> Ash.read!(tenant: oid, actor: user)
-
-    evaluations =
-      Emisint.Compliance.GoalEvaluation
-      |> Ash.read!(tenant: oid, actor: user)
-
-    eval_by_goal = Map.new(evaluations, fn e -> {e.schedule71_goal_id, e} end)
-
-    Enum.map(goals, fn goal -> {goal, Map.get(eval_by_goal, goal.id)} end)
+    Emisint.Compliance.Schedule71Goal
+    |> Ash.Query.filter(school_id == ^school_id)
+    |> Ash.Query.load(:goal_evaluations)
+    |> Ash.read!(tenant: oid, actor: user)
+    |> Enum.map(fn goal -> {goal, List.first(goal.goal_evaluations)} end)
   end
 
   defp load_triggers(school_id, oid, user) do

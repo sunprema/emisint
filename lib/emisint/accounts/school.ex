@@ -83,6 +83,41 @@ defmodule Emisint.Accounts.School do
     update_timestamp :updated_at
   end
 
+  calculations do
+    calculate :has_active_triggers, :boolean, expr(active_trigger_count > 0) do
+      public? true
+    end
+  end
+
+  aggregates do
+    count :active_trigger_count, :intervention_triggers do
+      filter expr(status == :active)
+      public? true
+    end
+
+    count :active_goal_count, :schedule71_goals do
+      public? true
+    end
+  end
+
+  relationships do
+    has_many :charter_contracts, Emisint.Compliance.CharterContract do
+      public? true
+    end
+
+    has_many :schedule71_goals, Emisint.Compliance.Schedule71Goal do
+      public? true
+    end
+
+    has_many :intervention_triggers, Emisint.Analytics.InterventionTrigger do
+      public? true
+    end
+
+    has_many :performance_snapshots, Emisint.Analytics.PerformanceSnapshot do
+      public? true
+    end
+  end
+
   identities do
     identity :unique_building_code_per_org, [:mde_building_code, :organization_id]
   end

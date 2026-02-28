@@ -8,6 +8,12 @@ defmodule Emisint.Assessments.AssessmentResult do
   postgres do
     table "assessment_results"
     repo Emisint.Repo
+
+    custom_indexes do
+      index [:organization_id, :academic_year_id]
+      index [:student_id, :academic_year_id]
+      index [:student_id, :academic_year_id, :subject, :testing_window]
+    end
   end
 
   actions do
@@ -52,6 +58,11 @@ defmodule Emisint.Assessments.AssessmentResult do
         :student_id,
         :academic_year_id
       ]
+    end
+
+    read :by_student_ids do
+      argument :student_ids, {:array, :uuid}, allow_nil?: false
+      filter expr(student_id in ^arg(:student_ids))
     end
 
     update :update do

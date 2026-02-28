@@ -9,6 +9,12 @@ defmodule Emisint.Analytics.InterventionTrigger do
   postgres do
     table "intervention_triggers"
     repo Emisint.Repo
+
+    custom_indexes do
+      index [:organization_id, :status]
+      index [:school_id, :academic_year_id, :status]
+      index [:school_id, :trigger_type, :status]
+    end
   end
 
   state_machine do

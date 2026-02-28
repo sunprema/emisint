@@ -123,6 +123,12 @@ defmodule Emisint.Registry.AcademicYear do
     update_timestamp :updated_at
   end
 
+  relationships do
+    has_many :enrollments, Emisint.Registry.Enrollment do
+      public? true
+    end
+  end
+
   identities do
     identity :unique_label_per_org, [:label, :organization_id]
   end
