@@ -26,14 +26,14 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:compare_code, "")
      |> assign(:primary, nil)
      |> assign(:compare, nil)
-     |> assign(:active_tab, "district_comparison")
+     |> assign(:active_tab, "school_vs_lea")
      |> assign(:district_buildings, [])
      |> assign(:selected_building_code, nil)
      |> assign(:school_vs_lea, nil)}
   end
 
   def handle_params(%{"district_code" => dc} = params, _uri, socket) do
-    tab = Map.get(params, "tab", "district_comparison")
+    tab = Map.get(params, "tab", "school_vs_lea")
     building_code = Map.get(params, "building", nil)
     year = socket.assigns.selected_year
     compare_code = Map.get(params, "compare", "")
@@ -41,7 +41,12 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     {primary, compare} =
       if tab == "district_comparison" do
         p = if year != "", do: load_district_data(dc, year), else: nil
-        c = if compare_code != "" && year != "", do: load_district_data(compare_code, year), else: nil
+
+        c =
+          if compare_code != "" && year != "",
+            do: load_district_data(compare_code, year),
+            else: nil
+
         {p, c}
       else
         {socket.assigns.primary, socket.assigns.compare}
@@ -50,9 +55,17 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     district_buildings =
       if tab == "school_vs_lea", do: load_district_buildings(dc), else: []
 
+    # Auto-select building: use URL param first, fall back to sole building in district
+    effective_building_code =
+      building_code ||
+        case district_buildings do
+          [sole] -> sole.building_code
+          _ -> nil
+        end
+
     school_vs_lea =
-      if tab == "school_vs_lea" && building_code && year != "" do
-        load_school_vs_lea(building_code, year)
+      if tab == "school_vs_lea" && effective_building_code && year != "" do
+        load_school_vs_lea(effective_building_code, year)
       else
         nil
       end
@@ -65,7 +78,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:primary, primary)
      |> assign(:compare, compare)
      |> assign(:district_buildings, district_buildings)
-     |> assign(:selected_building_code, building_code)
+     |> assign(:selected_building_code, effective_building_code)
      |> assign(:school_vs_lea, school_vs_lea)
      |> assign(:page_title, page_title(primary, compare))}
   end
@@ -82,15 +95,28 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     {primary, compare} =
       if tab == "district_comparison" do
         p = if dc, do: load_district_data(dc, year), else: nil
-        c = if socket.assigns.compare_code != "", do: load_district_data(socket.assigns.compare_code, year), else: nil
+
+        c =
+          if socket.assigns.compare_code != "",
+            do: load_district_data(socket.assigns.compare_code, year),
+            else: nil
+
         {p, c}
       else
         {socket.assigns.primary, socket.assigns.compare}
       end
 
+    # Honor auto-selected sole building the same way handle_params does
+    effective_building_code =
+      building_code ||
+        case socket.assigns.district_buildings do
+          [sole] -> sole.building_code
+          _ -> nil
+        end
+
     school_vs_lea =
-      if tab == "school_vs_lea" && building_code && year != "" do
-        load_school_vs_lea(building_code, year)
+      if tab == "school_vs_lea" && effective_building_code && year != "" do
+        load_school_vs_lea(effective_building_code, year)
       else
         socket.assigns.school_vs_lea
       end
@@ -129,8 +155,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   def handle_event("select_building", %{"building" => code}, socket) do
     {:noreply,
      push_patch(socket,
-       to:
-         ~p"/mde/districts/#{socket.assigns.district_code}?tab=school_vs_lea&building=#{code}"
+       to: ~p"/mde/districts/#{socket.assigns.district_code}?tab=school_vs_lea&building=#{code}"
      )}
   end
 
@@ -186,17 +211,17 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         <div class="flex border-b border-base-200">
           <button
             phx-click="select_tab"
-            phx-value-tab="district_comparison"
-            class={tab_class(@active_tab == "district_comparison")}
-          >
-            District Comparison
-          </button>
-          <button
-            phx-click="select_tab"
             phx-value-tab="school_vs_lea"
             class={tab_class(@active_tab == "school_vs_lea")}
           >
             School vs Geographic LEA
+          </button>
+          <button
+            phx-click="select_tab"
+            phx-value-tab="district_comparison"
+            class={tab_class(@active_tab == "district_comparison")}
+          >
+            District Comparison
           </button>
         </div>
 
@@ -356,8 +381,11 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
         <%!-- ══ Tab 2: School vs Geographic LEA ════════════════════════════════════ --%>
         <div :if={@active_tab == "school_vs_lea"} class="space-y-6">
-          <%!-- Building selector --%>
-          <div class="bg-base-100 border border-base-200 p-5 space-y-3">
+          <%!-- Building selector — only shown when district has multiple buildings --%>
+          <div
+            :if={length(@district_buildings) > 1}
+            class="bg-base-100 border border-base-200 p-5 space-y-3"
+          >
             <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40">
               Select a School Building
             </div>
@@ -376,14 +404,11 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 </option>
               </select>
             </form>
-            <p class="text-xs text-base-content/40">
-              Shows this school's M-STEP results vs the traditional district that geographically surrounds it.
-            </p>
           </div>
 
-          <%!-- Prompt when no building selected --%>
+          <%!-- Prompt when multi-building district but nothing selected yet --%>
           <div
-            :if={is_nil(@selected_building_code)}
+            :if={length(@district_buildings) > 1 && is_nil(@selected_building_code)}
             class="bg-base-50 border border-dashed border-base-300 flex items-center justify-center py-16 text-sm text-base-content/30"
           >
             Select a building above to view the comparison
@@ -399,13 +424,19 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 <div class="text-xs text-base-content/50">{@school_vs_lea.building_code}</div>
               </div>
 
-              <div :if={@school_vs_lea.no_lea_found} class="bg-base-100 border border-warning/30 p-5 flex items-center">
+              <div
+                :if={@school_vs_lea.no_lea_found}
+                class="bg-base-100 border border-warning/30 p-5 flex items-center"
+              >
                 <p class="text-sm text-warning">
                   No geographic LEA district mapping found for this building in the MDE Entity Master.
                 </p>
               </div>
 
-              <div :if={!@school_vs_lea.no_lea_found} class="bg-base-100 border border-warning/30 p-5 space-y-1">
+              <div
+                :if={!@school_vs_lea.no_lea_found}
+                class="bg-base-100 border border-warning/30 p-5 space-y-1"
+              >
                 <div class="text-xs font-semibold uppercase tracking-wider text-warning/60">
                   Geographic LEA District
                 </div>
@@ -451,14 +482,21 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   primary={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:school])}
                   primary_label={short_name(@school_vs_lea.school_name)}
                   compare={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:lea])}
-                  compare_label={short_name(@school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA")}
+                  compare_label={
+                    short_name(
+                      @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA"
+                    )
+                  }
                 />
               </div>
             </div>
 
             <%!-- Grade breakdown --%>
             <div
-              :if={!@school_vs_lea.no_results && !@school_vs_lea.no_lea_found && @school_vs_lea.grade_breakdown != []}
+              :if={
+                !@school_vs_lea.no_results && !@school_vs_lea.no_lea_found &&
+                  @school_vs_lea.grade_breakdown != []
+              }
               class="space-y-3"
             >
               <div class="flex items-center gap-2">
