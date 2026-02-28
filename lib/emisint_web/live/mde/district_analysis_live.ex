@@ -136,7 +136,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   def handle_event("select_compare", %{"compare" => code}, socket) do
     {:noreply,
      push_patch(socket,
-       to: ~p"/mde/districts/#{socket.assigns.district_code}?compare=#{code}"
+       to:
+         ~p"/mde/districts/#{socket.assigns.district_code}?compare=#{code}&tab=district_comparison"
      )}
   end
 
@@ -225,7 +226,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           </button>
         </div>
 
-        <%!-- ══ Tab 1: District Comparison ══════════════════════════════════════ --%>
+        <%!-- ══ Tab 2: District Comparison ══════════════════════════════════════ --%>
         <div :if={@active_tab == "district_comparison"} class="space-y-8">
           <%!-- District headers --%>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -379,7 +380,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           </div>
         </div>
 
-        <%!-- ══ Tab 2: School vs Geographic LEA ════════════════════════════════════ --%>
+        <%!-- ══ Tab 1: School vs Geographic LEA ════════════════════════════════════ --%>
         <div :if={@active_tab == "school_vs_lea"} class="space-y-6">
           <%!-- Building selector — only shown when district has multiple buildings --%>
           <div
@@ -419,33 +420,35 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
             <%!-- Info banner + download button --%>
             <div class="flex flex-col sm:flex-row sm:items-start gap-4">
               <div class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div class="bg-base-100 border border-info/30 p-5 space-y-1">
-                <div class="text-xs font-semibold uppercase tracking-wider text-info/60">School</div>
-                <div class="font-bold text-base">{@school_vs_lea.school_name}</div>
-                <div class="text-xs text-base-content/50">{@school_vs_lea.building_code}</div>
-              </div>
-
-              <div
-                :if={@school_vs_lea.no_lea_found}
-                class="bg-base-100 border border-warning/30 p-5 flex items-center"
-              >
-                <p class="text-sm text-warning">
-                  No geographic LEA district mapping found for this building in the MDE Entity Master.
-                </p>
-              </div>
-
-              <div
-                :if={!@school_vs_lea.no_lea_found}
-                class="bg-base-100 border border-warning/30 p-5 space-y-1"
-              >
-                <div class="text-xs font-semibold uppercase tracking-wider text-warning/60">
-                  Geographic LEA District
+                <div class="bg-base-100 border border-info/30 p-5 space-y-1">
+                  <div class="text-xs font-semibold uppercase tracking-wider text-info/60">
+                    School
+                  </div>
+                  <div class="font-bold text-base">{@school_vs_lea.school_name}</div>
+                  <div class="text-xs text-base-content/50">{@school_vs_lea.building_code}</div>
                 </div>
-                <div class="font-bold text-base">
-                  {@school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code}
+
+                <div
+                  :if={@school_vs_lea.no_lea_found}
+                  class="bg-base-100 border border-warning/30 p-5 flex items-center"
+                >
+                  <p class="text-sm text-warning">
+                    No geographic LEA district mapping found for this building in the MDE Entity Master.
+                  </p>
                 </div>
-                <div class="text-xs text-base-content/50">{@school_vs_lea.lea_district_code}</div>
-              </div>
+
+                <div
+                  :if={!@school_vs_lea.no_lea_found}
+                  class="bg-base-100 border border-warning/30 p-5 space-y-1"
+                >
+                  <div class="text-xs font-semibold uppercase tracking-wider text-warning/60">
+                    Geographic LEA District
+                  </div>
+                  <div class="font-bold text-base">
+                    {@school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code}
+                  </div>
+                  <div class="text-xs text-base-content/50">{@school_vs_lea.lea_district_code}</div>
+                </div>
               </div>
 
               <%!-- Download PDF button — only when LEA data is available --%>
@@ -748,8 +751,10 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
       <%!-- Delta badges when relevant data is present --%>
       <div :if={@primary_f && (@compare_f || @state_f)} class="flex justify-end gap-2">
-        <% delta_compare = if @primary_f && @compare_f, do: Float.round(@primary_f - @compare_f, 1), else: nil %>
-        <% delta_state = if @primary_f && @state_f, do: Float.round(@primary_f - @state_f, 1), else: nil %>
+        <% delta_compare =
+          if @primary_f && @compare_f, do: Float.round(@primary_f - @compare_f, 1), else: nil %>
+        <% delta_state =
+          if @primary_f && @state_f, do: Float.round(@primary_f - @state_f, 1), else: nil %>
         <span
           :if={delta_compare}
           class={[
@@ -757,7 +762,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
             if(delta_compare >= 0, do: "text-success bg-success/10", else: "text-error bg-error/10")
           ]}
         >
-          {if delta_compare >= 0, do: "+#{delta_compare}", else: "#{delta_compare}"} pts vs {@compare_label || "comparison"}
+          {if delta_compare >= 0, do: "+#{delta_compare}", else: "#{delta_compare}"} pts vs {@compare_label ||
+            "comparison"}
         </span>
         <span
           :if={delta_state}
