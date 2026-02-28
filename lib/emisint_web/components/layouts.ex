@@ -79,6 +79,11 @@ defmodule EmisintWeb.Layouts do
                   <.icon name="hero-chart-bar-square" class="size-4" /> MDE Data
                 </.link>
               </li>
+              <li>
+                <.link navigate={~p"/mde/entities"} class="flex items-center gap-2">
+                  <.icon name="hero-building-office-2" class="size-4" /> Entity Master
+                </.link>
+              </li>
               <li :if={@current_user && @current_user.role in [:emo_admin, :system_admin]}>
                 <.link navigate={~p"/admin/import"} class="flex items-center gap-2">
                   <.icon name="hero-arrow-up-tray" class="size-4" /> Data Import

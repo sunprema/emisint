@@ -43,6 +43,7 @@ defmodule EmisintWeb.Router do
       live "/admin/import", Admin.DataImportLive, :index
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
+      live "/mde/entities", Mde.EntityMasterLive, :index
     end
 
     get "/schools/:school_id/report.pdf", SchoolReportController, :show
