@@ -523,6 +523,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       |> Ash.Query.filter(
         school_year == ^year and
           report_category == "All Students" and
+          rollup_level == :building and
           mde_building.mde_district.district_code == ^district_code
       )
       |> Ash.Query.load(mde_building: [mde_district: :mde_isd])

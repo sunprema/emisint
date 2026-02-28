@@ -17,6 +17,83 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
       primary? true
 
       accept [
+        :rollup_level,
+        :school_year,
+        :test_type,
+        :test_population,
+        :grade_content_tested,
+        :subject,
+        :report_category,
+        :total_advanced,
+        :total_proficient,
+        :total_partially_proficient,
+        :total_not_proficient,
+        :total_surpassed,
+        :total_attained,
+        :total_emerging_towards,
+        :total_met,
+        :total_did_not_meet,
+        :number_assessed,
+        :percent_advanced,
+        :percent_proficient,
+        :percent_partially_proficient,
+        :percent_not_proficient,
+        :percent_surpassed,
+        :percent_attained,
+        :percent_emerging_towards,
+        :percent_met,
+        :percent_did_not_meet,
+        :avg_ss,
+        :std_dev_ss,
+        :mean_pts_earned,
+        :min_scale_score,
+        :max_scale_score,
+        :scale_score_25,
+        :scale_score_50,
+        :scale_score_75,
+        :mde_building_id,
+        :mde_district_id,
+        :mde_isd_id
+      ]
+    end
+
+    # Building-level upsert (existing)
+    create :upsert do
+      upsert? true
+      upsert_identity :unique_result
+
+      upsert_fields [
+        :total_advanced,
+        :total_proficient,
+        :total_partially_proficient,
+        :total_not_proficient,
+        :total_surpassed,
+        :total_attained,
+        :total_emerging_towards,
+        :total_met,
+        :total_did_not_meet,
+        :number_assessed,
+        :percent_advanced,
+        :percent_proficient,
+        :percent_partially_proficient,
+        :percent_not_proficient,
+        :percent_surpassed,
+        :percent_attained,
+        :percent_emerging_towards,
+        :percent_met,
+        :percent_did_not_meet,
+        :avg_ss,
+        :std_dev_ss,
+        :mean_pts_earned,
+        :min_scale_score,
+        :max_scale_score,
+        :scale_score_25,
+        :scale_score_50,
+        :scale_score_75
+      ]
+
+      accept [
+        :rollup_level,
         :school_year,
         :test_type,
         :test_population,
@@ -54,9 +131,10 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
       ]
     end
 
-    create :upsert do
+    # District-level rollup upsert
+    create :upsert_district_rollup do
       upsert? true
-      upsert_identity :unique_result
+      upsert_identity :unique_district_rollup
 
       upsert_fields [
         :total_advanced,
@@ -89,6 +167,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
       ]
 
       accept [
+        :mde_district_id,
+        :rollup_level,
         :school_year,
         :test_type,
         :test_population,
@@ -121,8 +201,81 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :max_scale_score,
         :scale_score_25,
         :scale_score_50,
-        :scale_score_75,
-        :mde_building_id
+        :scale_score_75
+      ]
+    end
+
+    # ISD-level rollup upsert
+    create :upsert_isd_rollup do
+      upsert? true
+      upsert_identity :unique_isd_rollup
+
+      upsert_fields [
+        :total_advanced,
+        :total_proficient,
+        :total_partially_proficient,
+        :total_not_proficient,
+        :total_surpassed,
+        :total_attained,
+        :total_emerging_towards,
+        :total_met,
+        :total_did_not_meet,
+        :number_assessed,
+        :percent_advanced,
+        :percent_proficient,
+        :percent_partially_proficient,
+        :percent_not_proficient,
+        :percent_surpassed,
+        :percent_attained,
+        :percent_emerging_towards,
+        :percent_met,
+        :percent_did_not_meet,
+        :avg_ss,
+        :std_dev_ss,
+        :mean_pts_earned,
+        :min_scale_score,
+        :max_scale_score,
+        :scale_score_25,
+        :scale_score_50,
+        :scale_score_75
+      ]
+
+      accept [
+        :mde_isd_id,
+        :rollup_level,
+        :school_year,
+        :test_type,
+        :test_population,
+        :grade_content_tested,
+        :subject,
+        :report_category,
+        :total_advanced,
+        :total_proficient,
+        :total_partially_proficient,
+        :total_not_proficient,
+        :total_surpassed,
+        :total_attained,
+        :total_emerging_towards,
+        :total_met,
+        :total_did_not_meet,
+        :number_assessed,
+        :percent_advanced,
+        :percent_proficient,
+        :percent_partially_proficient,
+        :percent_not_proficient,
+        :percent_surpassed,
+        :percent_attained,
+        :percent_emerging_towards,
+        :percent_met,
+        :percent_did_not_meet,
+        :avg_ss,
+        :std_dev_ss,
+        :mean_pts_earned,
+        :min_scale_score,
+        :max_scale_score,
+        :scale_score_25,
+        :scale_score_50,
+        :scale_score_75
       ]
     end
 
@@ -178,6 +331,16 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
 
   attributes do
     uuid_primary_key :id
+
+    # ── Granularity ───────────────────────────────────────────────────────────
+
+    # Distinguishes building-level rows from pre-aggregated district and ISD rollup rows
+    attribute :rollup_level, :atom do
+      constraints one_of: [:building, :district, :isd]
+      default :building
+      allow_nil? false
+      public? true
+    end
 
     # ── Dimension Keys ────────────────────────────────────────────────────────
 
@@ -365,17 +528,56 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
   end
 
   relationships do
+    # Nullable: rollup rows (district/ISD level) have no specific building
     belongs_to :mde_building, Emisint.Assessments.MdeBuilding do
-      allow_nil? false
+      allow_nil? true
+      attribute_writable? true
+      public? true
+    end
+
+    # Set for district-level rollup rows
+    belongs_to :mde_district, Emisint.Assessments.MdeDistrict do
+      allow_nil? true
+      attribute_writable? true
+      public? true
+    end
+
+    # Set for ISD-level rollup rows
+    belongs_to :mde_isd, Emisint.Assessments.MdeIsd do
+      allow_nil? true
       attribute_writable? true
       public? true
     end
   end
 
   identities do
-    # Composite natural key — one row per building × year × test × population × grade × subject × subgroup
+    # Building-level: one row per building × year × test × population × grade × subject × subgroup
     identity :unique_result, [
       :mde_building_id,
+      :school_year,
+      :test_type,
+      :test_population,
+      :grade_content_tested,
+      :subject,
+      :report_category
+    ]
+
+    # District-level rollup: one row per district × year × test × population × grade × subject × subgroup
+    identity :unique_district_rollup, [
+      :mde_district_id,
+      :rollup_level,
+      :school_year,
+      :test_type,
+      :test_population,
+      :grade_content_tested,
+      :subject,
+      :report_category
+    ]
+
+    # ISD-level rollup: one row per ISD × year × test × population × grade × subject × subgroup
+    identity :unique_isd_rollup, [
+      :mde_isd_id,
+      :rollup_level,
       :school_year,
       :test_type,
       :test_population,

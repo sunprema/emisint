@@ -633,7 +633,10 @@ defmodule EmisintWeb.Mde.OverviewLive do
     # Single query: all "All Students" rows for the year — load building → district → ISD
     results =
       MdeStateAssessmentResult
-      |> Ash.Query.filter(school_year == ^year and report_category == "All Students")
+      |> Ash.Query.filter(
+        school_year == ^year and report_category == "All Students" and
+          rollup_level == :building
+      )
       |> Ash.Query.load(mde_building: [mde_district: :mde_isd])
       |> Ash.read!(authorize?: false)
 
