@@ -56,5 +56,11 @@ defmodule Emisint.Assessments do
       define :upsert_mde_state_assessment_result, action: :upsert
       define :list_mde_state_assessment_results, action: :read
     end
+
+    resource Emisint.Assessments.MdeEntityMaster do
+      define :upsert_mde_entity_master, action: :upsert
+      define :list_mde_entity_masters, action: :read
+      define :get_mde_entity_master_by_code, action: :read, get_by: [:entity_code]
+    end
   end
 end
