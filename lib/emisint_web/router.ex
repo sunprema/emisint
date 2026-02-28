@@ -47,6 +47,7 @@ defmodule EmisintWeb.Router do
     end
 
     get "/schools/:school_id/report.pdf", SchoolReportController, :show
+    get "/mde/lea-comparison.pdf", MdeLeaReportController, :show
   end
 
   scope "/", EmisintWeb do

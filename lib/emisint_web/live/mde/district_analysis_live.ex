@@ -416,8 +416,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
           <%!-- Results --%>
           <div :if={@school_vs_lea} class="space-y-6">
-            <%!-- Info banner --%>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <%!-- Info banner + download button --%>
+            <div class="flex flex-col sm:flex-row sm:items-start gap-4">
+              <div class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div class="bg-base-100 border border-info/30 p-5 space-y-1">
                 <div class="text-xs font-semibold uppercase tracking-wider text-info/60">School</div>
                 <div class="font-bold text-base">{@school_vs_lea.school_name}</div>
@@ -445,6 +446,20 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 </div>
                 <div class="text-xs text-base-content/50">{@school_vs_lea.lea_district_code}</div>
               </div>
+              </div>
+
+              <%!-- Download PDF button — only when LEA data is available --%>
+              <div :if={!@school_vs_lea.no_lea_found && !@school_vs_lea.no_results} class="shrink-0">
+                <.link
+                  href={
+                    ~p"/mde/lea-comparison.pdf?building=#{@selected_building_code}&year=#{@selected_year}"
+                  }
+                  target="_blank"
+                  class="inline-flex items-center gap-2 px-4 py-2.5 bg-info text-white text-sm font-semibold hover:bg-info/90 transition-colors"
+                >
+                  <.icon name="hero-arrow-down-tray" class="size-4" /> Download PDF
+                </.link>
+              </div>
             </div>
 
             <%!-- No results notice --%>
@@ -461,6 +476,13 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
             >
               No M-STEP district-level rollup found for the geographic LEA ({@school_vs_lea.lea_district_code}) in {@selected_year}.
               District rollup data may not be imported yet.
+            </div>
+
+            <div
+              :if={@school_vs_lea.no_state_results}
+              class="bg-base-50 border border-base-200 p-4 text-sm text-base-content/50"
+            >
+              No Michigan state-wide average found for {@selected_year}. State benchmark not available for this year.
             </div>
 
             <%!-- Subject proficiency comparison --%>
@@ -487,6 +509,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                       @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA"
                     )
                   }
+                  state={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:state])}
+                  state_label="State Avg"
                 />
               </div>
             </div>
@@ -518,13 +542,19 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                           ELA — School
                         </th>
                         <th class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide">
-                          ELA — LEA District
+                          ELA — LEA
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-success uppercase tracking-wide">
+                          ELA — State
                         </th>
                         <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
                           Math — School
                         </th>
                         <th class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide">
-                          Math — LEA District
+                          Math — LEA
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-success uppercase tracking-wide">
+                          Math — State
                         </th>
                       </tr>
                     </thead>
@@ -538,10 +568,16 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                           <.pct_badge value={row.lea_ela} color="warning" />
                         </td>
                         <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.state_ela} color="success" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
                           <.pct_badge value={row.school_math} color="info" />
                         </td>
                         <td class="px-4 py-2.5 text-right">
                           <.pct_badge value={row.lea_math} color="warning" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.state_math} color="success" />
                         </td>
                       </tr>
                     </tbody>
@@ -604,21 +640,31 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   attr :primary_label, :string, default: "Primary"
   attr :compare, :any, default: nil
   attr :compare_label, :string, default: nil
+  attr :state, :any, default: nil
+  attr :state_label, :string, default: "State Avg"
 
   def subject_comparison(assigns) do
     primary_f = if assigns.primary, do: Decimal.to_float(assigns.primary), else: nil
     compare_f = if assigns.compare, do: Decimal.to_float(assigns.compare), else: nil
+    state_f = if assigns.state, do: Decimal.to_float(assigns.state), else: nil
 
     assigns =
       assigns
       |> assign(:primary_f, primary_f)
       |> assign(:compare_f, compare_f)
+      |> assign(:state_f, state_f)
 
     ~H"""
     <div class="space-y-1.5">
       <div class="flex items-center justify-between text-xs mb-1">
         <span class="font-semibold text-base-content/70">{@subject}</span>
         <div class="flex items-center gap-4">
+          <span :if={@state_f} class="flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-success"></span>
+            <span class="tabular-nums text-success font-semibold">
+              {if @state, do: "#{@state}%", else: "—"}
+            </span>
+          </span>
           <span :if={@compare_f} class="flex items-center gap-1.5">
             <span class="inline-block w-2 h-2 rounded-full bg-warning"></span>
             <span class="tabular-nums text-warning font-semibold">
@@ -645,7 +691,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
             style={"width: #{if @primary_f, do: min(@primary_f, 100), else: 0}%"}
           >
           </div>
-          <%!-- Comparison marker on primary bar --%>
+          <%!-- LEA comparison marker on primary bar --%>
           <div
             :if={@compare_f}
             class="absolute top-0 bottom-0 w-0.5 bg-warning"
@@ -678,14 +724,49 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         </div>
       </div>
 
-      <%!-- Delta badge when both are present --%>
-      <div :if={@primary_f && @compare_f} class="flex justify-end">
-        <% delta = Float.round(@primary_f - @compare_f, 1) %>
-        <span class={[
-          "text-xs font-semibold tabular-nums px-1.5 py-0.5",
-          if(delta >= 0, do: "text-success bg-success/10", else: "text-error bg-error/10")
-        ]}>
-          {if delta >= 0, do: "+#{delta}", else: "#{delta}"} pts vs comparison
+      <%!-- State bar (shown when state data is available) --%>
+      <div :if={@state} class="flex items-center gap-2">
+        <span class="text-xs text-base-content/40 w-20 truncate text-right">
+          {@state_label}
+        </span>
+        <div class="flex-1 bg-base-200 h-5 relative">
+          <div
+            class="h-5 bg-success/70 transition-all duration-500"
+            style={"width: #{if @state_f, do: min(@state_f, 100), else: 0}%"}
+          >
+          </div>
+          <%!-- Primary marker on state bar --%>
+          <div
+            :if={@primary_f}
+            class="absolute top-0 bottom-0 w-0.5 bg-info"
+            style={"left: #{min(@primary_f, 100)}%"}
+            title={"#{@primary_label}: #{@primary_f}%"}
+          >
+          </div>
+        </div>
+      </div>
+
+      <%!-- Delta badges when relevant data is present --%>
+      <div :if={@primary_f && (@compare_f || @state_f)} class="flex justify-end gap-2">
+        <% delta_compare = if @primary_f && @compare_f, do: Float.round(@primary_f - @compare_f, 1), else: nil %>
+        <% delta_state = if @primary_f && @state_f, do: Float.round(@primary_f - @state_f, 1), else: nil %>
+        <span
+          :if={delta_compare}
+          class={[
+            "text-xs font-semibold tabular-nums px-1.5 py-0.5",
+            if(delta_compare >= 0, do: "text-success bg-success/10", else: "text-error bg-error/10")
+          ]}
+        >
+          {if delta_compare >= 0, do: "+#{delta_compare}", else: "#{delta_compare}"} pts vs {@compare_label || "comparison"}
+        </span>
+        <span
+          :if={delta_state}
+          class={[
+            "text-xs font-semibold tabular-nums px-1.5 py-0.5",
+            if(delta_state >= 0, do: "text-success bg-success/10", else: "text-error bg-error/10")
+          ]}
+        >
+          {if delta_state >= 0, do: "+#{delta_state}", else: "#{delta_state}"} pts vs {@state_label}
         </span>
       </div>
     </div>
@@ -900,6 +981,17 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         {[], nil}
       end
 
+    # Step 3b: State-wide ISD rollup (isd_code "0" = Michigan state aggregate)
+    state_results =
+      MdeStateAssessmentResult
+      |> Ash.Query.filter(
+        rollup_level == :isd and
+          report_category == "All Students" and
+          school_year == ^year and
+          mde_isd.isd_code == "0"
+      )
+      |> Ash.read!(authorize?: false)
+
     # Step 4: Aggregate into comparison shape
     %{
       building_code: building_code,
@@ -909,8 +1001,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       no_lea_found: is_nil(lea_district_code),
       no_results: school_results == [],
       no_lea_results: lea_results == [],
-      all_subjects: build_subject_comparison(school_results, lea_results),
-      grade_breakdown: build_grade_comparison(school_results, lea_results)
+      no_state_results: state_results == [],
+      all_subjects: build_subject_comparison(school_results, lea_results, state_results),
+      grade_breakdown: build_grade_comparison(school_results, lea_results, state_results)
     }
   end
 
@@ -935,20 +1028,22 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     |> Enum.sort_by(& &1.grade)
   end
 
-  defp build_subject_comparison(school_rows, lea_rows) do
+  defp build_subject_comparison(school_rows, lea_rows, state_rows) do
     Map.new(@subjects, fn subject ->
       school_subj = Enum.filter(school_rows, &(&1.subject == subject))
       lea_subj = Enum.filter(lea_rows, &(&1.subject == subject))
+      state_subj = Enum.filter(state_rows, &(&1.subject == subject))
 
       {subject,
        %{
          school: weighted_proficiency(school_subj),
-         lea: weighted_proficiency(lea_subj)
+         lea: weighted_proficiency(lea_subj),
+         state: weighted_proficiency(state_subj)
        }}
     end)
   end
 
-  defp build_grade_comparison(school_rows, lea_rows) do
+  defp build_grade_comparison(school_rows, lea_rows, state_rows) do
     school_grades =
       school_rows
       |> Enum.reject(fn r ->
@@ -963,6 +1058,13 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       end)
       |> Enum.group_by(& &1.grade_content_tested)
 
+    state_grades =
+      state_rows
+      |> Enum.reject(fn r ->
+        is_nil(r.grade_content_tested) or r.grade_content_tested == "All"
+      end)
+      |> Enum.group_by(& &1.grade_content_tested)
+
     all_grades =
       (Map.keys(school_grades) ++ Map.keys(lea_grades))
       |> Enum.uniq()
@@ -971,13 +1073,16 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     Enum.map(all_grades, fn grade ->
       s_rows = Map.get(school_grades, grade, [])
       l_rows = Map.get(lea_grades, grade, [])
+      st_rows = Map.get(state_grades, grade, [])
 
       %{
         grade: grade,
         school_ela: weighted_proficiency(Enum.filter(s_rows, &(&1.subject == "ELA"))),
         school_math: weighted_proficiency(Enum.filter(s_rows, &(&1.subject == "Mathematics"))),
         lea_ela: weighted_proficiency(Enum.filter(l_rows, &(&1.subject == "ELA"))),
-        lea_math: weighted_proficiency(Enum.filter(l_rows, &(&1.subject == "Mathematics")))
+        lea_math: weighted_proficiency(Enum.filter(l_rows, &(&1.subject == "Mathematics"))),
+        state_ela: weighted_proficiency(Enum.filter(st_rows, &(&1.subject == "ELA"))),
+        state_math: weighted_proficiency(Enum.filter(st_rows, &(&1.subject == "Mathematics")))
       }
     end)
   end
