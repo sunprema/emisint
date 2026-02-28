@@ -6,8 +6,6 @@ defmodule EmisintWeb.Growth.MonitorLive do
   @windows [:fall, :winter, :spring]
 
   def mount(%{"school_id" => school_id}, _session, socket) do
-    user = socket.assigns.current_user
-    oid = user.organization_id
     scope = socket.assigns.scope
 
     school = Emisint.Accounts.get_school!(school_id, scope: scope)
@@ -31,8 +29,6 @@ defmodule EmisintWeb.Growth.MonitorLive do
   end
 
   def handle_event("select_year", %{"year_id" => year_id}, socket) do
-    user = socket.assigns.current_user
-    oid = user.organization_id
     scope = socket.assigns.scope
 
     snapshots = load_grade_snapshots(socket.assigns.school.id, year_id, scope)

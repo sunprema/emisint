@@ -6,8 +6,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
   on_mount {EmisintWeb.LiveUserAuth, :live_user_required}
 
   def mount(_params, _session, socket) do
-    user = socket.assigns.current_user
-    oid = user.organization_id
     scope = socket.assigns.scope
 
     schools = Ash.read!(Emisint.Accounts.School, scope: scope)

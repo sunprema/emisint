@@ -3,7 +3,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
   require Ash.Query
 
-  alias Emisint.Assessments.{MdeDistrict, MdeStateAssessmentResult}
+  alias Emisint.Assessments.{MdeBuilding, MdeDistrict, MdeEntityMaster, MdeStateAssessmentResult}
 
   @subjects ["ELA", "Mathematics", "Science", "Social Studies"]
 
@@ -25,26 +25,48 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:district_code, nil)
      |> assign(:compare_code, "")
      |> assign(:primary, nil)
-     |> assign(:compare, nil)}
+     |> assign(:compare, nil)
+     |> assign(:active_tab, "district_comparison")
+     |> assign(:district_buildings, [])
+     |> assign(:selected_building_code, nil)
+     |> assign(:school_vs_lea, nil)}
   end
 
   def handle_params(%{"district_code" => dc} = params, _uri, socket) do
-    compare_code = Map.get(params, "compare", "")
+    tab = Map.get(params, "tab", "district_comparison")
+    building_code = Map.get(params, "building", nil)
     year = socket.assigns.selected_year
+    compare_code = Map.get(params, "compare", "")
 
-    primary = if year != "", do: load_district_data(dc, year), else: nil
+    {primary, compare} =
+      if tab == "district_comparison" do
+        p = if year != "", do: load_district_data(dc, year), else: nil
+        c = if compare_code != "" && year != "", do: load_district_data(compare_code, year), else: nil
+        {p, c}
+      else
+        {socket.assigns.primary, socket.assigns.compare}
+      end
 
-    compare =
-      if compare_code != "" && year != "",
-        do: load_district_data(compare_code, year),
-        else: nil
+    district_buildings =
+      if tab == "school_vs_lea", do: load_district_buildings(dc), else: []
+
+    school_vs_lea =
+      if tab == "school_vs_lea" && building_code && year != "" do
+        load_school_vs_lea(building_code, year)
+      else
+        nil
+      end
 
     {:noreply,
      socket
      |> assign(:district_code, dc)
      |> assign(:compare_code, compare_code)
+     |> assign(:active_tab, tab)
      |> assign(:primary, primary)
      |> assign(:compare, compare)
+     |> assign(:district_buildings, district_buildings)
+     |> assign(:selected_building_code, building_code)
+     |> assign(:school_vs_lea, school_vs_lea)
      |> assign(:page_title, page_title(primary, compare))}
   end
 
@@ -53,32 +75,62 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   # ---------------------------------------------------------------------------
 
   def handle_event("select_year", %{"year" => year}, socket) do
-    primary =
-      if socket.assigns.district_code,
-        do: load_district_data(socket.assigns.district_code, year),
-        else: nil
+    dc = socket.assigns.district_code
+    tab = socket.assigns.active_tab
+    building_code = socket.assigns.selected_building_code
 
-    compare =
-      if socket.assigns.compare_code != "",
-        do: load_district_data(socket.assigns.compare_code, year),
-        else: nil
+    {primary, compare} =
+      if tab == "district_comparison" do
+        p = if dc, do: load_district_data(dc, year), else: nil
+        c = if socket.assigns.compare_code != "", do: load_district_data(socket.assigns.compare_code, year), else: nil
+        {p, c}
+      else
+        {socket.assigns.primary, socket.assigns.compare}
+      end
+
+    school_vs_lea =
+      if tab == "school_vs_lea" && building_code && year != "" do
+        load_school_vs_lea(building_code, year)
+      else
+        socket.assigns.school_vs_lea
+      end
 
     {:noreply,
      socket
      |> assign(:selected_year, year)
      |> assign(:primary, primary)
-     |> assign(:compare, compare)}
+     |> assign(:compare, compare)
+     |> assign(:school_vs_lea, school_vs_lea)}
   end
 
   def handle_event("select_compare", %{"compare" => ""}, socket) do
-    {:noreply,
-     push_patch(socket, to: ~p"/mde/districts/#{socket.assigns.district_code}")}
+    {:noreply, push_patch(socket, to: ~p"/mde/districts/#{socket.assigns.district_code}")}
   end
 
   def handle_event("select_compare", %{"compare" => code}, socket) do
     {:noreply,
      push_patch(socket,
        to: ~p"/mde/districts/#{socket.assigns.district_code}?compare=#{code}"
+     )}
+  end
+
+  def handle_event("select_tab", %{"tab" => tab}, socket) do
+    {:noreply,
+     push_patch(socket, to: ~p"/mde/districts/#{socket.assigns.district_code}?tab=#{tab}")}
+  end
+
+  def handle_event("select_building", %{"building" => ""}, socket) do
+    {:noreply,
+     push_patch(socket,
+       to: ~p"/mde/districts/#{socket.assigns.district_code}?tab=school_vs_lea"
+     )}
+  end
+
+  def handle_event("select_building", %{"building" => code}, socket) do
+    {:noreply,
+     push_patch(socket,
+       to:
+         ~p"/mde/districts/#{socket.assigns.district_code}?tab=school_vs_lea&building=#{code}"
      )}
   end
 
@@ -92,7 +144,6 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-6xl mx-auto space-y-8">
-
         <%!-- Top bar: back link + year selector --%>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div class="flex items-center gap-4">
@@ -131,154 +182,337 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           </div>
         </div>
 
-        <%!-- District headers --%>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <%!-- Primary district --%>
-          <.district_header district={@primary} label="Primary District" color="info" />
+        <%!-- Tab bar --%>
+        <div class="flex border-b border-base-200">
+          <button
+            phx-click="select_tab"
+            phx-value-tab="district_comparison"
+            class={tab_class(@active_tab == "district_comparison")}
+          >
+            District Comparison
+          </button>
+          <button
+            phx-click="select_tab"
+            phx-value-tab="school_vs_lea"
+            class={tab_class(@active_tab == "school_vs_lea")}
+          >
+            School vs Geographic LEA
+          </button>
+        </div>
 
-          <%!-- Compare district --%>
+        <%!-- ══ Tab 1: District Comparison ══════════════════════════════════════ --%>
+        <div :if={@active_tab == "district_comparison"} class="space-y-8">
+          <%!-- District headers --%>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <%!-- Primary district --%>
+            <.district_header district={@primary} label="Primary District" color="info" />
+
+            <%!-- Compare district --%>
+            <div class="bg-base-100 border border-base-200 p-5 space-y-3">
+              <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40">
+                Comparison District
+              </div>
+              <form phx-change="select_compare">
+                <select
+                  name="compare"
+                  class="w-full border border-base-300 bg-base-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-warning/25 focus:border-warning transition-all"
+                >
+                  <option value="">— Select a district to compare —</option>
+                  <option
+                    :for={d <- @all_districts}
+                    value={d.district_code}
+                    selected={d.district_code == @compare_code}
+                  >
+                    {d.district_name} ({d.entity_type || "—"})
+                  </option>
+                </select>
+              </form>
+              <.district_header :if={@compare} district={@compare} label="District" color="warning" />
+              <div
+                :if={!@compare}
+                class="text-sm text-base-content/35 text-center py-4 border border-dashed border-base-300"
+              >
+                Select a district above to compare side-by-side
+              </div>
+            </div>
+          </div>
+
+          <%!-- ── Subject Proficiency Side-by-Side ──────────────────────────────── --%>
+          <div :if={@primary} class="space-y-3">
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                M-STEP Proficiency by Subject
+              </h2>
+              <div class="flex-1 h-px bg-base-200"></div>
+            </div>
+
+            <div class="bg-base-100 border border-base-200 p-5 space-y-5">
+              <.subject_comparison
+                :for={subject <- @subjects}
+                subject={subject}
+                primary={Map.get(@primary.all_subjects, subject)}
+                primary_label={short_name(@primary.district_name)}
+                compare={@compare && Map.get(@compare.all_subjects, subject)}
+                compare_label={@compare && short_name(@compare.district_name)}
+              />
+            </div>
+          </div>
+
+          <%!-- ── Grade Breakdown ─────────────────────────────────────────────────── --%>
+          <div :if={@primary && @primary.grade_breakdown != []} class="space-y-3">
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                Grade-Level Breakdown — ELA &amp; Math
+              </h2>
+              <div class="flex-1 h-px bg-base-200"></div>
+            </div>
+
+            <div class="bg-base-100 border border-base-200 overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-base-200 bg-base-50">
+                      <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                        Grade
+                      </th>
+                      <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                        ELA — {short_name(@primary.district_name)}
+                      </th>
+                      <th
+                        :if={@compare}
+                        class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide"
+                      >
+                        ELA — {short_name(@compare.district_name)}
+                      </th>
+                      <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                        Math — {short_name(@primary.district_name)}
+                      </th>
+                      <th
+                        :if={@compare}
+                        class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide"
+                      >
+                        Math — {short_name(@compare.district_name)}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-base-200">
+                    <tr
+                      :for={
+                        grade_row <-
+                          align_grades(@primary.grade_breakdown, @compare && @compare.grade_breakdown)
+                      }
+                      class="hover:bg-base-50"
+                    >
+                      <td class="px-4 py-2.5 font-medium text-xs">{grade_label(grade_row.grade)}</td>
+                      <td class="px-4 py-2.5 text-right">
+                        <.pct_badge value={grade_row.primary_ela} color="info" />
+                      </td>
+                      <td :if={@compare} class="px-4 py-2.5 text-right">
+                        <.pct_badge value={grade_row.compare_ela} color="warning" />
+                      </td>
+                      <td class="px-4 py-2.5 text-right">
+                        <.pct_badge value={grade_row.primary_math} color="info" />
+                      </td>
+                      <td :if={@compare} class="px-4 py-2.5 text-right">
+                        <.pct_badge value={grade_row.compare_math} color="warning" />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <%!-- ── Proficiency Distribution ───────────────────────────────────────── --%>
+          <div :if={@primary && @primary.proficiency_dist} class="space-y-3">
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                Proficiency Level Distribution — All M-STEP Subjects
+              </h2>
+              <div class="flex-1 h-px bg-base-200"></div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <.dist_card
+                district={@primary}
+                color_class="border-info/30 bg-info/5"
+                label="Primary"
+              />
+              <.dist_card
+                :if={@compare && @compare.proficiency_dist}
+                district={@compare}
+                color_class="border-warning/30 bg-warning/5"
+                label="Comparison"
+              />
+              <div
+                :if={!@compare}
+                class="bg-base-50 border border-dashed border-base-300 flex items-center justify-center py-10 text-sm text-base-content/30"
+              >
+                No comparison district selected
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <%!-- ══ Tab 2: School vs Geographic LEA ════════════════════════════════════ --%>
+        <div :if={@active_tab == "school_vs_lea"} class="space-y-6">
+          <%!-- Building selector --%>
           <div class="bg-base-100 border border-base-200 p-5 space-y-3">
             <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40">
-              Comparison District
+              Select a School Building
             </div>
-            <form phx-change="select_compare">
+            <form phx-change="select_building">
               <select
-                name="compare"
-                class="w-full border border-base-300 bg-base-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-warning/25 focus:border-warning transition-all"
+                name="building"
+                class="w-full border border-base-300 bg-base-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-info/25 focus:border-info transition-all"
               >
-                <option value="">— Select a district to compare —</option>
+                <option value="">— Select a building —</option>
                 <option
-                  :for={d <- @all_districts}
-                  value={d.district_code}
-                  selected={d.district_code == @compare_code}
+                  :for={b <- @district_buildings}
+                  value={b.building_code}
+                  selected={b.building_code == @selected_building_code}
                 >
-                  {d.district_name} ({d.entity_type || "—"})
+                  {b.building_name} ({b.building_code})
                 </option>
               </select>
             </form>
-            <.district_header :if={@compare} district={@compare} label={nil} color="warning" />
+            <p class="text-xs text-base-content/40">
+              Shows this school's M-STEP results vs the traditional district that geographically surrounds it.
+            </p>
+          </div>
+
+          <%!-- Prompt when no building selected --%>
+          <div
+            :if={is_nil(@selected_building_code)}
+            class="bg-base-50 border border-dashed border-base-300 flex items-center justify-center py-16 text-sm text-base-content/30"
+          >
+            Select a building above to view the comparison
+          </div>
+
+          <%!-- Results --%>
+          <div :if={@school_vs_lea} class="space-y-6">
+            <%!-- Info banner --%>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div class="bg-base-100 border border-info/30 p-5 space-y-1">
+                <div class="text-xs font-semibold uppercase tracking-wider text-info/60">School</div>
+                <div class="font-bold text-base">{@school_vs_lea.school_name}</div>
+                <div class="text-xs text-base-content/50">{@school_vs_lea.building_code}</div>
+              </div>
+
+              <div :if={@school_vs_lea.no_lea_found} class="bg-base-100 border border-warning/30 p-5 flex items-center">
+                <p class="text-sm text-warning">
+                  No geographic LEA district mapping found for this building in the MDE Entity Master.
+                </p>
+              </div>
+
+              <div :if={!@school_vs_lea.no_lea_found} class="bg-base-100 border border-warning/30 p-5 space-y-1">
+                <div class="text-xs font-semibold uppercase tracking-wider text-warning/60">
+                  Geographic LEA District
+                </div>
+                <div class="font-bold text-base">
+                  {@school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code}
+                </div>
+                <div class="text-xs text-base-content/50">{@school_vs_lea.lea_district_code}</div>
+              </div>
+            </div>
+
+            <%!-- No results notice --%>
             <div
-              :if={!@compare}
-              class="text-sm text-base-content/35 text-center py-4 border border-dashed border-base-300"
+              :if={@school_vs_lea.no_results}
+              class="bg-warning/5 border border-warning/20 p-4 text-sm text-warning"
             >
-              Select a district above to compare side-by-side
+              No M-STEP building-level results found for this school in {@selected_year}.
             </div>
-          </div>
-        </div>
 
-        <%!-- ── Subject Proficiency Side-by-Side ──────────────────────────────── --%>
-        <div :if={@primary} class="space-y-3">
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-              M-STEP Proficiency by Subject
-            </h2>
-            <div class="flex-1 h-px bg-base-200"></div>
-          </div>
-
-          <div class="bg-base-100 border border-base-200 p-5 space-y-5">
-            <.subject_comparison
-              :for={subject <- @subjects}
-              subject={subject}
-              primary={Map.get(@primary.all_subjects, subject)}
-              primary_label={short_name(@primary.district_name)}
-              compare={@compare && Map.get(@compare.all_subjects, subject)}
-              compare_label={@compare && short_name(@compare.district_name)}
-            />
-          </div>
-        </div>
-
-        <%!-- ── Grade Breakdown ─────────────────────────────────────────────────── --%>
-        <div :if={@primary && @primary.grade_breakdown != []} class="space-y-3">
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-              Grade-Level Breakdown — ELA &amp; Math
-            </h2>
-            <div class="flex-1 h-px bg-base-200"></div>
-          </div>
-
-          <div class="bg-base-100 border border-base-200 overflow-hidden">
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="border-b border-base-200 bg-base-50">
-                    <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
-                      Grade
-                    </th>
-                    <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
-                      ELA — {short_name(@primary.district_name)}
-                    </th>
-                    <th
-                      :if={@compare}
-                      class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide"
-                    >
-                      ELA — {short_name(@compare.district_name)}
-                    </th>
-                    <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
-                      Math — {short_name(@primary.district_name)}
-                    </th>
-                    <th
-                      :if={@compare}
-                      class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide"
-                    >
-                      Math — {short_name(@compare.district_name)}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-base-200">
-                  <tr
-                    :for={grade_row <- align_grades(@primary.grade_breakdown, @compare && @compare.grade_breakdown)}
-                    class="hover:bg-base-50"
-                  >
-                    <td class="px-4 py-2.5 font-medium text-xs">{grade_label(grade_row.grade)}</td>
-                    <td class="px-4 py-2.5 text-right">
-                      <.pct_badge value={grade_row.primary_ela} color="info" />
-                    </td>
-                    <td :if={@compare} class="px-4 py-2.5 text-right">
-                      <.pct_badge value={grade_row.compare_ela} color="warning" />
-                    </td>
-                    <td class="px-4 py-2.5 text-right">
-                      <.pct_badge value={grade_row.primary_math} color="info" />
-                    </td>
-                    <td :if={@compare} class="px-4 py-2.5 text-right">
-                      <.pct_badge value={grade_row.compare_math} color="warning" />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <%!-- ── Proficiency Distribution ───────────────────────────────────────── --%>
-        <div :if={@primary && @primary.proficiency_dist} class="space-y-3">
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-              Proficiency Level Distribution — All M-STEP Subjects
-            </h2>
-            <div class="flex-1 h-px bg-base-200"></div>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <.dist_card
-              district={@primary}
-              color_class="border-info/30 bg-info/5"
-              label="Primary"
-            />
-            <.dist_card
-              :if={@compare && @compare.proficiency_dist}
-              district={@compare}
-              color_class="border-warning/30 bg-warning/5"
-              label="Comparison"
-            />
             <div
-              :if={!@compare}
-              class="bg-base-50 border border-dashed border-base-300 flex items-center justify-center py-10 text-sm text-base-content/30"
+              :if={!@school_vs_lea.no_lea_found && @school_vs_lea.no_lea_results}
+              class="bg-warning/5 border border-warning/20 p-4 text-sm text-warning"
             >
-              No comparison district selected
+              No M-STEP district-level rollup found for the geographic LEA ({@school_vs_lea.lea_district_code}) in {@selected_year}.
+              District rollup data may not be imported yet.
+            </div>
+
+            <%!-- Subject proficiency comparison --%>
+            <div
+              :if={!@school_vs_lea.no_results && !@school_vs_lea.no_lea_found}
+              class="space-y-3"
+            >
+              <div class="flex items-center gap-2">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                  M-STEP Proficiency by Subject
+                </h2>
+                <div class="flex-1 h-px bg-base-200"></div>
+              </div>
+
+              <div class="bg-base-100 border border-base-200 p-5 space-y-5">
+                <.subject_comparison
+                  :for={subject <- @subjects}
+                  subject={subject}
+                  primary={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:school])}
+                  primary_label={short_name(@school_vs_lea.school_name)}
+                  compare={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:lea])}
+                  compare_label={short_name(@school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA")}
+                />
+              </div>
+            </div>
+
+            <%!-- Grade breakdown --%>
+            <div
+              :if={!@school_vs_lea.no_results && !@school_vs_lea.no_lea_found && @school_vs_lea.grade_breakdown != []}
+              class="space-y-3"
+            >
+              <div class="flex items-center gap-2">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                  Grade-Level Breakdown — ELA &amp; Math
+                </h2>
+                <div class="flex-1 h-px bg-base-200"></div>
+              </div>
+
+              <div class="bg-base-100 border border-base-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-base-200 bg-base-50">
+                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Grade
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          ELA — School
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide">
+                          ELA — LEA District
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          Math — School
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide">
+                          Math — LEA District
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-base-200">
+                      <tr :for={row <- @school_vs_lea.grade_breakdown} class="hover:bg-base-50">
+                        <td class="px-4 py-2.5 font-medium text-xs">{grade_label(row.grade)}</td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.school_ela} color="info" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.lea_ela} color="warning" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.school_math} color="info" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.lea_math} color="warning" />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
       </div>
     </Layouts.app>
     """
@@ -315,7 +549,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         <span :if={@district.isd_name}>·</span>
         <span :if={@district.entity_type}>{@district.entity_type}</span>
         <span :if={@district.entity_type}>·</span>
-        <span>{@district.buildings} {if @district.buildings == 1, do: "building", else: "buildings"}</span>
+        <span>
+          {@district.buildings} {if @district.buildings == 1, do: "building", else: "buildings"}
+        </span>
         <span :if={@district.total_assessed > 0}>·</span>
         <span :if={@district.total_assessed > 0}>
           {format_number(@district.total_assessed)} students
@@ -567,6 +803,79 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     end
   end
 
+  defp load_district_buildings(district_code) do
+    MdeBuilding
+    |> Ash.Query.filter(mde_district.district_code == ^district_code)
+    |> Ash.Query.sort(:building_name)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp load_school_vs_lea(building_code, year) do
+    # Step 1: Entity master → geographic LEA district code
+    # entity_code in mde_entity_masters is zero-padded to 5 chars (e.g. "110" → "00110")
+    padded_code = String.pad_leading(building_code, 5, "0")
+
+    entity =
+      MdeEntityMaster
+      |> Ash.Query.filter(entity_code == ^padded_code)
+      |> Ash.read_one!(authorize?: false)
+
+    lea_district_code = entity && entity.entity_geographic_lea_district_code
+    school_name = (entity && entity.entity_official_name) || building_code
+
+    # Step 2: School (building-level) results
+    school_results =
+      MdeStateAssessmentResult
+      |> Ash.Query.filter(
+        rollup_level == :building and
+          report_category == "All Students" and
+          school_year == ^year and
+          mde_building.building_code == ^building_code
+      )
+      |> Ash.read!(authorize?: false)
+
+    # Step 3: LEA district rollup results (pre-aggregated)
+    {lea_results, lea_district_name} =
+      if lea_district_code do
+        rows =
+          MdeStateAssessmentResult
+          |> Ash.Query.filter(
+            rollup_level == :district and
+              report_category == "All Students" and
+              school_year == ^year and
+              mde_district.district_code == ^lea_district_code
+          )
+          |> Ash.Query.load(:mde_district)
+          |> Ash.read!(authorize?: false)
+
+        name =
+          case rows do
+            [first | _] ->
+              (first.mde_district && first.mde_district.district_name) || lea_district_code
+
+            [] ->
+              lea_district_code
+          end
+
+        {rows, name}
+      else
+        {[], nil}
+      end
+
+    # Step 4: Aggregate into comparison shape
+    %{
+      building_code: building_code,
+      school_name: school_name,
+      lea_district_code: lea_district_code,
+      lea_district_name: lea_district_name,
+      no_lea_found: is_nil(lea_district_code),
+      no_results: school_results == [],
+      no_lea_results: lea_results == [],
+      all_subjects: build_subject_comparison(school_results, lea_results),
+      grade_breakdown: build_grade_comparison(school_results, lea_results)
+    }
+  end
+
   defp build_grade_breakdown(rows) do
     rows
     |> Enum.reject(fn r ->
@@ -586,6 +895,53 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       }
     end)
     |> Enum.sort_by(& &1.grade)
+  end
+
+  defp build_subject_comparison(school_rows, lea_rows) do
+    Map.new(@subjects, fn subject ->
+      school_subj = Enum.filter(school_rows, &(&1.subject == subject))
+      lea_subj = Enum.filter(lea_rows, &(&1.subject == subject))
+
+      {subject,
+       %{
+         school: weighted_proficiency(school_subj),
+         lea: weighted_proficiency(lea_subj)
+       }}
+    end)
+  end
+
+  defp build_grade_comparison(school_rows, lea_rows) do
+    school_grades =
+      school_rows
+      |> Enum.reject(fn r ->
+        is_nil(r.grade_content_tested) or r.grade_content_tested == "All"
+      end)
+      |> Enum.group_by(& &1.grade_content_tested)
+
+    lea_grades =
+      lea_rows
+      |> Enum.reject(fn r ->
+        is_nil(r.grade_content_tested) or r.grade_content_tested == "All"
+      end)
+      |> Enum.group_by(& &1.grade_content_tested)
+
+    all_grades =
+      (Map.keys(school_grades) ++ Map.keys(lea_grades))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    Enum.map(all_grades, fn grade ->
+      s_rows = Map.get(school_grades, grade, [])
+      l_rows = Map.get(lea_grades, grade, [])
+
+      %{
+        grade: grade,
+        school_ela: weighted_proficiency(Enum.filter(s_rows, &(&1.subject == "ELA"))),
+        school_math: weighted_proficiency(Enum.filter(s_rows, &(&1.subject == "Mathematics"))),
+        lea_ela: weighted_proficiency(Enum.filter(l_rows, &(&1.subject == "ELA"))),
+        lea_math: weighted_proficiency(Enum.filter(l_rows, &(&1.subject == "Mathematics")))
+      }
+    end)
   end
 
   defp compute_proficiency_dist(rows) do
@@ -640,10 +996,23 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   # Helpers
   # ---------------------------------------------------------------------------
 
+  defp tab_class(true),
+    do: "px-4 py-2.5 text-sm font-semibold border-b-2 border-info text-info"
+
+  defp tab_class(false),
+    do:
+      "px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-base-content/50 hover:text-base-content"
+
   # Merge two grade breakdown lists into aligned rows for the comparison table
   defp align_grades(primary_grades, nil) do
     Enum.map(primary_grades, fn g ->
-      %{grade: g.grade, primary_ela: g.ela, primary_math: g.math, compare_ela: nil, compare_math: nil}
+      %{
+        grade: g.grade,
+        primary_ela: g.ela,
+        primary_math: g.math,
+        compare_ela: nil,
+        compare_math: nil
+      }
     end)
   end
 
