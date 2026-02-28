@@ -401,12 +401,20 @@ defmodule EmisintWeb.Mde.OverviewLive do
               </span>
             </div>
           </div>
-          <button
-            phx-click="close_district"
-            class="p-1.5 text-base-content/40 hover:text-base-content hover:bg-base-200 transition-colors shrink-0"
-          >
-            <.icon name="hero-x-mark" class="size-5" />
-          </button>
+          <div class="flex items-center gap-2 shrink-0">
+            <.link
+              navigate={~p"/mde/districts/#{@district.district_code}"}
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-info text-info-content hover:bg-info/80 transition-colors"
+            >
+              <.icon name="hero-chart-bar" class="size-3.5" /> Analysis
+            </.link>
+            <button
+              phx-click="close_district"
+              class="p-1.5 text-base-content/40 hover:text-base-content hover:bg-base-200 transition-colors"
+            >
+              <.icon name="hero-x-mark" class="size-5" />
+            </button>
+          </div>
         </div>
 
         <div class="p-6 space-y-8">
@@ -705,6 +713,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
           end)
 
         %{
+          district_code: district.district_code,
           district_name: district.district_name,
           entity_type: district.entity_type,
           isd_name: isd_name,
