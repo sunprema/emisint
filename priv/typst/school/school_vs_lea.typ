@@ -305,6 +305,13 @@
   th("LEA %"),
   th("State %"),
   th("Δ vs LEA"),
+  table.hline(stroke: 1pt + c-border),
+  table.cell(fill: c-th-bg, text(size: 9pt, weight: "bold", fill: c-text, "All Subjects Avg")),
+  table.cell(fill: c-th-bg, align(center, pct-badge(elixir_data.all_subjects_avg.school_pct))),
+  table.cell(fill: c-th-bg, tri-bar(elixir_data.all_subjects_avg.school_pct, elixir_data.all_subjects_avg.lea_pct, elixir_data.all_subjects_avg.state_pct)),
+  table.cell(fill: c-th-bg, align(center, pct-badge(elixir_data.all_subjects_avg.lea_pct))),
+  table.cell(fill: c-th-bg, align(center, pct-badge(elixir_data.all_subjects_avg.state_pct))),
+  table.cell(fill: c-th-bg, align(center, delta-badge(elixir_data.all_subjects_avg.delta))),
   ..for s in elixir_data.subjects {(
     text(size: 9pt, weight: "semibold", s.subject),
     align(center, pct-badge(s.school_pct)),
@@ -313,13 +320,7 @@
     align(center, pct-badge(s.state_pct)),
     align(center, delta-badge(s.delta))
   )},
-  table.hline(stroke: 1pt + c-border),
-  table.cell(fill: c-th-bg, text(size: 9pt, weight: "bold", fill: c-text, "All Subjects Avg")),
-  table.cell(fill: c-th-bg, align(center, pct-badge(elixir_data.all_subjects_avg.school_pct))),
-  table.cell(fill: c-th-bg, tri-bar(elixir_data.all_subjects_avg.school_pct, elixir_data.all_subjects_avg.lea_pct, elixir_data.all_subjects_avg.state_pct)),
-  table.cell(fill: c-th-bg, align(center, pct-badge(elixir_data.all_subjects_avg.lea_pct))),
-  table.cell(fill: c-th-bg, align(center, pct-badge(elixir_data.all_subjects_avg.state_pct))),
-  table.cell(fill: c-th-bg, align(center, delta-badge(elixir_data.all_subjects_avg.delta))),
+  
 )
 
 #v(6pt)
