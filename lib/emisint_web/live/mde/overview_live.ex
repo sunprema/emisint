@@ -24,6 +24,9 @@ defmodule EmisintWeb.Mde.OverviewLive do
      |> assign(:school_years, years)
      |> assign(:selected_year, selected_year)
      |> assign(:stats, stats)
+     |> assign(:all_district_rows, district_rows)
+     |> assign(:district_total, length(district_rows))
+     |> assign(:district_search, "")
      |> assign(:district_count, length(district_rows))
      |> assign(:district_lookup, Map.new(district_rows, &{&1.id, &1}))
      |> stream(:district_rows, district_rows)
@@ -41,10 +44,23 @@ defmodule EmisintWeb.Mde.OverviewLive do
      socket
      |> assign(:selected_year, year)
      |> assign(:stats, stats)
+     |> assign(:all_district_rows, district_rows)
+     |> assign(:district_total, length(district_rows))
+     |> assign(:district_search, "")
      |> assign(:district_count, length(district_rows))
      |> assign(:district_lookup, Map.new(district_rows, &{&1.id, &1}))
      |> stream(:district_rows, district_rows, reset: true)
      |> assign(:selected_district, nil)}
+  end
+
+  def handle_event("search_districts", %{"search" => search}, socket) do
+    filtered = filter_districts(socket.assigns.all_district_rows, search)
+
+    {:noreply,
+     socket
+     |> assign(:district_search, search)
+     |> assign(:district_count, length(filtered))
+     |> stream(:district_rows, filtered, reset: true)}
   end
 
   def handle_event("show_district", %{"code" => code}, socket) do
@@ -187,18 +203,49 @@ defmodule EmisintWeb.Mde.OverviewLive do
         </div>
 
         <%!-- ── District Breakdown Table ──────────────────────────────────────── --%>
-        <div :if={@district_count > 0} class="space-y-3">
+        <div :if={@district_total > 0} class="space-y-3">
           <div class="flex items-center gap-2">
             <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
               District Breakdown — M-STEP All Students
             </h2>
             <div class="flex-1 h-px bg-base-200"></div>
-            <span class="text-xs text-base-content/35">
-              {@district_count} districts · sorted by ELA % · click a row for details
-            </span>
+            <span class="text-xs text-base-content/35">sorted by ELA % · click a row for details</span>
           </div>
 
-          <div class="bg-base-100 border border-base-200 overflow-hidden">
+          <%!-- Search --%>
+          <form phx-change="search_districts" class="flex items-center gap-3">
+            <div class="relative flex-1 max-w-xs">
+              <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                <.icon name="hero-magnifying-glass" class="size-4 text-base-content/35" />
+              </div>
+              <input
+                type="text"
+                name="search"
+                value={@district_search}
+                placeholder="Search districts…"
+                class="w-full pl-9 pr-3 py-2 border border-base-300 bg-base-50 text-sm focus:outline-none focus:ring-2 focus:ring-info/25 focus:border-info transition-all"
+                phx-debounce="200"
+              />
+            </div>
+            <span class="text-xs text-base-content/40">
+              {if @district_search != "",
+                do: "#{@district_count} of #{@district_total}",
+                else: to_string(@district_total)} districts
+            </span>
+          </form>
+
+          <%!-- No search results --%>
+          <div
+            :if={@district_count == 0}
+            class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-10 text-center"
+          >
+            <div class="p-3 bg-base-200 mb-3">
+              <.icon name="hero-funnel" class="size-5 text-base-content/25" />
+            </div>
+            <p class="text-sm font-medium text-base-content/40">No districts match your search</p>
+          </div>
+
+          <div :if={@district_count > 0} class="bg-base-100 border border-base-200 overflow-hidden">
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead>
@@ -840,6 +887,20 @@ defmodule EmisintWeb.Mde.OverviewLive do
     else
       nil
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Filtering
+  # ---------------------------------------------------------------------------
+
+  defp filter_districts(rows, ""), do: rows
+
+  defp filter_districts(rows, search) do
+    search_down = String.downcase(search)
+
+    Enum.filter(rows, fn row ->
+      String.contains?(String.downcase(row.district_name || ""), search_down)
+    end)
   end
 
   # ---------------------------------------------------------------------------

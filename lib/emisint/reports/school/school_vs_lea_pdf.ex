@@ -81,6 +81,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
     subjects = build_subject_comparison(school_results, lea_results, state_results)
     grades = build_grade_comparison(school_results, lea_results, state_results)
+    all_subjects_avg = build_all_subjects_avg(subjects)
 
     above_lea = Enum.count(subjects, fn s -> s.school_pct && s.lea_pct && s.delta >= 0 end)
     below_lea = Enum.count(subjects, fn s -> s.school_pct && s.lea_pct && s.delta < 0 end)
@@ -106,6 +107,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
       above_state: above_state,
       grades_compared: length(grades),
       subjects: subjects,
+      all_subjects_avg: all_subjects_avg,
       grade_breakdown: grades
     }
   end
@@ -183,6 +185,20 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           if(school_math && lea_math, do: Float.round(school_math - lea_math, 1), else: nil)
       }
     end)
+  end
+
+  defp build_all_subjects_avg(subjects) do
+    avg_school = avg_float_values(Enum.map(subjects, & &1.school_pct))
+    avg_lea = avg_float_values(Enum.map(subjects, & &1.lea_pct))
+    avg_state = avg_float_values(Enum.map(subjects, & &1.state_pct))
+    delta = if avg_school && avg_lea, do: Float.round(avg_school - avg_lea, 1), else: nil
+
+    %{school_pct: avg_school, lea_pct: avg_lea, state_pct: avg_state, delta: delta}
+  end
+
+  defp avg_float_values(values) do
+    non_nil = Enum.reject(values, &is_nil/1)
+    if non_nil == [], do: nil, else: Float.round(Enum.sum(non_nil) / length(non_nil), 1)
   end
 
   defp weighted_proficiency_float([]), do: nil

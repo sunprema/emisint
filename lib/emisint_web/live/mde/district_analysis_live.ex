@@ -488,6 +488,36 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
               No Michigan state-wide average found for {@selected_year}. State benchmark not available for this year.
             </div>
 
+            <%!-- All Subjects Average --%>
+            <div
+              :if={!@school_vs_lea.no_results && !@school_vs_lea.no_lea_found}
+              class="space-y-3"
+            >
+              <div class="flex items-center gap-2">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                  All Subjects Average
+                </h2>
+                <div class="flex-1 h-px bg-base-200"></div>
+              </div>
+
+              <div class="bg-base-100 border border-base-200 p-5">
+                <.subject_comparison
+                  subject="All Subjects"
+                  primary={@school_vs_lea.avg_subjects.school}
+                  primary_label={short_name(@school_vs_lea.school_name)}
+                  compare={@school_vs_lea.avg_subjects.lea}
+                  compare_label={
+                    short_name(
+                      @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code ||
+                        "LEA"
+                    )
+                  }
+                  state={@school_vs_lea.avg_subjects.state}
+                  state_label="State Avg"
+                />
+              </div>
+            </div>
+
             <%!-- Subject proficiency comparison --%>
             <div
               :if={!@school_vs_lea.no_results && !@school_vs_lea.no_lea_found}
@@ -999,6 +1029,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       |> Ash.read!(authorize?: false)
 
     # Step 4: Aggregate into comparison shape
+    all_subjects = build_subject_comparison(school_results, lea_results, state_results)
+
     %{
       building_code: building_code,
       school_name: school_name,
@@ -1008,7 +1040,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       no_results: school_results == [],
       no_lea_results: lea_results == [],
       no_state_results: state_results == [],
-      all_subjects: build_subject_comparison(school_results, lea_results, state_results),
+      all_subjects: all_subjects,
+      avg_subjects: avg_across_subjects(all_subjects),
       grade_breakdown: build_grade_comparison(school_results, lea_results, state_results)
     }
   end
@@ -1117,6 +1150,27 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     else
       nil
     end
+  end
+
+  defp avg_across_subjects(all_subjects) do
+    school_vals = all_subjects |> Map.values() |> Enum.map(& &1.school) |> Enum.reject(&is_nil/1)
+    lea_vals = all_subjects |> Map.values() |> Enum.map(& &1.lea) |> Enum.reject(&is_nil/1)
+    state_vals = all_subjects |> Map.values() |> Enum.map(& &1.state) |> Enum.reject(&is_nil/1)
+
+    %{
+      school: avg_decimals(school_vals),
+      lea: avg_decimals(lea_vals),
+      state: avg_decimals(state_vals)
+    }
+  end
+
+  defp avg_decimals([]), do: nil
+
+  defp avg_decimals(values) do
+    values
+    |> Enum.reduce(&Decimal.add/2)
+    |> Decimal.div(length(values))
+    |> Decimal.round(1)
   end
 
   defp weighted_proficiency([]), do: nil
