@@ -24,7 +24,9 @@ defmodule EmisintWeb.Mde.OverviewLive do
      |> assign(:school_years, years)
      |> assign(:selected_year, selected_year)
      |> assign(:stats, stats)
-     |> assign(:district_rows, district_rows)
+     |> assign(:district_count, length(district_rows))
+     |> assign(:district_lookup, Map.new(district_rows, &{&1.id, &1}))
+     |> stream(:district_rows, district_rows)
      |> assign(:selected_district, nil)}
   end
 
@@ -33,20 +35,20 @@ defmodule EmisintWeb.Mde.OverviewLive do
   # ---------------------------------------------------------------------------
 
   def handle_event("select_year", %{"year" => year}, socket) do
-    IO.inspect(year, label: "Selected year")
     {stats, district_rows} = load_data(year)
 
     {:noreply,
      socket
      |> assign(:selected_year, year)
      |> assign(:stats, stats)
-     |> assign(:district_rows, district_rows)
+     |> assign(:district_count, length(district_rows))
+     |> assign(:district_lookup, Map.new(district_rows, &{&1.id, &1}))
+     |> stream(:district_rows, district_rows, reset: true)
      |> assign(:selected_district, nil)}
   end
 
-  def handle_event("show_district", %{"index" => idx_str}, socket) do
-    idx = String.to_integer(idx_str)
-    selected = Enum.at(socket.assigns.district_rows, idx)
+  def handle_event("show_district", %{"code" => code}, socket) do
+    selected = Map.get(socket.assigns.district_lookup, code)
     {:noreply, assign(socket, :selected_district, selected)}
   end
 
@@ -185,14 +187,14 @@ defmodule EmisintWeb.Mde.OverviewLive do
         </div>
 
         <%!-- ── District Breakdown Table ──────────────────────────────────────── --%>
-        <div :if={@district_rows != []} class="space-y-3">
+        <div :if={@district_count > 0} class="space-y-3">
           <div class="flex items-center gap-2">
             <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
               District Breakdown — M-STEP All Students
             </h2>
             <div class="flex-1 h-px bg-base-200"></div>
             <span class="text-xs text-base-content/35">
-              {length(@district_rows)} districts · sorted by ELA % · click a row for details
+              {@district_count} districts · sorted by ELA % · click a row for details
             </span>
           </div>
 
@@ -221,12 +223,13 @@ defmodule EmisintWeb.Mde.OverviewLive do
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-base-200">
+                <tbody id="district-rows" phx-update="stream" class="divide-y divide-base-200">
                   <tr
-                    :for={{row, idx} <- Enum.with_index(@district_rows)}
+                    :for={{dom_id, row} <- @streams.district_rows}
+                    id={dom_id}
                     class="hover:bg-base-50 transition-colors cursor-pointer"
                     phx-click="show_district"
-                    phx-value-index={idx}
+                    phx-value-code={row.id}
                   >
                     <td class="px-4 py-3 font-medium">{row.district_name}</td>
                     <td class="px-4 py-3 text-xs text-base-content/50 hidden sm:table-cell">
@@ -716,6 +719,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
           end)
 
         %{
+          id: district.district_code,
           district_code: district.district_code,
           district_name: district.district_name,
           entity_type: district.entity_type,
