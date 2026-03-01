@@ -70,7 +70,7 @@ defmodule Emisint.Assessments.MdeImporter do
     with :ok <- validate_file(path) do
       # First pass — cheap: only keeps unique dimension rows in memory.
       # Skips "0" sentinel codes so no phantom records are created.
-      {isds, districts, buildings} = collect_dimensions(path)
+      {isds, districts, buildings, school_year} = collect_dimensions(path)
 
       # Upsert ISDs, then build isd_code → UUID map
       upsert_isds(isds)
@@ -94,7 +94,8 @@ defmodule Emisint.Assessments.MdeImporter do
          districts: map_size(districts),
          buildings: map_size(buildings),
          results: result_count,
-         errors: error_count
+         errors: error_count,
+         school_year: school_year
        }}
     end
   rescue
@@ -130,10 +131,13 @@ defmodule Emisint.Assessments.MdeImporter do
 
   defp collect_dimensions(path) do
     stream_as_maps(path)
-    |> Enum.reduce({%{}, %{}, %{}}, fn row, {isds, districts, buildings} ->
+    |> Enum.reduce({%{}, %{}, %{}, nil}, fn row, {isds, districts, buildings, school_year} ->
       isd_code = row["ISDCode"]
       district_code = row["DistrictCode"]
       building_code = row["BuildingCode"]
+
+      # Capture the school year from the first row that has it
+      school_year = school_year || row["SchoolYear"]
 
       # ISDs are always real — isd_code is never "0"
       isds =
@@ -175,7 +179,7 @@ defmodule Emisint.Assessments.MdeImporter do
           })
         end
 
-      {isds, districts, buildings}
+      {isds, districts, buildings, school_year}
     end)
   end
 

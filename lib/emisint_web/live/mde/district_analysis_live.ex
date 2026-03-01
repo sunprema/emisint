@@ -3,7 +3,13 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
   require Ash.Query
 
-  alias Emisint.Assessments.{MdeBuilding, MdeDistrict, MdeEntityMaster, MdeStateAssessmentResult}
+  alias Emisint.Assessments.{
+    MdeBuilding,
+    MdeDistrict,
+    MdeDistrictSnapshot,
+    MdeSchoolVsLeaSnapshot,
+    MdeStateAssessmentResult
+  }
 
   @subjects ["ELA", "Mathematics", "Science", "Social Studies"]
 
@@ -909,51 +915,26 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   end
 
   defp load_district_data(district_code, year) do
-    results =
-      MdeStateAssessmentResult
-      |> Ash.Query.filter(
-        school_year == ^year and
-          report_category == "All Students" and
-          rollup_level == :building and
-          mde_building.mde_district.district_code == ^district_code
-      )
-      |> Ash.Query.load(mde_building: [mde_district: :mde_isd])
-      |> Ash.read!(authorize?: false)
+    snapshot =
+      MdeDistrictSnapshot
+      |> Ash.Query.filter(district_code == ^district_code and school_year == ^year)
+      |> Ash.read_one!(authorize?: false)
 
-    case results do
-      [] ->
+    case snapshot do
+      nil ->
         nil
 
-      _ ->
-        first = List.first(results)
-        district = first.mde_building && first.mde_building.mde_district
-        isd_name = district && district.mde_isd && district.mde_isd.isd_name
-
-        ela_rows = Enum.filter(results, &(&1.subject == "ELA"))
-        buildings = results |> Enum.map(& &1.mde_building_id) |> Enum.uniq() |> length()
-
-        total_assessed =
-          ela_rows
-          |> Enum.filter(&(&1.grade_content_tested == "All"))
-          |> Enum.map(&(&1.number_assessed || 0))
-          |> Enum.sum()
-
-        all_subjects =
-          Map.new(@subjects, fn subject ->
-            subj_rows = Enum.filter(results, &(&1.subject == subject))
-            {subject, weighted_proficiency(subj_rows)}
-          end)
-
+      snap ->
         %{
-          district_code: district_code,
-          district_name: (district && district.district_name) || district_code,
-          entity_type: district && district.entity_type,
-          isd_name: isd_name,
-          buildings: buildings,
-          total_assessed: total_assessed,
-          all_subjects: all_subjects,
-          grade_breakdown: build_grade_breakdown(results),
-          proficiency_dist: compute_proficiency_dist(results)
+          district_code: snap.district_code,
+          district_name: snap.district_name || district_code,
+          entity_type: snap.entity_type,
+          isd_name: snap.isd_name,
+          buildings: snap.buildings || 0,
+          total_assessed: snap.total_assessed || 0,
+          all_subjects: convert_snapshot_subjects(snap.all_subjects),
+          grade_breakdown: convert_snapshot_grade_breakdown(snap.grade_breakdown),
+          proficiency_dist: convert_snapshot_proficiency_dist(snap.proficiency_dist)
         }
     end
   end
@@ -966,233 +947,128 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   end
 
   defp load_school_vs_lea(building_code, year) do
-    # Step 1: Entity master → geographic LEA district code
-    # entity_code in mde_entity_masters is zero-padded to 5 chars (e.g. "110" → "00110")
-    padded_code = String.pad_leading(building_code, 5, "0")
-
-    entity =
-      MdeEntityMaster
-      |> Ash.Query.filter(entity_code == ^padded_code)
+    snapshot =
+      MdeSchoolVsLeaSnapshot
+      |> Ash.Query.for_read(:by_building_and_year, %{
+        building_code: building_code,
+        school_year: year
+      })
       |> Ash.read_one!(authorize?: false)
 
-    lea_district_code = entity && entity.entity_geographic_lea_district_code
-    school_name = (entity && entity.entity_official_name) || building_code
+    case snapshot do
+      nil ->
+        %{
+          building_code: building_code,
+          school_name: building_code,
+          lea_district_code: nil,
+          lea_district_name: nil,
+          no_lea_found: false,
+          no_results: true,
+          no_lea_results: true,
+          no_state_results: true,
+          all_subjects: %{},
+          avg_subjects: %{school: nil, lea: nil, state: nil},
+          grade_breakdown: []
+        }
 
-    # Step 2: School (building-level) results
-    school_results =
-      MdeStateAssessmentResult
-      |> Ash.Query.filter(
-        rollup_level == :building and
-          report_category == "All Students" and
-          school_year == ^year and
-          mde_building.building_code == ^building_code
-      )
-      |> Ash.read!(authorize?: false)
-
-    # Step 3: LEA district rollup results (pre-aggregated)
-    {lea_results, lea_district_name} =
-      if lea_district_code do
-        rows =
-          MdeStateAssessmentResult
-          |> Ash.Query.filter(
-            rollup_level == :district and
-              report_category == "All Students" and
-              school_year == ^year and
-              mde_district.district_code == ^lea_district_code
-          )
-          |> Ash.Query.load(:mde_district)
-          |> Ash.read!(authorize?: false)
-
-        name =
-          case rows do
-            [first | _] ->
-              (first.mde_district && first.mde_district.district_name) || lea_district_code
-
-            [] ->
-              lea_district_code
-          end
-
-        {rows, name}
-      else
-        {[], nil}
-      end
-
-    # Step 3b: State-wide ISD rollup (isd_code "0" = Michigan state aggregate)
-    state_results =
-      MdeStateAssessmentResult
-      |> Ash.Query.filter(
-        rollup_level == :isd and
-          report_category == "All Students" and
-          school_year == ^year and
-          mde_isd.isd_code == "0"
-      )
-      |> Ash.read!(authorize?: false)
-
-    # Step 4: Aggregate into comparison shape
-    all_subjects = build_subject_comparison(school_results, lea_results, state_results)
-
-    %{
-      building_code: building_code,
-      school_name: school_name,
-      lea_district_code: lea_district_code,
-      lea_district_name: lea_district_name,
-      no_lea_found: is_nil(lea_district_code),
-      no_results: school_results == [],
-      no_lea_results: lea_results == [],
-      no_state_results: state_results == [],
-      all_subjects: all_subjects,
-      avg_subjects: avg_across_subjects(all_subjects),
-      grade_breakdown: build_grade_comparison(school_results, lea_results, state_results)
-    }
+      snap ->
+        %{
+          building_code: snap.building_code,
+          school_name: snap.school_name || building_code,
+          lea_district_code: snap.lea_district_code,
+          lea_district_name: snap.lea_district_name,
+          no_lea_found: snap.no_lea_found,
+          no_results: snap.no_results,
+          no_lea_results: snap.no_lea_results,
+          no_state_results: snap.no_state_results,
+          all_subjects: convert_snap_subject_comparison(snap.subject_comparison),
+          avg_subjects: convert_snap_all_subjects_avg(snap.all_subjects_avg),
+          grade_breakdown: convert_snap_grade_comparison(snap.grade_breakdown)
+        }
+    end
   end
 
-  defp build_grade_breakdown(rows) do
-    rows
-    |> Enum.reject(fn r ->
-      is_nil(r.grade_content_tested) or r.grade_content_tested == "All"
-    end)
-    |> Enum.group_by(& &1.grade_content_tested)
-    |> Enum.map(fn {grade, grade_rows} ->
-      ela = Enum.filter(grade_rows, &(&1.subject == "ELA"))
-      math = Enum.filter(grade_rows, &(&1.subject == "Mathematics"))
-      students = ela |> Enum.map(&(&1.number_assessed || 0)) |> Enum.sum()
+  # ---------------------------------------------------------------------------
+  # Snapshot → template shape converters
+  # JSONB round-trip produces string-keyed maps and floats; convert to the
+  # atom-keyed / Decimal shapes that existing components expect.
+  # ---------------------------------------------------------------------------
 
+  defp float_to_decimal(nil), do: nil
+  defp float_to_decimal(f) when is_float(f), do: Decimal.from_float(f)
+
+  defp convert_snapshot_subjects(nil), do: %{}
+
+  defp convert_snapshot_subjects(map) do
+    Map.new(map, fn {k, v} -> {k, float_to_decimal(v)} end)
+  end
+
+  defp convert_snapshot_grade_breakdown(nil), do: []
+
+  defp convert_snapshot_grade_breakdown(list) do
+    list
+    |> Enum.map(fn row ->
       %{
-        grade: grade,
-        ela: weighted_proficiency(ela),
-        math: weighted_proficiency(math),
-        students: students
+        grade: row["grade"],
+        ela: float_to_decimal(row["ela"]),
+        math: float_to_decimal(row["math"]),
+        students: row["students"] || 0
       }
     end)
     |> Enum.sort_by(& &1.grade)
   end
 
-  defp build_subject_comparison(school_rows, lea_rows, state_rows) do
-    Map.new(@subjects, fn subject ->
-      school_subj = Enum.filter(school_rows, &(&1.subject == subject))
-      lea_subj = Enum.filter(lea_rows, &(&1.subject == subject))
-      state_subj = Enum.filter(state_rows, &(&1.subject == subject))
+  defp convert_snapshot_proficiency_dist(nil), do: nil
 
-      {subject,
+  defp convert_snapshot_proficiency_dist(map) do
+    %{
+      advanced: map["advanced"],
+      proficient: map["proficient"],
+      partially: map["partially"],
+      not_proficient: map["not_proficient"]
+    }
+  end
+
+  # subject_comparison list → %{subject => %{school: Decimal, lea: Decimal, state: Decimal}}
+  defp convert_snap_subject_comparison(nil), do: %{}
+
+  defp convert_snap_subject_comparison(list) do
+    Map.new(list, fn row ->
+      {row["subject"],
        %{
-         school: weighted_proficiency(school_subj),
-         lea: weighted_proficiency(lea_subj),
-         state: weighted_proficiency(state_subj)
+         school: float_to_decimal(row["school_pct"]),
+         lea: float_to_decimal(row["lea_pct"]),
+         state: float_to_decimal(row["state_pct"])
        }}
     end)
   end
 
-  defp build_grade_comparison(school_rows, lea_rows, state_rows) do
-    school_grades =
-      school_rows
-      |> Enum.reject(fn r ->
-        is_nil(r.grade_content_tested) or r.grade_content_tested == "All"
-      end)
-      |> Enum.group_by(& &1.grade_content_tested)
+  # all_subjects_avg map → %{school: Decimal, lea: Decimal, state: Decimal}
+  defp convert_snap_all_subjects_avg(nil), do: %{school: nil, lea: nil, state: nil}
 
-    lea_grades =
-      lea_rows
-      |> Enum.reject(fn r ->
-        is_nil(r.grade_content_tested) or r.grade_content_tested == "All"
-      end)
-      |> Enum.group_by(& &1.grade_content_tested)
-
-    state_grades =
-      state_rows
-      |> Enum.reject(fn r ->
-        is_nil(r.grade_content_tested) or r.grade_content_tested == "All"
-      end)
-      |> Enum.group_by(& &1.grade_content_tested)
-
-    all_grades =
-      (Map.keys(school_grades) ++ Map.keys(lea_grades))
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    Enum.map(all_grades, fn grade ->
-      s_rows = Map.get(school_grades, grade, [])
-      l_rows = Map.get(lea_grades, grade, [])
-      st_rows = Map.get(state_grades, grade, [])
-
-      %{
-        grade: grade,
-        school_ela: weighted_proficiency(Enum.filter(s_rows, &(&1.subject == "ELA"))),
-        school_math: weighted_proficiency(Enum.filter(s_rows, &(&1.subject == "Mathematics"))),
-        lea_ela: weighted_proficiency(Enum.filter(l_rows, &(&1.subject == "ELA"))),
-        lea_math: weighted_proficiency(Enum.filter(l_rows, &(&1.subject == "Mathematics"))),
-        state_ela: weighted_proficiency(Enum.filter(st_rows, &(&1.subject == "ELA"))),
-        state_math: weighted_proficiency(Enum.filter(st_rows, &(&1.subject == "Mathematics")))
-      }
-    end)
-  end
-
-  defp compute_proficiency_dist(rows) do
-    all_grade_rows = Enum.filter(rows, &(&1.grade_content_tested == "All"))
-
-    {total_adv, total_prof, total_partly, total_not, total_n} =
-      Enum.reduce(all_grade_rows, {0, 0, 0, 0, 0}, fn r, {adv, prof, partly, not_p, n} ->
-        {
-          adv + (r.total_advanced || 0),
-          prof + (r.total_proficient || 0),
-          partly + (r.total_partially_proficient || 0),
-          not_p + (r.total_not_proficient || 0),
-          n + (r.number_assessed || 0)
-        }
-      end)
-
-    if total_n > 0 do
-      %{
-        advanced: Float.round(total_adv / total_n * 100, 1),
-        proficient: Float.round(total_prof / total_n * 100, 1),
-        partially: Float.round(total_partly / total_n * 100, 1),
-        not_proficient: Float.round(total_not / total_n * 100, 1)
-      }
-    else
-      nil
-    end
-  end
-
-  defp avg_across_subjects(all_subjects) do
-    school_vals = all_subjects |> Map.values() |> Enum.map(& &1.school) |> Enum.reject(&is_nil/1)
-    lea_vals = all_subjects |> Map.values() |> Enum.map(& &1.lea) |> Enum.reject(&is_nil/1)
-    state_vals = all_subjects |> Map.values() |> Enum.map(& &1.state) |> Enum.reject(&is_nil/1)
-
+  defp convert_snap_all_subjects_avg(map) do
     %{
-      school: avg_decimals(school_vals),
-      lea: avg_decimals(lea_vals),
-      state: avg_decimals(state_vals)
+      school: float_to_decimal(map["school_pct"]),
+      lea: float_to_decimal(map["lea_pct"]),
+      state: float_to_decimal(map["state_pct"])
     }
   end
 
-  defp avg_decimals([]), do: nil
+  # grade_breakdown list → atom-keyed maps with Decimal values
+  defp convert_snap_grade_comparison(nil), do: []
 
-  defp avg_decimals(values) do
-    values
-    |> Enum.reduce(&Decimal.add/2)
-    |> Decimal.div(length(values))
-    |> Decimal.round(1)
-  end
-
-  defp weighted_proficiency([]), do: nil
-
-  defp weighted_proficiency(rows) do
-    {total_assessed, total_prof} =
-      Enum.reduce(rows, {0, 0}, fn r, {assessed, prof} ->
-        {
-          assessed + (r.number_assessed || 0),
-          prof + (r.total_advanced || 0) + (r.total_proficient || 0)
-        }
-      end)
-
-    if total_assessed > 0 do
-      total_prof
-      |> Decimal.new()
-      |> Decimal.div(Decimal.new(total_assessed))
-      |> Decimal.mult(Decimal.new(100))
-      |> Decimal.round(1)
-    else
-      nil
-    end
+  defp convert_snap_grade_comparison(list) do
+    Enum.map(list, fn row ->
+      %{
+        grade: row["grade"],
+        school_ela: float_to_decimal(row["school_ela"]),
+        lea_ela: float_to_decimal(row["lea_ela"]),
+        state_ela: float_to_decimal(row["state_ela"]),
+        school_math: float_to_decimal(row["school_math"]),
+        lea_math: float_to_decimal(row["lea_math"]),
+        state_math: float_to_decimal(row["state_math"])
+      }
+    end)
   end
 
   # ---------------------------------------------------------------------------

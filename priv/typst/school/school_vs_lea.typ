@@ -174,6 +174,7 @@
 }
 
 // ── Page 1: Cover Header ──────────────────────────────────────────────────────
+
 #grid(
   columns: (auto, 1fr, auto),
   gutter: 12pt,

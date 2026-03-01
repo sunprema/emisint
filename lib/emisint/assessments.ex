@@ -62,5 +62,17 @@ defmodule Emisint.Assessments do
       define :list_mde_entity_masters, action: :read
       define :get_mde_entity_master_by_code, action: :read, get_by: [:entity_code]
     end
+
+    resource Emisint.Assessments.MdeDistrictSnapshot do
+      define :list_mde_district_snapshots_by_year, action: :by_year, args: [:school_year]
+      define :upsert_mde_district_snapshot, action: :upsert
+    end
+
+    resource Emisint.Assessments.MdeSchoolVsLeaSnapshot do
+      define :get_mde_school_vs_lea_snapshot, action: :by_building_and_year,
+        args: [:building_code, :school_year]
+
+      define :upsert_mde_school_vs_lea_snapshot, action: :upsert
+    end
   end
 end

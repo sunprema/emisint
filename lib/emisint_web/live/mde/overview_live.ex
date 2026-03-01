@@ -3,7 +3,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
 
   require Ash.Query
 
-  alias Emisint.Assessments.MdeStateAssessmentResult
+  alias Emisint.Assessments.{MdeDistrictSnapshot, MdeStateAssessmentResult}
 
   @subjects ["ELA", "Mathematics", "Science", "Social Studies"]
 
@@ -680,116 +680,47 @@ defmodule EmisintWeb.Mde.OverviewLive do
   end
 
   defp load_data(year) do
-    # Single query: all "All Students" rows for the year — load building → district → ISD
-    results =
-      MdeStateAssessmentResult
-      |> Ash.Query.filter(
-        school_year == ^year and report_category == "All Students" and
-          rollup_level == :building
-      )
-      |> Ash.Query.load(mde_building: [mde_district: :mde_isd])
+    # Fast indexed read — pre-computed by MdeComparisonSnapshotWorker
+    snapshots =
+      MdeDistrictSnapshot
+      |> Ash.Query.for_read(:by_year, %{school_year: year})
       |> Ash.read!(authorize?: false)
 
-    # Enum.filter(results, &(&1.test_type == "M-STEP"))
-    mstep = results
+    # Small statewide ISD aggregate rows (handful per year) for proficiency stat cards
+    state_rows =
+      MdeStateAssessmentResult
+      |> Ash.Query.filter(
+        school_year == ^year and
+          report_category == "All Students" and
+          rollup_level == :isd and
+          mde_isd.isd_code == "0"
+      )
+      |> Ash.read!(authorize?: false)
 
-    # ── Summary stats ──────────────────────────────────────────────────────────
+    # ── Summary stats (computed from snapshot rows in-memory — O(N districts)) ──
 
-    buildings_count =
-      results |> Enum.map(& &1.mde_building_id) |> Enum.uniq() |> length()
-
-    districts_count =
-      results
-      |> Enum.map(fn r -> r.mde_building && r.mde_building.mde_district_id end)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> length()
+    buildings_count = snapshots |> Enum.map(&(&1.buildings || 0)) |> Enum.sum()
+    districts_count = length(snapshots)
 
     isds_count =
-      results
-      |> Enum.map(fn r ->
-        r.mde_building && r.mde_building.mde_district &&
-          r.mde_building.mde_district.mde_isd_id
-      end)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> length()
+      snapshots |> Enum.map(& &1.isd_name) |> Enum.reject(&is_nil/1) |> Enum.uniq() |> length()
 
-    # ELA as proxy — avoids double-counting across subjects
-    students_assessed =
-      mstep
-      |> Enum.filter(&(&1.subject == "ELA"))
-      |> Enum.map(&(&1.number_assessed || 0))
-      |> Enum.sum()
+    students_assessed = snapshots |> Enum.map(&(&1.total_assessed || 0)) |> Enum.sum()
 
-    # ── M-STEP proficiency by subject (statewide) ─────────────────────────────
+    # ── Proficiency by subject (statewide, from ISD aggregate rows) ────────────
 
     proficiency_by_subject =
       Map.new(@subjects, fn subject ->
-        rows = Enum.filter(mstep, &(&1.subject == subject))
+        rows = Enum.filter(state_rows, &(&1.subject == subject))
         {subject, weighted_proficiency(rows)}
-      end)
-
-    # ── Assessment coverage by test type ──────────────────────────────────────
-
-    by_test_type =
-      results
-      |> Enum.group_by(& &1.test_type)
-      |> Map.new(fn {type, rows} ->
-        buildings = rows |> Enum.map(& &1.mde_building_id) |> Enum.uniq() |> length()
-        {type, %{buildings: buildings, records: length(rows)}}
       end)
 
     # ── District breakdown (sorted by ELA % desc) ─────────────────────────────
 
     district_rows =
-      mstep
-      |> Enum.group_by(fn r -> r.mde_building && r.mde_building.mde_district end)
-      |> Enum.reject(fn {district, _} -> is_nil(district) end)
-      |> Enum.map(fn {district, rows} ->
-        ela_rows = Enum.filter(rows, &(&1.subject == "ELA"))
-        math_rows = Enum.filter(rows, &(&1.subject == "Mathematics"))
-        buildings = rows |> Enum.map(& &1.mde_building_id) |> Enum.uniq() |> length()
-        isd_name = district.mde_isd && district.mde_isd.isd_name
-
-        # Total ELA students from the "All" grade aggregate row
-        total_assessed =
-          ela_rows
-          |> Enum.filter(&(&1.grade_content_tested == "All"))
-          |> Enum.map(&(&1.number_assessed || 0))
-          |> Enum.sum()
-
-        all_subjects =
-          Map.new(@subjects, fn subject ->
-            subj_rows = Enum.filter(rows, &(&1.subject == subject))
-            {subject, weighted_proficiency(subj_rows)}
-          end)
-
-        %{
-          id: district.district_code,
-          district_code: district.district_code,
-          district_name: district.district_name,
-          entity_type: district.entity_type,
-          isd_name: isd_name,
-          buildings: buildings,
-          total_assessed: total_assessed,
-          ela: weighted_proficiency(ela_rows),
-          math: weighted_proficiency(math_rows),
-          avg_total_proficient: avg_total_proficient(rows),
-          all_subjects: all_subjects,
-          grade_breakdown: build_grade_breakdown(rows),
-          proficiency_dist: compute_proficiency_dist(rows)
-        }
-      end)
-      |> Enum.sort_by(
-        fn row ->
-          case row.ela do
-            nil -> -1.0
-            d -> Decimal.to_float(d)
-          end
-        end,
-        :desc
-      )
+      snapshots
+      |> Enum.sort_by(&(&1.ela_pct || -1.0), :desc)
+      |> Enum.map(&snapshot_to_district_row/1)
 
     stats = %{
       buildings: buildings_count,
@@ -797,76 +728,68 @@ defmodule EmisintWeb.Mde.OverviewLive do
       isds: isds_count,
       students_assessed: students_assessed,
       proficiency_by_subject: proficiency_by_subject,
-      by_test_type: by_test_type
+      by_test_type: %{}
     }
 
     {stats, district_rows}
   end
 
-  # Per-grade ELA + Math proficiency (excludes "All" aggregate rows)
-  defp build_grade_breakdown(rows) do
-    rows
-    |> Enum.reject(fn r ->
-      is_nil(r.grade_content_tested) or r.grade_content_tested == "All"
-    end)
-    |> Enum.group_by(& &1.grade_content_tested)
-    |> Enum.map(fn {grade, grade_rows} ->
-      ela = Enum.filter(grade_rows, &(&1.subject == "ELA"))
-      math = Enum.filter(grade_rows, &(&1.subject == "Mathematics"))
-      students = ela |> Enum.map(&(&1.number_assessed || 0)) |> Enum.sum()
-
-      %{
-        grade: grade,
-        ela: weighted_proficiency(ela),
-        math: weighted_proficiency(math),
-        students: students
-      }
-    end)
-    |> Enum.sort_by(& &1.grade)
+  # Maps a MdeDistrictSnapshot struct to the shape expected by the template.
+  # JSONB round-trip produces string-keyed maps and floats — converted here so
+  # existing components (pct_badge, subject_vs_state) continue to work unchanged.
+  defp snapshot_to_district_row(snapshot) do
+    %{
+      id: snapshot.district_code,
+      district_code: snapshot.district_code,
+      district_name: snapshot.district_name,
+      entity_type: snapshot.entity_type,
+      isd_name: snapshot.isd_name,
+      buildings: snapshot.buildings || 0,
+      total_assessed: snapshot.total_assessed || 0,
+      ela: float_to_decimal(snapshot.ela_pct),
+      math: float_to_decimal(snapshot.math_pct),
+      avg_total_proficient: float_to_decimal(snapshot.avg_total_proficient),
+      all_subjects: convert_snapshot_subjects(snapshot.all_subjects),
+      grade_breakdown: convert_snapshot_grade_breakdown(snapshot.grade_breakdown),
+      proficiency_dist: convert_snapshot_proficiency_dist(snapshot.proficiency_dist)
+    }
   end
 
-  # Proficiency level distribution using "All" grade rows to avoid double-counting
-  defp compute_proficiency_dist(rows) do
-    all_grade_rows = Enum.filter(rows, &(&1.grade_content_tested == "All"))
+  defp float_to_decimal(nil), do: nil
+  defp float_to_decimal(f) when is_float(f), do: Decimal.from_float(f)
 
-    {total_adv, total_prof, total_partly, total_not, total_n} =
-      Enum.reduce(all_grade_rows, {0, 0, 0, 0, 0}, fn r, {adv, prof, partly, not_p, n} ->
-        {
-          adv + (r.total_advanced || 0),
-          prof + (r.total_proficient || 0),
-          partly + (r.total_partially_proficient || 0),
-          not_p + (r.total_not_proficient || 0),
-          n + (r.number_assessed || 0)
-        }
-      end)
+  defp convert_snapshot_subjects(nil), do: %{}
 
-    if total_n > 0 do
-      %{
-        advanced: Float.round(total_adv / total_n * 100, 1),
-        proficient: Float.round(total_prof / total_n * 100, 1),
-        partially: Float.round(total_partly / total_n * 100, 1),
-        not_proficient: Float.round(total_not / total_n * 100, 1)
-      }
-    else
-      nil
-    end
+  defp convert_snapshot_subjects(map) do
+    Map.new(map, fn {k, v} -> {k, float_to_decimal(v)} end)
   end
 
-  # Average of raw total_proficient counts across all rows (rough indicator)
-  defp avg_total_proficient(rows) do
-    values = rows |> Enum.map(& &1.percent_met) |> Enum.reject(&is_nil/1)
-    IO.inspect(values, label: "VALUES")
+  defp convert_snapshot_grade_breakdown(nil), do: []
 
-    case values do
-      [] ->
-        nil
+  defp convert_snapshot_grade_breakdown(list) do
+    Enum.map(list, fn row ->
+      %{
+        grade: row["grade"],
+        ela: float_to_decimal(row["ela"]),
+        math: float_to_decimal(row["math"]),
+        students: row["students"] || 0
+      }
+    end)
+  end
 
-      _ ->
-        values |> Enum.reduce(&Decimal.add/2) |> Decimal.div(length(values)) |> Decimal.round(2)
-    end
+  defp convert_snapshot_proficiency_dist(nil), do: nil
+
+  defp convert_snapshot_proficiency_dist(map) do
+    %{
+      advanced: map["advanced"],
+      proficient: map["proficient"],
+      partially: map["partially"],
+      not_proficient: map["not_proficient"]
+    }
   end
 
   # Weighted proficiency = (Σ advanced + Σ proficient) / Σ number_assessed × 100
+  # Used for statewide proficiency_by_subject from ISD aggregate rows.
   defp weighted_proficiency([]), do: nil
 
   defp weighted_proficiency(rows) do

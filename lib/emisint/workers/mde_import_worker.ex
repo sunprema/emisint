@@ -28,6 +28,7 @@ defmodule Emisint.Workers.MdeImportWorker do
   require Logger
 
   alias Emisint.Assessments.MdeImporter
+  alias Emisint.Workers.MdeComparisonSnapshotWorker
 
   @pubsub_topic "mde_import"
 
@@ -49,6 +50,12 @@ defmodule Emisint.Workers.MdeImportWorker do
           @pubsub_topic,
           {:mde_import_completed, stats}
         )
+
+        if stats.school_year do
+          %{"school_year" => stats.school_year}
+          |> MdeComparisonSnapshotWorker.new()
+          |> Oban.insert!()
+        end
 
         :ok
 
