@@ -17,6 +17,8 @@
 #let c-th-bg    = rgb("#f1f5f9")
 #let c-school   = rgb("#1d4ed8")
 #let c-lea      = rgb("#b45309")
+#let c-pink     = rgb("#db2777")
+#let c-pink-bg  = rgb("#fdf2f8")
 
 // ── Page layout ───────────────────────────────────────────────────────────────
 #set page(
@@ -172,6 +174,12 @@
     )
   })
 }
+
+// Integer formatter (nil → em dash)
+#let fmt-int(v) = if v == none { "—" } else { str(v) }
+
+// Percentage sub-label for stat boxes
+#let fmt-pct-sub(v) = if v == none { "" } else { str(calc.round(v, digits: 1)) + "% of enrollment" }
 
 // ── Page 1: Cover Header ──────────────────────────────────────────────────────
 
@@ -373,6 +381,73 @@
       align(center, pct-badge(row.state_math))
     )}
   )
+]
+
+// ── Section 3: Student Enrollment ─────────────────────────────────────────────
+#section-title("Student Enrollment",
+  subtitle: "Building-level student body composition · " + elixir_data.school_year)
+
+#if elixir_data.enrollment.total == none [
+  #rect(
+    width: 100%, inset: 14pt, stroke: 0.5pt + c-border, radius: 2pt,
+    text(fill: c-muted, style: "italic", "No enrollment data available for this school year.")
+  )
+] else [
+  #grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 10pt,
+    stat-box("Total Enrolled",
+      fmt-int(elixir_data.enrollment.total),
+      sub: "all students"),
+    stat-box("Male",
+      fmt-int(elixir_data.enrollment.male),
+      sub: fmt-pct-sub(elixir_data.enrollment.male_pct)),
+    stat-box("Female",
+      fmt-int(elixir_data.enrollment.female),
+      sub: fmt-pct-sub(elixir_data.enrollment.female_pct))
+  )
+  #if elixir_data.enrollment.male_pct != none [
+    #v(14pt)
+    // Legend
+    #grid(
+      columns: (auto, 1fr, auto),
+      {
+        box(width: 10pt, height: 8pt, fill: c-school, radius: 1pt)
+        h(5pt)
+        text(size: 8pt, fill: c-muted, "Male")
+      },
+      [],
+      {
+        box(width: 10pt, height: 8pt, fill: c-pink, radius: 1pt)
+        h(5pt)
+        text(size: 8pt, fill: c-muted, "Female")
+      }
+    )
+    #v(4pt)
+    // Proportional gender bar
+    #let mp = calc.max(calc.min(elixir_data.enrollment.male_pct / 100, 0.99), 0.01)
+    #let fp = 1.0 - mp
+    #grid(
+      columns: (mp * 100%, fp * 100%),
+      rows: 26pt,
+      rect(
+        width: 100%, height: 100%, fill: c-school,
+        radius: (left: 4pt, right: 0pt),
+        align(center + horizon,
+          text(fill: white, weight: "bold", size: 9pt,
+            str(calc.round(elixir_data.enrollment.male_pct, digits: 1)) + "%")
+        )
+      ),
+      rect(
+        width: 100%, height: 100%, fill: c-pink,
+        radius: (right: 4pt, left: 0pt),
+        align(center + horizon,
+          text(fill: white, weight: "bold", size: 9pt,
+            str(calc.round(elixir_data.enrollment.female_pct, digits: 1)) + "%")
+        )
+      )
+    )
+  ]
 ]
 
 // ── Signature block ────────────────────────────────────────────────────────────

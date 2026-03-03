@@ -3,7 +3,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   require Ash.Query
 
-  alias Emisint.Assessments.MdeSchoolVsLeaSnapshot
+  alias Emisint.Assessments.{MdeEnrollmentResult, MdeSchoolVsLeaSnapshot}
 
   @doc """
   Generates a School vs Geographic LEA PDF for the given building code and school year.
@@ -28,6 +28,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
       })
       |> Ash.read_one!(authorize?: false)
 
+    enrollment = load_enrollment_data(building_code, year)
+
     case snapshot do
       nil ->
         # No snapshot computed yet — return minimal safe structure
@@ -45,7 +47,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           grades_compared: 0,
           subjects: [],
           all_subjects_avg: %{school_pct: nil, lea_pct: nil, state_pct: nil, delta: nil},
-          grade_breakdown: []
+          grade_breakdown: [],
+          enrollment: enrollment
         }
 
       snap ->
@@ -70,10 +73,41 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           grades_compared: snap.grades_compared,
           subjects: subjects,
           all_subjects_avg: all_subjects_avg,
-          grade_breakdown: grades
+          grade_breakdown: grades,
+          enrollment: enrollment
         }
     end
   end
+
+  defp load_enrollment_data(building_code, year) do
+    record =
+      MdeEnrollmentResult
+      |> Ash.Query.filter(
+        building_code == ^building_code and
+          school_year == ^year and
+          rollup_level == :building
+      )
+      |> Ash.read_one!(authorize?: false)
+
+    case record do
+      nil ->
+        %{total: nil, male: nil, female: nil, male_pct: nil, female_pct: nil}
+
+      rec ->
+        %{
+          total: rec.total_enrollment,
+          male: rec.male_enrollment,
+          female: rec.female_enrollment,
+          male_pct: safe_pct(rec.male_enrollment, rec.total_enrollment),
+          female_pct: safe_pct(rec.female_enrollment, rec.total_enrollment)
+        }
+    end
+  end
+
+  defp safe_pct(num, den) when is_integer(num) and is_integer(den) and den > 0,
+    do: Float.round(num / den * 100, 1)
+
+  defp safe_pct(_, _), do: nil
 
   # --- Snapshot → PDF data shape converters ---
 

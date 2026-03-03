@@ -1177,10 +1177,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
                       SchoolYear, ISDCode, ISDName, DistrictCode, DistrictName,
                       BuildingCode, BuildingName, CountyCode, CountyName, EntityType,
                       SchoolLevel, LOCALE_NAME, MISTEM_NAME, MISTEM_CODE,
-                      Total, Male, Female, AmericanIndian, Asian, AfricanAmerican,
-                      Hispanic, Hawaiian, White, TwoOrMoreRaces, EarlyMiddleCollege,
-                      PreKindergarten, Kindergarten, Grade1 … Grade12, Ungraded,
-                      EconomicallyDisadvantaged, SpecialEducation, EnglishLanguageLearners
+                      TOTAL_ENROLLMENT, MALE_ENROLLMENT, FEMALE_ENROLLMENT,
+                      AMERICAN_INDIAN_ENROLLMENT, ASIAN_ENROLLMENT,
+                      AFRICAN_AMERICAN_ENROLLMENT, HISPANIC_ENROLLMENT,
+                      HAWAIIAN_ENROLLMENT, WHITE_ENROLLMENT,
+                      TWO_OR_MORE_RACES_ENROLLMENT, EARLY_MIDDLE_COLLEGE_ENROLLMENT,
+                      PREKINDERGARTEN_ENROLLMENT, KINDERGARTEN_ENROLLMENT,
+                      GRADE_1_ENROLLMENT … GRADE_12_ENROLLMENT, UNGRADED_ENROLLMENT,
+                      ECONOMIC_DISADVANTAGED_ENROLLMENT, SPECIAL_EDUCATION_ENROLLMENT,
+                      ENGLISH_LANGUAGE_LEARNERS_ENROLLMENT
                     </p>
                   </div>
                 </div>
