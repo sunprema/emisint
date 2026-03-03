@@ -7,6 +7,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     MdeBuilding,
     MdeDistrict,
     MdeDistrictSnapshot,
+    MdeEnrollmentResult,
     MdeSchoolVsLeaSnapshot,
     MdeStateAssessmentResult
   }
@@ -35,6 +36,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:active_tab, "school_vs_lea")
      |> assign(:district_buildings, [])
      |> assign(:selected_building_code, nil)
+     |> assign(:enrollment, nil)
      |> assign(:school_vs_lea, nil)}
   end
 
@@ -76,6 +78,13 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         nil
       end
 
+    enrollment =
+      if tab == "school_vs_lea" && effective_building_code && year != "" do
+        load_enrollment(effective_building_code, year)
+      else
+        nil
+      end
+
     {:noreply,
      socket
      |> assign(:district_code, dc)
@@ -85,6 +94,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:compare, compare)
      |> assign(:district_buildings, district_buildings)
      |> assign(:selected_building_code, effective_building_code)
+     |> assign(:enrollment, enrollment)
      |> assign(:school_vs_lea, school_vs_lea)
      |> assign(:page_title, page_title(primary, compare))}
   end
@@ -127,11 +137,19 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         socket.assigns.school_vs_lea
       end
 
+    enrollment =
+      if tab == "school_vs_lea" && effective_building_code && year != "" do
+        load_enrollment(effective_building_code, year)
+      else
+        socket.assigns.enrollment
+      end
+
     {:noreply,
      socket
      |> assign(:selected_year, year)
      |> assign(:primary, primary)
      |> assign(:compare, compare)
+     |> assign(:enrollment, enrollment)
      |> assign(:school_vs_lea, school_vs_lea)}
   end
 
@@ -432,6 +450,21 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </div>
                   <div class="font-bold text-base">{@school_vs_lea.school_name}</div>
                   <div class="text-xs text-base-content/50">{@school_vs_lea.building_code}</div>
+
+                  <%!-- Enrollment breakdown --%>
+                  <div :if={@enrollment} class="pt-4 mt-3 border-t border-base-200">
+                    <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-3">
+                      Enrollment — {@selected_year}
+                    </div>
+                    <.enrollment_donut
+                      total={@enrollment.total_enrollment}
+                      male={@enrollment.male_enrollment}
+                      female={@enrollment.female_enrollment}
+                    />
+                  </div>
+                  <div :if={is_nil(@enrollment)} class="pt-2 mt-1 text-xs text-base-content/30 italic">
+                    No enrollment data for this year
+                  </div>
                 </div>
 
                 <div
@@ -634,6 +667,117 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   # ---------------------------------------------------------------------------
   # Components
   # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Enrollment donut chart component
+  # ---------------------------------------------------------------------------
+
+  attr :total, :integer, default: nil
+  attr :male, :integer, default: nil
+  attr :female, :integer, default: nil
+
+  def enrollment_donut(assigns) do
+    total = assigns.total || 0
+
+    {male_pct, female_pct} =
+      if total > 0 do
+        m = if is_integer(assigns.male), do: Float.round(assigns.male / total * 100, 1), else: 0.0
+        f = if is_integer(assigns.female), do: Float.round(assigns.female / total * 100, 1), else: 0.0
+        {m, f}
+      else
+        {0.0, 0.0}
+      end
+
+    assigns =
+      assigns
+      |> assign(:male_pct, male_pct)
+      |> assign(:female_pct, female_pct)
+      # Female segment starts where male ends: rotate by male's arc degrees
+      |> assign(:female_rotation, -90 + male_pct * 3.6)
+
+    ~H"""
+    <div class="flex items-center gap-4">
+      <%!-- SVG donut — r=15.9155 gives circumference≈100, so dasharray values = percentages --%>
+      <div class="shrink-0">
+        <svg viewBox="0 0 36 36" width="88" height="88">
+          <%!-- Background ring --%>
+          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#e5e7eb" stroke-width="3.5" />
+
+          <%!-- Male segment (blue), starts at top (rotate -90°) --%>
+          <circle
+            :if={@male_pct > 0}
+            cx="18"
+            cy="18"
+            r="15.9155"
+            fill="none"
+            stroke="#3b82f6"
+            stroke-width="3.5"
+            stroke-dasharray={"#{@male_pct} #{100 - @male_pct}"}
+            transform="rotate(-90 18 18)"
+          />
+
+          <%!-- Female segment (pink), starts where male ends --%>
+          <circle
+            :if={@female_pct > 0}
+            cx="18"
+            cy="18"
+            r="15.9155"
+            fill="none"
+            stroke="#ec4899"
+            stroke-width="3.5"
+            stroke-dasharray={"#{@female_pct} #{100 - @female_pct}"}
+            transform={"rotate(#{@female_rotation} 18 18)"}
+          />
+
+          <%!-- Center label --%>
+          <text
+            x="18"
+            y="16"
+            text-anchor="middle"
+            font-size="4.5"
+            fill="#9ca3af"
+            font-family="ui-sans-serif,system-ui,sans-serif"
+          >
+            Total
+          </text>
+          <text
+            x="18"
+            y="22.5"
+            text-anchor="middle"
+            font-size="5.5"
+            font-weight="bold"
+            fill="#1f2937"
+            font-family="ui-sans-serif,system-ui,sans-serif"
+          >
+            {if @total, do: format_number(@total), else: "—"}
+          </text>
+        </svg>
+      </div>
+
+      <%!-- Legend --%>
+      <div class="space-y-2">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#3b82f6">
+          </span>
+          <span class="text-base-content/60">Male</span>
+          <span class="font-semibold tabular-nums">
+            {if @male, do: format_number(@male), else: "—"}
+          </span>
+          <span :if={@male_pct > 0} class="text-base-content/40">({@male_pct}%)</span>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#ec4899">
+          </span>
+          <span class="text-base-content/60">Female</span>
+          <span class="font-semibold tabular-nums">
+            {if @female, do: format_number(@female), else: "—"}
+          </span>
+          <span :if={@female_pct > 0} class="text-base-content/40">({@female_pct}%)</span>
+        </div>
+      </div>
+    </div>
+    """
+  end
 
   attr :district, :map, default: nil
   attr :label, :string, default: nil
@@ -944,6 +1088,14 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     |> Ash.Query.filter(mde_district.district_code == ^district_code)
     |> Ash.Query.sort(:building_name)
     |> Ash.read!(authorize?: false)
+  end
+
+  defp load_enrollment(building_code, year) do
+    MdeEnrollmentResult
+    |> Ash.Query.filter(
+      building_code == ^building_code and school_year == ^year and rollup_level == :building
+    )
+    |> Ash.read_one!(authorize?: false)
   end
 
   defp load_school_vs_lea(building_code, year) do

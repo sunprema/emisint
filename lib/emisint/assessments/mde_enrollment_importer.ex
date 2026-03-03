@@ -98,9 +98,13 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
   defp collect_dimensions(path) do
     stream_as_maps(path)
     |> Enum.reduce({%{}, %{}, %{}, nil}, fn row, {isds, districts, buildings, school_year} ->
-      isd_code = row["ISDCode"]
-      district_code = nilify(row["DistrictCode"])
-      building_code = nilify(row["BuildingCode"])
+      # Normalize codes by stripping MDE zero-padding so they match codes already
+      # stored by the assessment importer (e.g. "01234" → "1234").
+      # normalize_entity_code/1 passes nil through unchanged, so blank-field rollup
+      # detection (nil == nil) continues to work correctly.
+      isd_code = normalize_entity_code(row["ISDCode"])
+      district_code = normalize_entity_code(nilify(row["DistrictCode"]))
+      building_code = normalize_entity_code(nilify(row["BuildingCode"]))
 
       school_year = school_year || nilify(row["SchoolYear"])
 
@@ -233,9 +237,9 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
   #   building_code blank (district present) → district-level aggregate
   #   otherwise → building-level row
   defp tag_row(row, building_map, district_map, isd_map) do
-    district_code = nilify(row["DistrictCode"])
-    building_code = nilify(row["BuildingCode"])
-    isd_code = row["ISDCode"]
+    district_code = normalize_entity_code(nilify(row["DistrictCode"]))
+    building_code = normalize_entity_code(nilify(row["BuildingCode"]))
+    isd_code = normalize_entity_code(row["ISDCode"])
     base = to_enrollment_attrs(row)
 
     cond do
@@ -270,11 +274,11 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
   defp to_enrollment_attrs(row) do
     %{
       school_year: nilify(row["SchoolYear"]),
-      isd_code: nilify(row["ISDCode"]),
+      isd_code: normalize_entity_code(row["ISDCode"]),
       isd_name: nilify(row["ISDName"]),
-      district_code: nilify(row["DistrictCode"]),
+      district_code: normalize_entity_code(nilify(row["DistrictCode"])),
       district_name: nilify(row["DistrictName"]),
-      building_code: nilify(row["BuildingCode"]),
+      building_code: normalize_entity_code(nilify(row["BuildingCode"])),
       building_name: nilify(row["BuildingName"]),
       county_code: nilify(row["CountyCode"]),
       county_name: nilify(row["CountyName"]),
@@ -346,6 +350,19 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
     if File.exists?(path),
       do: :ok,
       else: {:error, "File not found: #{path}"}
+  end
+
+  # Strips MDE zero-padding from entity codes so they match the codes already
+  # stored by the assessment importer (e.g. "01234" → "1234", "00520" → "520").
+  # nil passes through unchanged so blank-field rollup detection stays correct.
+  # All-zero strings (e.g. "000") normalise to "0" rather than the empty string.
+  defp normalize_entity_code(nil), do: nil
+
+  defp normalize_entity_code(code) do
+    case String.trim_leading(code, "0") do
+      "" -> "0"
+      stripped -> stripped
+    end
   end
 
   # Empty string and whitespace-only values → nil
