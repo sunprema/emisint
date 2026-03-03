@@ -74,5 +74,10 @@ defmodule Emisint.Assessments do
 
       define :upsert_mde_school_vs_lea_snapshot, action: :upsert
     end
+
+    resource Emisint.Assessments.MdeEnrollmentResult do
+      define :list_mde_enrollment_results, action: :read
+      define :upsert_mde_enrollment_result, action: :upsert
+    end
   end
 end

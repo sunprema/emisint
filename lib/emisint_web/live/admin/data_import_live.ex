@@ -20,6 +20,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
       if user.role == :system_admin do
         Phoenix.PubSub.subscribe(Emisint.PubSub, "mde_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "entity_master_import")
+        Phoenix.PubSub.subscribe(Emisint.PubSub, "enrollment_import")
       end
     end
 
@@ -43,6 +44,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> assign(:mde_import_result, nil)
       |> assign(:entity_master_importing, false)
       |> assign(:entity_master_import_result, nil)
+      |> assign(:enrollment_importing, false)
+      |> assign(:enrollment_import_result, nil)
       |> allow_upload(:csv_file,
         accept: ~w(.csv),
         max_entries: 1,
@@ -58,6 +61,12 @@ defmodule EmisintWeb.Admin.DataImportLive do
         accept: ~w(.csv),
         max_entries: 1,
         # EntityMaster daily export is typically < 5 MB, allow up to 50 MB
+        max_file_size: 52_428_800
+      )
+      |> allow_upload(:enrollment_file,
+        accept: ~w(.csv),
+        max_entries: 1,
+        # Annual enrollment export is typically < 5 MB, allow up to 50 MB
         max_file_size: 52_428_800
       )
 
@@ -123,6 +132,29 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:entity_master_importing, false)
      |> assign(:entity_master_import_result, {:error, reason})
      |> put_flash(:error, "EntityMaster import failed: #{reason}")}
+  end
+
+  # ---------------------------------------------------------------------------
+  # PubSub — Enrollment import status updates
+  # ---------------------------------------------------------------------------
+
+  def handle_info({:enrollment_import_completed, stats}, socket) do
+    {:noreply,
+     socket
+     |> assign(:enrollment_importing, false)
+     |> assign(:enrollment_import_result, {:ok, stats})
+     |> put_flash(
+       :info,
+       "Enrollment import complete — #{format_number(stats.records)} records loaded."
+     )}
+  end
+
+  def handle_info({:enrollment_import_failed, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:enrollment_importing, false)
+     |> assign(:enrollment_import_result, {:error, reason})
+     |> put_flash(:error, "Enrollment import failed: #{reason}")}
   end
 
   # ---------------------------------------------------------------------------
@@ -259,6 +291,43 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
   def handle_event("cancel-entity-master-upload", %{"ref" => ref}, socket) do
     {:noreply, cancel_upload(socket, :entity_master_file, ref)}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Events — Enrollment CSV upload
+  # ---------------------------------------------------------------------------
+
+  def handle_event("validate_enrollment", _params, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_event("import_enrollment", _params, socket) do
+    case consume_uploaded_entries(socket, :enrollment_file, fn %{path: temp_path}, entry ->
+           dest = persist_upload(temp_path, entry.client_name, "enrollment_import")
+           {:ok, %{path: dest, filename: entry.client_name}}
+         end) do
+      [] ->
+        {:noreply,
+         put_flash(socket, :error, "Please select an enrollment CSV file to upload.")}
+
+      [%{path: dest_path, filename: filename}] ->
+        %{"file_path" => dest_path}
+        |> Emisint.Workers.MdeEnrollmentImportWorker.new()
+        |> Oban.insert!()
+
+        {:noreply,
+         socket
+         |> assign(:enrollment_importing, true)
+         |> assign(:enrollment_import_result, nil)
+         |> put_flash(
+           :info,
+           "Enrollment import queued: #{filename}. Processing in background…"
+         )}
+    end
+  end
+
+  def handle_event("cancel-enrollment-upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :enrollment_file, ref)}
   end
 
   # ---------------------------------------------------------------------------
@@ -990,6 +1059,243 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <p class="text-sm font-semibold text-error">Import failed</p>
                     <p class="text-xs text-base-content/50 mt-1 break-all">
                       {elem(@entity_master_import_result, 1)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <%!-- ── Section 4: MDE Enrollment (system_admin only) ──────────────────────── --%>
+        <div class="divider"></div>
+        <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
+          <div class="flex items-center gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold">MDE Student Enrollment</h2>
+                <span class="badge badge-success badge-sm">System Admin</span>
+              </div>
+              <p class="text-xs text-base-content/50 mt-0.5">
+                Import the MDE annual enrollment CSV — building, district, and ISD-level
+                counts by grade, race/ethnicity, and subgroup. Upserts one row per entity
+                per school year.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+            <%!-- Enrollment upload form — 3 cols --%>
+            <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200">
+                <h3 class="font-semibold">Upload Enrollment CSV</h3>
+                <p class="text-xs text-base-content/40 mt-0.5">
+                  Annual MDE enrollment export. No school or year selection needed.
+                </p>
+              </div>
+
+              <form
+                phx-submit="import_enrollment"
+                phx-change="validate_enrollment"
+                class="p-6 space-y-6"
+              >
+                <%!-- File upload drop zone --%>
+                <div class="space-y-2">
+                  <label class="text-sm font-medium">
+                    Enrollment CSV File <span class="text-error text-xs">*</span>
+                  </label>
+
+                  <div
+                    class="relative border-2 border-dashed border-base-300 hover:border-success/40 bg-base-50/50 transition-colors group cursor-pointer"
+                    phx-drop-target={@uploads.enrollment_file.ref}
+                  >
+                    <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
+                      <div class="p-3 bg-base-200 group-hover:bg-success/10 transition-colors mb-3">
+                        <.icon
+                          name="hero-users"
+                          class="size-7 text-base-content/30 group-hover:text-success transition-colors"
+                        />
+                      </div>
+                      <p class="text-sm text-base-content/50">
+                        Drag & drop the Enrollment CSV here, or{" "}
+                        <span class="text-success font-medium hover:underline">browse</span>
+                      </p>
+                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 50 MB</p>
+                      <.live_file_input upload={@uploads.enrollment_file} class="hidden" />
+                    </label>
+                  </div>
+
+                  <%!-- File entry preview --%>
+                  <div
+                    :for={entry <- @uploads.enrollment_file.entries}
+                    class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
+                  >
+                    <div class="p-2 bg-success/10 shrink-0">
+                      <.icon name="hero-document-text" class="size-4 text-success" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium truncate">{entry.client_name}</div>
+                      <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
+                        <div
+                          class="bg-success h-1 rounded-full transition-all duration-300"
+                          style={"width: #{entry.progress}%"}
+                        >
+                        </div>
+                      </div>
+                    </div>
+                    <span class="text-xs text-base-content/40 shrink-0">
+                      {format_bytes(entry.client_size)}
+                    </span>
+                    <button
+                      type="button"
+                      phx-click="cancel-enrollment-upload"
+                      phx-value-ref={entry.ref}
+                      class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+
+                  <%!-- Upload errors --%>
+                  <div
+                    :for={err <- upload_errors(@uploads.enrollment_file)}
+                    class="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/10 px-3 py-2.5"
+                  >
+                    <.icon name="hero-exclamation-circle" class="size-4 shrink-0" />
+                    {upload_error_msg(err)}
+                  </div>
+                </div>
+
+                <%!-- Expected format hint --%>
+                <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
+                  <.icon
+                    name="hero-information-circle"
+                    class="size-4 shrink-0 mt-0.5 text-base-content/35"
+                  />
+                  <div>
+                    <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+                    <p class="font-mono leading-relaxed">
+                      SchoolYear, ISDCode, ISDName, DistrictCode, DistrictName,
+                      BuildingCode, BuildingName, CountyCode, CountyName, EntityType,
+                      SchoolLevel, LOCALE_NAME, MISTEM_NAME, MISTEM_CODE,
+                      Total, Male, Female, AmericanIndian, Asian, AfricanAmerican,
+                      Hispanic, Hawaiian, White, TwoOrMoreRaces, EarlyMiddleCollege,
+                      PreKindergarten, Kindergarten, Grade1 … Grade12, Ungraded,
+                      EconomicallyDisadvantaged, SpecialEducation, EnglishLanguageLearners
+                    </p>
+                  </div>
+                </div>
+
+                <%!-- Submit button --%>
+                <button
+                  type="submit"
+                  class={[
+                    "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
+                    !@enrollment_importing &&
+                      "bg-success text-success-content hover:opacity-90 active:scale-[0.99]",
+                    @enrollment_importing &&
+                      "bg-success/50 text-success-content/70 cursor-not-allowed"
+                  ]}
+                  disabled={@enrollment_importing}
+                >
+                  <span
+                    :if={@enrollment_importing}
+                    class="loading loading-spinner loading-sm"
+                  >
+                  </span>
+                  <.icon
+                    :if={!@enrollment_importing}
+                    name="hero-arrow-up-tray"
+                    class="size-4"
+                  />
+                  {if @enrollment_importing, do: "Processing…", else: "Import Enrollment"}
+                </button>
+              </form>
+            </div>
+
+            <%!-- Enrollment import result / status — 2 cols --%>
+            <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
+                <div>
+                  <h3 class="font-semibold">Import Status</h3>
+                  <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
+                </div>
+                <div
+                  :if={@enrollment_importing}
+                  class="flex items-center gap-1.5 text-xs text-base-content/40"
+                >
+                  <span class="loading loading-spinner loading-xs"></span> Running…
+                </div>
+              </div>
+
+              <%!-- Idle / no result yet --%>
+              <div
+                :if={!@enrollment_importing && is_nil(@enrollment_import_result)}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-base-200 mb-3">
+                  <.icon name="hero-users" class="size-6 text-base-content/25" />
+                </div>
+                <p class="text-sm font-medium text-base-content/40">No import yet</p>
+                <p class="text-xs text-base-content/30 mt-1">
+                  Upload an enrollment CSV to populate the enrollment table.
+                </p>
+              </div>
+
+              <%!-- In-progress pulse --%>
+              <div
+                :if={@enrollment_importing}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-success/10 mb-3">
+                  <span class="loading loading-spinner loading-md text-success"></span>
+                </div>
+                <p class="text-sm font-medium">Processing enrollment data…</p>
+                <p class="text-xs text-base-content/40 mt-1">
+                  Upserting enrollment records in the background.
+                </p>
+              </div>
+
+              <%!-- Success result --%>
+              <div
+                :if={match?({:ok, _}, @enrollment_import_result)}
+                class="p-6 space-y-4"
+              >
+                <div class="flex items-center gap-2 text-success">
+                  <.icon name="hero-check-circle" class="size-5" />
+                  <span class="font-semibold text-sm">Import completed</span>
+                </div>
+                <dl class="grid grid-cols-2 gap-3">
+                  <.mde_stat
+                    label="Records"
+                    value={format_number(elem(@enrollment_import_result, 1).records)}
+                    icon="hero-users"
+                  />
+                  <.mde_stat
+                    label="Errors"
+                    value={elem(@enrollment_import_result, 1).errors}
+                    icon="hero-exclamation-circle"
+                  />
+                </dl>
+                <div
+                  :if={elem(@enrollment_import_result, 1).errors > 0}
+                  class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
+                >
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
+                  {elem(@enrollment_import_result, 1).errors} rows had errors and were skipped.
+                </div>
+              </div>
+
+              <%!-- Error result --%>
+              <div
+                :if={match?({:error, _}, @enrollment_import_result)}
+                class="p-6"
+              >
+                <div class="flex items-start gap-3 p-4 bg-error/5 border border-error/15">
+                  <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
+                  <div>
+                    <p class="text-sm font-semibold text-error">Import failed</p>
+                    <p class="text-xs text-base-content/50 mt-1 break-all">
+                      {elem(@enrollment_import_result, 1)}
                     </p>
                   </div>
                 </div>
