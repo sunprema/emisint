@@ -426,14 +426,17 @@ defmodule Emisint.Workers.MdeComparisonSnapshotWorker do
 
   defp weighted_proficiency_float(rows) do
     {total_assessed, total_prof} =
-      Enum.reduce(rows, {0, 0}, fn r, {assessed, prof} ->
+      Enum.reduce(rows, {0, 0.0}, fn r, {assessed, prof} ->
+        pct = if r.percent_met, do: Decimal.to_float(r.percent_met), else: 0.0
+        n = r.number_assessed || 0
+
         {
-          assessed + (r.number_assessed || 0),
-          prof + (r.total_advanced || 0) + (r.total_proficient || 0)
+          assessed + n,
+          prof + pct * n / 100.0
         }
       end)
 
-    if total_assessed > 0, do: Float.round(total_prof / total_assessed * 100, 1), else: nil
+    if total_assessed > 0, do: Float.round(total_prof / total_assessed * 100.0, 1), else: nil
   end
 
   defp avg_across_values(values) do
