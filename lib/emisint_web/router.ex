@@ -44,6 +44,7 @@ defmodule EmisintWeb.Router do
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
       live "/mde/entities", Mde.EntityMasterLive, :index
+      live "/health-scores", School.HealthScoreLive, :index
     end
 
     get "/schools/:school_id/report.pdf", SchoolReportController, :show
