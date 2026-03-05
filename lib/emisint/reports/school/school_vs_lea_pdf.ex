@@ -3,7 +3,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   require Ash.Query
 
-  alias Emisint.Assessments.{MdeEnrollmentResult, MdeSchoolVsLeaSnapshot}
+  alias Emisint.Assessments.{MdeEnrollmentResult, MdeSatResult, MdeSchoolVsLeaSnapshot}
 
   @doc """
   Generates a School vs Geographic LEA PDF for the given building code and school year.
@@ -29,6 +29,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
       |> Ash.read_one!(authorize?: false)
 
     enrollment = load_enrollment_data(building_code, year)
+    sat_results = load_sat_data(building_code, year)
 
     case snapshot do
       nil ->
@@ -48,7 +49,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           subjects: [],
           all_subjects_avg: %{school_pct: nil, lea_pct: nil, state_pct: nil, delta: nil},
           grade_breakdown: [],
-          enrollment: enrollment
+          enrollment: enrollment,
+          sat_results: sat_results
         }
 
       snap ->
@@ -74,7 +76,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           subjects: subjects,
           all_subjects_avg: all_subjects_avg,
           grade_breakdown: grades,
-          enrollment: enrollment
+          enrollment: enrollment,
+          sat_results: sat_results
         }
     end
   end
@@ -103,6 +106,29 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
         }
     end
   end
+
+  defp load_sat_data(building_code, year) do
+    MdeSatResult
+    |> Ash.Query.filter(
+      building_code == ^building_code and school_year == ^year and rollup_level == :building
+    )
+    |> Ash.Query.sort(:subgroup)
+    |> Ash.read!(authorize?: false)
+    |> Enum.map(fn row ->
+      %{
+        subgroup: row.subgroup || "All Students",
+        num_assessed: row.math_num_assessed,
+        math_percent_ready: decimal_to_float(row.math_percent_ready),
+        reading_percent_ready: decimal_to_float(row.reading_percent_ready),
+        english_percent_ready: decimal_to_float(row.english_percent_ready),
+        ebrw_percent_ready: decimal_to_float(row.ebrw_percent_ready),
+        all_subject_percent_ready: decimal_to_float(row.all_subject_percent_ready)
+      }
+    end)
+  end
+
+  defp decimal_to_float(nil), do: nil
+  defp decimal_to_float(%Decimal{} = d), do: Decimal.to_float(d)
 
   defp safe_pct(num, den) when is_integer(num) and is_integer(den) and den > 0,
     do: Float.round(num / den * 100, 1)

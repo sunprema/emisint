@@ -79,5 +79,10 @@ defmodule Emisint.Assessments do
       define :list_mde_enrollment_results, action: :read
       define :upsert_mde_enrollment_result, action: :upsert
     end
+
+    resource Emisint.Assessments.MdeSatResult do
+      define :list_mde_sat_results, action: :read
+      define :upsert_mde_sat_result, action: :upsert
+    end
   end
 end

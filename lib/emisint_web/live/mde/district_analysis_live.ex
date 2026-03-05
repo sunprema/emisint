@@ -8,6 +8,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     MdeDistrict,
     MdeDistrictSnapshot,
     MdeEnrollmentResult,
+    MdeSatResult,
     MdeSchoolVsLeaSnapshot,
     MdeStateAssessmentResult
   }
@@ -37,7 +38,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:district_buildings, [])
      |> assign(:selected_building_code, nil)
      |> assign(:enrollment, nil)
-     |> assign(:school_vs_lea, nil)}
+     |> assign(:school_vs_lea, nil)
+     |> assign(:sat_results, [])}
   end
 
   def handle_params(%{"district_code" => dc} = params, _uri, socket) do
@@ -85,6 +87,13 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         nil
       end
 
+    sat_results =
+      if tab == "school_vs_lea" && effective_building_code && year != "" do
+        load_sat_results(effective_building_code, year)
+      else
+        []
+      end
+
     {:noreply,
      socket
      |> assign(:district_code, dc)
@@ -96,6 +105,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:selected_building_code, effective_building_code)
      |> assign(:enrollment, enrollment)
      |> assign(:school_vs_lea, school_vs_lea)
+     |> assign(:sat_results, sat_results)
      |> assign(:page_title, page_title(primary, compare))}
   end
 
@@ -144,13 +154,21 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         socket.assigns.enrollment
       end
 
+    sat_results =
+      if tab == "school_vs_lea" && effective_building_code && year != "" do
+        load_sat_results(effective_building_code, year)
+      else
+        socket.assigns.sat_results
+      end
+
     {:noreply,
      socket
      |> assign(:selected_year, year)
      |> assign(:primary, primary)
      |> assign(:compare, compare)
      |> assign(:enrollment, enrollment)
-     |> assign(:school_vs_lea, school_vs_lea)}
+     |> assign(:school_vs_lea, school_vs_lea)
+     |> assign(:sat_results, sat_results)}
   end
 
   def handle_event("select_compare", %{"compare" => ""}, socket) do
@@ -657,6 +675,71 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 </div>
               </div>
             </div>
+
+            <%!-- SAT College Readiness --%>
+            <div :if={@sat_results != []} class="space-y-3">
+              <div class="flex items-center gap-2">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                  SAT College Readiness
+                </h2>
+                <div class="flex-1 h-px bg-base-200"></div>
+              </div>
+
+              <div class="bg-base-100 border border-base-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-base-200 bg-base-50">
+                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Subgroup
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Assessed
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          Math
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-secondary uppercase tracking-wide">
+                          Reading
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-accent uppercase tracking-wide">
+                          English
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-success uppercase tracking-wide">
+                          EBRW
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide">
+                          All Subjects
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-base-200">
+                      <tr :for={row <- @sat_results} class="hover:bg-base-50">
+                        <td class="px-4 py-2.5 font-medium text-xs">{row.subgroup || "All Students"}</td>
+                        <td class="px-4 py-2.5 text-right text-xs text-base-content/60">
+                          {if row.math_num_assessed, do: format_number(row.math_num_assessed), else: "—"}
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.math_percent_ready} color="info" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.reading_percent_ready} color="secondary" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.english_percent_ready} color="accent" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.ebrw_percent_ready} color="success" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.all_subject_percent_ready} color="warning" />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1096,6 +1179,15 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       building_code == ^building_code and school_year == ^year and rollup_level == :building
     )
     |> Ash.read_one!(authorize?: false)
+  end
+
+  defp load_sat_results(building_code, year) do
+    MdeSatResult
+    |> Ash.Query.filter(
+      building_code == ^building_code and school_year == ^year and rollup_level == :building
+    )
+    |> Ash.Query.sort(:subgroup)
+    |> Ash.read!(authorize?: false)
   end
 
   defp load_school_vs_lea(building_code, year) do

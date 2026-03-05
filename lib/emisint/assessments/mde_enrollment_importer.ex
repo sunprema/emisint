@@ -60,13 +60,17 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
       upsert_buildings(buildings, district_map)
       building_map = build_code_map(MdeBuilding, :building_code)
 
-      {record_count, error_count} = upsert_results(path, building_map, district_map, isd_map)
+      {record_count, error_count, error_rows} =
+        upsert_results(path, building_map, district_map, isd_map)
+
+      error_file = write_error_csv(path, error_rows)
 
       {:ok,
        %{
          records: record_count,
          errors: error_count,
-         school_year: school_year
+         school_year: school_year,
+         error_file: error_file
        }}
     end
   rescue
@@ -210,7 +214,7 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
     |> Stream.map(&tag_row(&1, building_map, district_map, isd_map))
     |> Stream.reject(&is_nil/1)
     |> Stream.chunk_every(@batch_size)
-    |> Enum.reduce({0, 0}, fn batch, {ok_acc, err_acc} ->
+    |> Enum.reduce({0, 0, []}, fn batch, {ok_acc, err_acc, err_rows_acc} ->
       {building_rows, district_rows, isd_rows} =
         Enum.reduce(batch, {[], [], []}, fn
           {:building, attrs}, {b, d, i} -> {[attrs | b], d, i}
@@ -227,7 +231,11 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
           (length(district_rows) - r2.error_count) +
           (length(isd_rows) - r3.error_count)
 
-      {ok_acc + total_ok, err_acc + r1.error_count + r2.error_count + r3.error_count}
+      batch_err_rows = r1.error_rows ++ r2.error_rows ++ r3.error_rows
+
+      {ok_acc + total_ok,
+       err_acc + r1.error_count + r2.error_count + r3.error_count,
+       err_rows_acc ++ batch_err_rows}
     end)
   end
 
@@ -323,13 +331,31 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
   # Bulk upsert helper
   # ---------------------------------------------------------------------------
 
-  defp bulk_upsert([], _action), do: %{error_count: 0}
+  defp bulk_upsert([], _action), do: %{error_count: 0, error_rows: []}
 
   defp bulk_upsert(rows, action) do
-    Ash.bulk_create(rows, MdeEnrollmentResult, action,
-      authorize?: false,
-      return_errors?: true
-    )
+    result =
+      Ash.bulk_create(rows, MdeEnrollmentResult, action,
+        authorize?: false,
+        return_errors?: true
+      )
+
+    error_rows =
+      if result.error_count > 0 do
+        Enum.filter(rows, fn row ->
+          r =
+            Ash.bulk_create([row], MdeEnrollmentResult, action,
+              authorize?: false,
+              return_errors?: true
+            )
+
+          r.error_count > 0
+        end)
+      else
+        []
+      end
+
+    %{error_count: result.error_count, error_rows: error_rows}
   end
 
   # ---------------------------------------------------------------------------
@@ -340,6 +366,29 @@ defmodule Emisint.Assessments.MdeEnrollmentImporter do
     resource
     |> Ash.read!(authorize?: false)
     |> Map.new(fn record -> {Map.get(record, code_field), record.id} end)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Error CSV writer
+  # ---------------------------------------------------------------------------
+
+  defp write_error_csv(_path, []), do: nil
+
+  defp write_error_csv(input_path, [first | _] = error_rows) do
+    headers = first |> Map.keys() |> Enum.sort()
+    header_strings = Enum.map(headers, &to_string/1)
+
+    data_rows =
+      Enum.map(error_rows, fn row ->
+        Enum.map(headers, fn key -> to_string(row[key] || "") end)
+      end)
+
+    content = NimbleCSV.RFC4180.dump_to_iodata([header_strings | data_rows])
+
+    base = Path.basename(input_path, ".csv")
+    error_path = Path.join(Path.dirname(input_path), "#{base}_errors.csv")
+    File.write!(error_path, content)
+    error_path
   end
 
   # ---------------------------------------------------------------------------

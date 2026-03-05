@@ -450,6 +450,55 @@
   ]
 ]
 
+// ── Section 4: SAT College Readiness ──────────────────────────────────────────
+#section-title("SAT College Readiness",
+  subtitle: "Percent of students meeting college-readiness benchmarks by subgroup · " + elixir_data.school_year)
+
+#if elixir_data.sat_results.len() == 0 [
+  #rect(
+    width: 100%, inset: 14pt, stroke: 0.5pt + c-border, radius: 2pt,
+    text(fill: c-muted, style: "italic", "No SAT college-readiness data available for this school year.")
+  )
+] else [
+  #table(
+    columns: (1.8fr, 0.7fr, 0.75fr, 0.75fr, 0.75fr, 0.75fr, 0.9fr),
+    stroke: (x, y) => if y == 0 { none } else { (bottom: 0.5pt + c-border) },
+    inset: (x: 7pt, y: 8pt),
+    fill: (x, y) => if y == 0 { c-th-bg } else if calc.odd(y) { white } else { c-row-alt },
+    th("Subgroup"),
+    th("Assessed"),
+    th("Math"),
+    th("Reading"),
+    th("English"),
+    th("EBRW"),
+    th("All Subjects"),
+    ..for row in elixir_data.sat_results {(
+      text(size: 9pt, weight: "semibold", row.subgroup),
+      align(center, text(size: 8.5pt, fill: c-muted, if row.num_assessed == none { "—" } else { str(row.num_assessed) })),
+      align(center, pct-badge(row.math_percent_ready)),
+      align(center, pct-badge(row.reading_percent_ready)),
+      align(center, pct-badge(row.english_percent_ready)),
+      align(center, pct-badge(row.ebrw_percent_ready)),
+      align(center, pct-badge(row.all_subject_percent_ready))
+    )}
+  )
+  #v(6pt)
+  #text(size: 8pt, fill: c-muted)[
+    SAT readiness thresholds:
+    #box(fill: c-green-bg, inset:(x:5pt,y:2pt), radius:3pt,
+      stroke: 0.5pt + c-green.lighten(40%),
+      text(fill:c-green, size:7.5pt, weight:"bold", "≥ 60% Strong"))
+    #h(5pt)
+    #box(fill: c-amber-bg, inset:(x:5pt,y:2pt), radius:3pt,
+      stroke: 0.5pt + c-amber.lighten(40%),
+      text(fill:c-amber, size:7.5pt, weight:"bold", "40–59% Typical"))
+    #h(5pt)
+    #box(fill: c-red-bg, inset:(x:5pt,y:2pt), radius:3pt,
+      stroke: 0.5pt + c-red.lighten(40%),
+      text(fill:c-red, size:7.5pt, weight:"bold", "< 40% Below"))
+  ]
+]
+
 // ── Signature block ────────────────────────────────────────────────────────────
 #v(1fr)
 #line(length: 100%, stroke: 0.5pt + c-border)

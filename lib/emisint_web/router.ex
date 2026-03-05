@@ -49,6 +49,7 @@ defmodule EmisintWeb.Router do
 
     get "/schools/:school_id/report.pdf", SchoolReportController, :show
     get "/mde/lea-comparison.pdf", MdeLeaReportController, :show
+    get "/admin/import/errors/download", ErrorFileDownloadController, :download
   end
 
   scope "/", EmisintWeb do

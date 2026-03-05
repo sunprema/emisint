@@ -18,7 +18,7 @@ defmodule Emisint.Assessments.MdeEntityMasterImporter do
   ## Usage
 
       iex> Emisint.Assessments.MdeEntityMasterImporter.import_file("/tmp/EntityMaster.csv")
-      {:ok, %{records: 4200, errors: 0}}
+      {:ok, %{records: 4200, errors: 0, error_file: nil}}
 
   """
 
@@ -93,6 +93,69 @@ defmodule Emisint.Assessments.MdeEntityMasterImporter do
     "ESSA Support Category Status" => :essa_support_category_status
   }
 
+  @upsert_fields [
+    :isd_code,
+    :isd_official_name,
+    :district_code,
+    :district_official_name,
+    :district_type,
+    :district_type_name,
+    :district_common_name,
+    :entity_official_name,
+    :agreement_number,
+    :entity_type,
+    :entity_type_name,
+    :entity_type_group,
+    :entity_type_group_name,
+    :entity_type_category,
+    :entity_type_category_name,
+    :entity_county_code,
+    :entity_county_name,
+    :entity_chartering_agency_code,
+    :entity_chartering_agency_name,
+    :entity_geographic_lea_district_code,
+    :entity_geographic_lea_district_official_name,
+    :entity_nces_code,
+    :entity_locale_code,
+    :entity_locale_name,
+    :entity_authorized_educational_settings,
+    :entity_actual_educational_settings,
+    :entity_status,
+    :entity_open_date,
+    :entity_close_date,
+    :entity_authorized_grades,
+    :entity_actual_grades,
+    :entity_fips_code,
+    :entity_remc_id,
+    :entity_schedules_list,
+    :entity_early_childhood_program_list,
+    :receives_transportation_from_code,
+    :receives_transportation_from_name,
+    :entity_religious_orientation_code,
+    :entity_religious_orientation_name,
+    :entity_email,
+    :entity_phone,
+    :entity_phone_ext,
+    :entity_fax,
+    :entity_fax_ext,
+    :entity_lead_admin_honorific,
+    :entity_lead_admin_first_name,
+    :entity_lead_admin_last_name,
+    :entity_physical_street,
+    :entity_physical_city,
+    :entity_physical_state,
+    :entity_physical_zip4,
+    :entity_mailing_street,
+    :entity_mailing_city,
+    :entity_mailing_state,
+    :entity_mailing_zip4,
+    :early_middle_college,
+    :see_type,
+    :head_start_grantee,
+    :school_emphasis,
+    :essa_support_category_status
+  ]
+
   # ---------------------------------------------------------------------------
   # Public API
   # ---------------------------------------------------------------------------
@@ -100,114 +163,75 @@ defmodule Emisint.Assessments.MdeEntityMasterImporter do
   @spec import_file(Path.t()) :: {:ok, map()} | {:error, String.t()}
   def import_file(path) do
     with :ok <- validate_file(path) do
-      {record_count, error_count} =
+      {record_count, error_count, error_rows} =
         stream_as_maps(path)
         |> Stream.map(&to_attrs/1)
         |> Stream.reject(&is_nil/1)
         |> Stream.chunk_every(@batch_size)
-        |> Enum.reduce({0, 0}, fn batch, {ok_acc, err_acc} ->
-          result =
-            Ash.bulk_create(batch, MdeEntityMaster, :upsert,
-              authorize?: false,
-              return_errors?: true,
-              upsert_fields: [
-                :isd_code,
-                :isd_official_name,
-                :district_code,
-                :district_official_name,
-                :district_type,
-                :district_type_name,
-                :district_common_name,
-                :entity_official_name,
-                :agreement_number,
-                :entity_type,
-                :entity_type_name,
-                :entity_type_group,
-                :entity_type_group_name,
-                :entity_type_category,
-                :entity_type_category_name,
-                :entity_county_code,
-                :entity_county_name,
-                :entity_chartering_agency_code,
-                :entity_chartering_agency_name,
-                :entity_geographic_lea_district_code,
-                :entity_geographic_lea_district_official_name,
-                :entity_nces_code,
-                :entity_locale_code,
-                :entity_locale_name,
-                :entity_authorized_educational_settings,
-                :entity_actual_educational_settings,
-                :entity_status,
-                :entity_open_date,
-                :entity_close_date,
-                :entity_authorized_grades,
-                :entity_actual_grades,
-                :entity_fips_code,
-                :entity_remc_id,
-                :entity_schedules_list,
-                :entity_early_childhood_program_list,
-                :receives_transportation_from_code,
-                :receives_transportation_from_name,
-                :entity_religious_orientation_code,
-                :entity_religious_orientation_name,
-                :entity_email,
-                :entity_phone,
-                :entity_phone_ext,
-                :entity_fax,
-                :entity_fax_ext,
-                :entity_lead_admin_honorific,
-                :entity_lead_admin_first_name,
-                :entity_lead_admin_last_name,
-                :entity_physical_street,
-                :entity_physical_city,
-                :entity_physical_state,
-                :entity_physical_zip4,
-                :entity_mailing_street,
-                :entity_mailing_city,
-                :entity_mailing_state,
-                :entity_mailing_zip4,
-                :early_middle_college,
-                :see_type,
-                :head_start_grantee,
-                :school_emphasis,
-                :essa_support_category_status
-              ]
-            )
-
-          batch_ok = length(batch) - result.error_count
-          {ok_acc + batch_ok, err_acc + result.error_count}
+        |> Enum.reduce({0, 0, []}, fn batch, {ok_acc, err_acc, err_rows_acc} ->
+          {batch_ok, batch_err, batch_err_rows} = bulk_upsert(batch)
+          {ok_acc + batch_ok, err_acc + batch_err, err_rows_acc ++ batch_err_rows}
         end)
 
-      {:ok, %{records: record_count, errors: error_count}}
+      error_file = write_error_csv(path, error_rows)
+
+      {:ok, %{records: record_count, errors: error_count, error_file: error_file}}
     end
   rescue
     error -> {:error, Exception.message(error)}
   end
 
   # ---------------------------------------------------------------------------
+  # Bulk upsert
+  # ---------------------------------------------------------------------------
+
+  defp bulk_upsert([]), do: {0, 0, []}
+
+  defp bulk_upsert(rows) do
+    result =
+      Ash.bulk_create(rows, MdeEntityMaster, :upsert,
+        authorize?: false,
+        return_errors?: true,
+        upsert_fields: @upsert_fields
+      )
+
+    error_rows =
+      if result.error_count > 0 do
+        Enum.filter(rows, fn row ->
+          r =
+            Ash.bulk_create([row], MdeEntityMaster, :upsert,
+              authorize?: false,
+              return_errors?: true,
+              upsert_fields: @upsert_fields
+            )
+
+          r.error_count > 0
+        end)
+      else
+        []
+      end
+
+    {length(rows) - result.error_count, result.error_count, error_rows}
+  end
+
+  # ---------------------------------------------------------------------------
   # Streaming helpers
   # ---------------------------------------------------------------------------
 
-  # Streams the CSV as string-keyed maps, one per data row.
-  # Handles optional UTF-8 BOM produced by some Windows CSV exports.
   defp stream_as_maps(path) do
     File.stream!(path)
     |> NimbleCSV.RFC4180.parse_stream(skip_headers: false)
     |> Stream.transform(nil, fn
-      # First row: capture headers, strip BOM if present, emit nothing
       [first | rest], nil ->
         headers = [String.trim_leading(first, "\uFEFF") | rest]
         {[], headers}
 
-      # Subsequent rows: zip with headers to produce a string-keyed map
       row, headers ->
         row_map = headers |> Enum.zip(row) |> Map.new()
         {[row_map], headers}
     end)
   end
 
-  # Maps one CSV row-map to MdeEntityMaster attrs using @header_map.
-  # Returns nil when entity_code is missing or blank (skip the row).
   defp to_attrs(row) do
     attrs =
       Enum.reduce(@header_map, %{}, fn {csv_col, field}, acc ->
@@ -216,6 +240,29 @@ defmodule Emisint.Assessments.MdeEntityMasterImporter do
       end)
 
     if is_nil(attrs[:entity_code]), do: nil, else: attrs
+  end
+
+  # ---------------------------------------------------------------------------
+  # Error CSV writer
+  # ---------------------------------------------------------------------------
+
+  defp write_error_csv(_path, []), do: nil
+
+  defp write_error_csv(input_path, [first | _] = error_rows) do
+    headers = first |> Map.keys() |> Enum.sort()
+    header_strings = Enum.map(headers, &to_string/1)
+
+    data_rows =
+      Enum.map(error_rows, fn row ->
+        Enum.map(headers, fn key -> to_string(row[key] || "") end)
+      end)
+
+    content = NimbleCSV.RFC4180.dump_to_iodata([header_strings | data_rows])
+
+    base = Path.basename(input_path, ".csv")
+    error_path = Path.join(Path.dirname(input_path), "#{base}_errors.csv")
+    File.write!(error_path, content)
+    error_path
   end
 
   # ---------------------------------------------------------------------------
@@ -228,7 +275,6 @@ defmodule Emisint.Assessments.MdeEntityMasterImporter do
       else: {:error, "File not found: #{path}"}
   end
 
-  # Empty string and whitespace-only values → nil
   defp nilify(val) when is_binary(val) do
     case String.trim(val) do
       "" -> nil

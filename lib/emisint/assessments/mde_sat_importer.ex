@@ -1,65 +1,49 @@
-defmodule Emisint.Assessments.MdeImporter do
+defmodule Emisint.Assessments.MdeSatImporter do
   @batch_size 500
 
   @moduledoc """
-  Imports MDE public state assessment CSV data into the normalized relational tables.
+  Imports MDE SAT college-readiness CSV data into the `mde_sat_results` table.
 
-  The CSV must follow the standard MDE aggregate export format with a header row.
-  File may be very large (millions of rows); the importer uses two streaming passes
-  so the fact rows are never fully loaded into memory.
+  SAT files contain building-, district-, and ISD-level aggregate rows broken out
+  by ESSA subgroup. Unlike the enrollment CSV (which uses blank fields for rollups),
+  this file uses the same zero-sentinel convention as the MDE state assessment CSV:
+  `DistrictCode = "0"` signals an ISD-level row and `BuildingCode = "0"` signals a
+  district-level row.
+
+  The CSV is **wide-format** — one row per entity × school year × subgroup, with all
+  subject metrics (Math, Reading, Science, English, AllSubject, EBRW) as columns.
 
   ## Pipeline
 
-    1. **First pass** — stream the file to collect unique ISDs, districts, and buildings
-       (these are tiny sets: ~57 ISDs, ~900 districts, ~4 000 buildings statewide).
-       Rows with `building_code = "0"` or `district_code = "0"` are sentinel rollup rows
-       and are skipped when collecting dimensions (no phantom "0" entities are created).
+    1. **First pass** — stream the CSV to collect unique ISDs, districts, and buildings.
+       Rows with sentinel codes are skipped when collecting lower-level dimensions.
     2. **Upsert dimension tables** in FK order:
        `MdeIsd → MdeDistrict → MdeBuilding`
-       After each upsert, read back the table to build a `code → UUID` lookup map.
-    3. **Second pass** — stream fact rows in batches of #{@batch_size}, tag each row as
-       `:building`, `:district`, or `:isd` granularity, resolve UUIDs, and bulk-upsert
-       `MdeStateAssessmentResult` via the appropriate action for each granularity.
+       After each upsert, build a `code → UUID` lookup map.
+    3. **Second pass** — stream fact rows in batches of #{@batch_size}, tag each as
+       `:building`, `:district`, or `:isd`, resolve UUIDs, and bulk-upsert
+       `MdeSatResult` via the appropriate action.
+
+  ## Expected CSV column headers
+
+      SchoolYear, ISDCode, ISDName, DistrictCode, DistrictName,
+      BuildingCode, BuildingName, CountyCode, CountyName, EntityType,
+      SchoolLevel, Locale, MISTEM_NAME, MISTEM_CODE, Subgroup,
+      MathPercentReady, MathNumAssessed, MathScoreAverage, MathCountReady,
+      ReadingPercentReady, ReadingNumAssessed, ReadingScoreAverage,
+      SciencePercentReady, ScienceNumAssessed, ScienceScoreAverage,
+      EnglishPercentReady, EnglishNumAssessed, EnglishScoreAverage,
+      AllSubjectPercentReady, AllSubjectNumAssessed, AllSubjectScoreAverage, AllCountReady,
+      EBRWPercentReady, EBRWNumAssessed, EBRWScoreAverage, EBRWCountReady
 
   ## Usage
 
-      iex> Emisint.Assessments.MdeImporter.import_file("priv/data/mde_assessment_results.csv")
-      {:ok, %{isds: 57, districts: 842, buildings: 3891, results: 1_200_000, errors: 0}}
+      iex> Emisint.Assessments.MdeSatImporter.import_file("/tmp/sat_2024.csv")
+      {:ok, %{records: 2450, errors: 0, school_year: "2023-2024"}}
 
   """
 
-  alias Emisint.Assessments.{MdeBuilding, MdeDistrict, MdeIsd, MdeStateAssessmentResult}
-
-  # Score fields updated on conflict (same for all three upsert actions)
-  @score_upsert_fields [
-    :total_advanced,
-    :total_proficient,
-    :total_partially_proficient,
-    :total_not_proficient,
-    :total_surpassed,
-    :total_attained,
-    :total_emerging_towards,
-    :total_met,
-    :total_did_not_meet,
-    :number_assessed,
-    :percent_advanced,
-    :percent_proficient,
-    :percent_partially_proficient,
-    :percent_not_proficient,
-    :percent_surpassed,
-    :percent_attained,
-    :percent_emerging_towards,
-    :percent_met,
-    :percent_did_not_meet,
-    :avg_ss,
-    :std_dev_ss,
-    :mean_pts_earned,
-    :min_scale_score,
-    :max_scale_score,
-    :scale_score_25,
-    :scale_score_50,
-    :scale_score_75
-  ]
+  alias Emisint.Assessments.{MdeBuilding, MdeDistrict, MdeIsd, MdeSatResult}
 
   # ---------------------------------------------------------------------------
   # Public API
@@ -68,35 +52,25 @@ defmodule Emisint.Assessments.MdeImporter do
   @spec import_file(Path.t()) :: {:ok, map()} | {:error, String.t()}
   def import_file(path) do
     with :ok <- validate_file(path) do
-      # First pass — cheap: only keeps unique dimension rows in memory.
-      # Skips "0" sentinel codes so no phantom records are created.
       {isds, districts, buildings, school_year} = collect_dimensions(path)
 
-      # Upsert ISDs, then build isd_code → UUID map
       upsert_isds(isds)
       isd_map = build_code_map(MdeIsd, :isd_code)
 
-      # Upsert districts (needs ISD UUIDs), then build district_code → UUID map
       upsert_districts(districts, isd_map)
       district_map = build_code_map(MdeDistrict, :district_code)
 
-      # Upsert buildings (needs district UUIDs), then build building_code → UUID map
       upsert_buildings(buildings, district_map)
       building_map = build_code_map(MdeBuilding, :building_code)
 
-      # Second pass — streamed in batches, never fully in memory.
-      # Routes rows to the correct upsert action by rollup granularity.
-      {result_count, error_count, error_rows} =
+      {record_count, error_count, error_rows} =
         upsert_results(path, building_map, district_map, isd_map)
 
       error_file = write_error_csv(path, error_rows)
 
       {:ok,
        %{
-         isds: map_size(isds),
-         districts: map_size(districts),
-         buildings: map_size(buildings),
-         results: result_count,
+         records: record_count,
          errors: error_count,
          school_year: school_year,
          error_file: error_file
@@ -110,19 +84,14 @@ defmodule Emisint.Assessments.MdeImporter do
   # Streaming helpers
   # ---------------------------------------------------------------------------
 
-  # Streams the CSV as string-keyed maps, one per data row.
-  # Uses Stream.transform to capture the header row and zip it with each data row.
-  # Handles optional UTF-8 BOM produced by some Windows CSV exports.
   defp stream_as_maps(path) do
     File.stream!(path)
     |> NimbleCSV.RFC4180.parse_stream(skip_headers: false)
     |> Stream.transform(nil, fn
-      # First row: capture headers, strip BOM if present, emit nothing
       [first | rest], nil ->
         headers = [String.trim_leading(first, "\uFEFF") | rest]
         {[], headers}
 
-      # Subsequent rows: zip with headers to produce a string-keyed map
       row, headers ->
         row_map = headers |> Enum.zip(row) |> Map.new()
         {[row_map], headers}
@@ -140,8 +109,7 @@ defmodule Emisint.Assessments.MdeImporter do
       district_code = row["DistrictCode"]
       building_code = row["BuildingCode"]
 
-      # Capture the school year from the first row that has it
-      school_year = school_year || row["SchoolYear"]
+      school_year = school_year || nilify(row["SchoolYear"])
 
       # ISDs are always real — isd_code is never "0"
       isds =
@@ -161,7 +129,6 @@ defmodule Emisint.Assessments.MdeImporter do
             county_code: nilify(row["CountyCode"]),
             county_name: nilify(row["CountyName"]),
             entity_type: nilify(row["EntityType"]),
-            # Kept as code here; resolved to UUID before upsert
             isd_code: isd_code
           })
         end
@@ -178,7 +145,6 @@ defmodule Emisint.Assessments.MdeImporter do
             locale: nilify(row["Locale"]),
             mistem_name: nilify(row["MISTEM_NAME"]),
             mistem_code: nilify(row["MISTEM_CODE"]),
-            # Kept as code here; resolved to UUID before upsert
             district_code: district_code
           })
         end
@@ -188,7 +154,7 @@ defmodule Emisint.Assessments.MdeImporter do
   end
 
   # ---------------------------------------------------------------------------
-  # Dimension upserts
+  # Dimension upserts (reuses existing MdeIsd/MdeDistrict/MdeBuilding actions)
   # ---------------------------------------------------------------------------
 
   defp upsert_isds(isds_map) do
@@ -272,16 +238,16 @@ defmodule Emisint.Assessments.MdeImporter do
     end)
   end
 
-  # Tags one CSV row as {:building, attrs}, {:district, attrs}, {:isd, attrs}, or nil.
-  # Routing logic:
-  #   district_code == "0"  → ISD-level aggregate
-  #   building_code == "0"  → district-level aggregate
-  #   otherwise             → building-level row
+  # Tags one row as {:building, attrs}, {:district, attrs}, {:isd, attrs}, or nil.
+  # Routing logic (zero = rollup sentinel, same as MDE state assessment CSV):
+  #   district_code == "0" → ISD-level aggregate
+  #   building_code == "0" (district != "0") → district-level aggregate
+  #   otherwise → building-level row
   defp tag_row(row, building_map, district_map, isd_map) do
-    building_code = row["BuildingCode"]
     district_code = row["DistrictCode"]
+    building_code = row["BuildingCode"]
     isd_code = row["ISDCode"]
-    base = to_score_attrs(row)
+    base = to_sat_attrs(row)
 
     cond do
       district_code == "0" ->
@@ -311,42 +277,45 @@ defmodule Emisint.Assessments.MdeImporter do
     end
   end
 
-  # Extracts all dimension + score fields from a CSV row (no FK resolution).
-  defp to_score_attrs(row) do
+  # Extracts dimension strings + all SAT metric columns from a CSV row.
+  defp to_sat_attrs(row) do
     %{
-      school_year: row["SchoolYear"],
-      test_type: row["TestType"],
-      test_population: row["TestPopulation"],
-      grade_content_tested: row["GradeContentTested"],
-      subject: row["Subject"],
-      report_category: row["ReportCategory"],
-      total_advanced: parse_integer(row["TotalAdvanced"]),
-      total_proficient: parse_integer(row["TotalProficient"]),
-      total_partially_proficient: parse_integer(row["TotalPartiallyProficient"]),
-      total_not_proficient: parse_integer(row["TotalNotProficient"]),
-      total_surpassed: parse_integer(row["TotalSurpassed"]),
-      total_attained: parse_integer(row["TotalAttained"]),
-      total_emerging_towards: parse_integer(row["TotalEmergingTowards"]),
-      total_met: parse_integer(row["TotalMet"]),
-      total_did_not_meet: parse_integer(row["TotalDidNotMeet"]),
-      number_assessed: parse_integer(row["NumberAssessed"]),
-      percent_advanced: parse_decimal(row["PercentAdvanced"]),
-      percent_proficient: parse_decimal(row["PercentProficient"]),
-      percent_partially_proficient: parse_decimal(row["PercentPartiallyProficient"]),
-      percent_not_proficient: parse_decimal(row["PercentNotProficient"]),
-      percent_surpassed: parse_decimal(row["PercentSurpassed"]),
-      percent_attained: parse_decimal(row["PercentAttained"]),
-      percent_emerging_towards: parse_decimal(row["PercentEmergingTowards"]),
-      percent_met: parse_decimal(row["PercentMet"]),
-      percent_did_not_meet: parse_decimal(row["PercentDidNotMeet"]),
-      avg_ss: parse_decimal(row["AvgSS"]),
-      std_dev_ss: parse_decimal(row["StdDevSS"]),
-      mean_pts_earned: parse_decimal(row["MeanPtsEarned"]),
-      min_scale_score: parse_decimal(row["MinScaleScore"]),
-      max_scale_score: parse_decimal(row["MaxScaleScore"]),
-      scale_score_25: parse_decimal(row["ScaleScore25"]),
-      scale_score_50: parse_decimal(row["ScaleScore50"]),
-      scale_score_75: parse_decimal(row["ScaleScore75"])
+      school_year: nilify(row["SchoolYear"]),
+      subgroup: nilify(row["Subgroup"]),
+      isd_code: nilify(row["ISDCode"]),
+      isd_name: nilify(row["ISDName"]),
+      district_code: nilify(row["DistrictCode"]),
+      district_name: nilify(row["DistrictName"]),
+      building_code: nilify(row["BuildingCode"]),
+      building_name: nilify(row["BuildingName"]),
+      county_code: nilify(row["CountyCode"]),
+      county_name: nilify(row["CountyName"]),
+      entity_type: nilify(row["EntityType"]),
+      school_level: nilify(row["SchoolLevel"]),
+      locale: nilify(row["Locale"]),
+      mistem_name: nilify(row["MISTEM_NAME"]),
+      mistem_code: nilify(row["MISTEM_CODE"]),
+      math_percent_ready: parse_decimal(row["MathPercentReady"]),
+      math_num_assessed: parse_integer(row["MathNumAssessed"]),
+      math_score_average: parse_decimal(row["MathScoreAverage"]),
+      math_count_ready: parse_integer(row["MathCountReady"]),
+      reading_percent_ready: parse_decimal(row["ReadingPercentReady"]),
+      reading_num_assessed: parse_integer(row["ReadingNumAssessed"]),
+      reading_score_average: parse_decimal(row["ReadingScoreAverage"]),
+      science_percent_ready: parse_decimal(row["SciencePercentReady"]),
+      science_num_assessed: parse_integer(row["ScienceNumAssessed"]),
+      science_score_average: parse_decimal(row["ScienceScoreAverage"]),
+      english_percent_ready: parse_decimal(row["EnglishPercentReady"]),
+      english_num_assessed: parse_integer(row["EnglishNumAssessed"]),
+      english_score_average: parse_decimal(row["EnglishScoreAverage"]),
+      all_subject_percent_ready: parse_decimal(row["AllSubjectPercentReady"]),
+      all_subject_num_assessed: parse_integer(row["AllSubjectNumAssessed"]),
+      all_subject_score_average: parse_decimal(row["AllSubjectScoreAverage"]),
+      all_count_ready: parse_integer(row["AllCountReady"]),
+      ebrw_percent_ready: parse_decimal(row["EBRWPercentReady"]),
+      ebrw_num_assessed: parse_integer(row["EBRWNumAssessed"]),
+      ebrw_score_average: parse_decimal(row["EBRWScoreAverage"]),
+      ebrw_count_ready: parse_integer(row["EBRWCountReady"])
     }
   end
 
@@ -358,22 +327,15 @@ defmodule Emisint.Assessments.MdeImporter do
 
   defp bulk_upsert(rows, action) do
     result =
-      Ash.bulk_create(rows, MdeStateAssessmentResult, action,
+      Ash.bulk_create(rows, MdeSatResult, action,
         authorize?: false,
-        return_errors?: true,
-        upsert_fields: @score_upsert_fields
+        return_errors?: true
       )
 
     error_rows =
       if result.error_count > 0 do
         Enum.filter(rows, fn row ->
-          r =
-            Ash.bulk_create([row], MdeStateAssessmentResult, action,
-              authorize?: false,
-              return_errors?: true,
-              upsert_fields: @score_upsert_fields
-            )
-
+          r = Ash.bulk_create([row], MdeSatResult, action, authorize?: false, return_errors?: true)
           r.error_count > 0
         end)
       else
@@ -387,7 +349,6 @@ defmodule Emisint.Assessments.MdeImporter do
   # Post-upsert lookup helper
   # ---------------------------------------------------------------------------
 
-  # Reads an entire dimension table and returns a map of code_value → UUID.
   defp build_code_map(resource, code_field) do
     resource
     |> Ash.read!(authorize?: false)
@@ -398,6 +359,7 @@ defmodule Emisint.Assessments.MdeImporter do
   # Error CSV writer
   # ---------------------------------------------------------------------------
 
+  # Writes error rows to a sibling CSV file. Returns the path, or nil if no errors.
   defp write_error_csv(_path, []), do: nil
 
   defp write_error_csv(input_path, [first | _] = error_rows) do
@@ -427,7 +389,6 @@ defmodule Emisint.Assessments.MdeImporter do
       else: {:error, "File not found: #{path}"}
   end
 
-  # Empty string and whitespace-only values from MDE CSV → nil
   defp nilify(val) when is_binary(val) do
     case String.trim(val) do
       "" -> nil
@@ -437,7 +398,7 @@ defmodule Emisint.Assessments.MdeImporter do
 
   defp nilify(val), do: val
 
-  # MDE suppresses cells below 10 students with empty strings
+  # MDE suppresses small cells with empty strings
   defp parse_integer(val) when val in [nil, ""], do: nil
 
   defp parse_integer(val) when is_binary(val) do
