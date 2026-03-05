@@ -104,6 +104,8 @@
 
 // Proficiency % badge — colour-coded by threshold (value is 0–100)
 #let pct-badge(v, school: false) = {
+  // Coerce strings (e.g. from JSON decode edge cases) to numbers
+  let v = if type(v) == "string" { float(v) } else { v }
   if v == none {
     box(fill: c-row-alt, inset: (x: 7pt, y: 3pt), radius: 3pt,
       text(fill: c-muted, weight: "bold", size: 8.5pt, "—"))
@@ -250,6 +252,36 @@
 
 #v(2pt)
 #line(length: 100%, stroke: 0.5pt + c-border)
+
+// ── Section 0: School Details ─────────────────────────────────────────────────
+#section-title("School Details", subtitle: "MDE entity information")
+
+#let detail-row(label, value) = {
+  grid(
+    columns: (120pt, 1fr),
+    gutter: 0pt,
+    rect(
+      width: 100%, inset: (x: 10pt, y: 7pt),
+      stroke: (bottom: 0.5pt + c-border, right: 0.5pt + c-border),
+      fill: c-th-bg,
+      text(size: 8pt, weight: "bold", fill: c-muted, upper(label))
+    ),
+    rect(
+      width: 100%, inset: (x: 10pt, y: 7pt),
+      stroke: (bottom: 0.5pt + c-border),
+      text(size: 9pt, fill: c-text, if value == none or value == "" { text(fill: c-muted, style: "italic", "—") } else { value })
+    )
+  )
+}
+
+#let ed = elixir_data.entity_details
+
+#detail-row("ISD Code", ed.isd_code)
+#detail-row("ISD Name", ed.isd_official_name)
+#detail-row("Chartering Agency Code", ed.entity_chartering_agency_code)
+#detail-row("Chartering Agency", ed.entity_chartering_agency_name)
+#detail-row("Authorized Grades", ed.entity_authorized_grades)
+#detail-row("Actual Grades", ed.entity_actual_grades)
 
 // ── KPI Summary ───────────────────────────────────────────────────────────────
 #section-title("Comparison Summary", subtitle: "M-STEP proficiency — school vs geographic LEA district")

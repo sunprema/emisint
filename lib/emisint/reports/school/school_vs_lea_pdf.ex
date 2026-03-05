@@ -3,7 +3,12 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   require Ash.Query
 
-  alias Emisint.Assessments.{MdeEnrollmentResult, MdeSatResult, MdeSchoolVsLeaSnapshot}
+  alias Emisint.Assessments.{
+    MdeEnrollmentResult,
+    MdeEntityMaster,
+    MdeSatResult,
+    MdeSchoolVsLeaSnapshot
+  }
 
   @doc """
   Generates a School vs Geographic LEA PDF for the given building code and school year.
@@ -30,6 +35,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
     enrollment = load_enrollment_data(building_code, year)
     sat_results = load_sat_data(building_code, year)
+    entity_details = load_entity_details(building_code)
 
     case snapshot do
       nil ->
@@ -50,7 +56,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           all_subjects_avg: %{school_pct: nil, lea_pct: nil, state_pct: nil, delta: nil},
           grade_breakdown: [],
           enrollment: enrollment,
-          sat_results: sat_results
+          sat_results: sat_results,
+          entity_details: entity_details
         }
 
       snap ->
@@ -77,7 +84,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           all_subjects_avg: all_subjects_avg,
           grade_breakdown: grades,
           enrollment: enrollment,
-          sat_results: sat_results
+          sat_results: sat_results,
+          entity_details: entity_details
         }
     end
   end
@@ -107,6 +115,35 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     end
   end
 
+  defp load_entity_details(building_code) do
+    record =
+      MdeEntityMaster
+      |> Ash.Query.filter(entity_code == ^building_code)
+      |> Ash.read_one!(authorize?: false)
+
+    case record do
+      nil ->
+        %{
+          isd_code: nil,
+          isd_official_name: nil,
+          entity_chartering_agency_code: nil,
+          entity_chartering_agency_name: nil,
+          entity_authorized_grades: nil,
+          entity_actual_grades: nil
+        }
+
+      rec ->
+        %{
+          isd_code: rec.isd_code,
+          isd_official_name: rec.isd_official_name,
+          entity_chartering_agency_code: rec.entity_chartering_agency_code,
+          entity_chartering_agency_name: rec.entity_chartering_agency_name,
+          entity_authorized_grades: rec.entity_authorized_grades,
+          entity_actual_grades: rec.entity_actual_grades
+        }
+    end
+  end
+
   defp load_sat_data(building_code, year) do
     MdeSatResult
     |> Ash.Query.filter(
@@ -130,6 +167,21 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
   defp decimal_to_float(nil), do: nil
   defp decimal_to_float(%Decimal{} = d), do: Decimal.to_float(d)
 
+  # Coerces any numeric-ish value from JSONB to a plain Elixir float.
+  # JSONB round-trips through Jason; numbers come back as float/integer.
+  # String values (double-encoded snapshots) are parsed defensively.
+  defp to_float(nil), do: nil
+  defp to_float(v) when is_float(v), do: v
+  defp to_float(v) when is_integer(v), do: v * 1.0
+  defp to_float(%Decimal{} = d), do: Decimal.to_float(d)
+
+  defp to_float(v) when is_binary(v) do
+    case Float.parse(v) do
+      {f, _} -> f
+      :error -> nil
+    end
+  end
+
   defp safe_pct(num, den) when is_integer(num) and is_integer(den) and den > 0,
     do: Float.round(num / den * 100, 1)
 
@@ -141,13 +193,15 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   defp snapshot_to_subjects(list) do
     Enum.map(list, fn row ->
+      row = if is_binary(row), do: Jason.decode!(row), else: row
+
       %{
         subject: row["subject"],
-        school_pct: row["school_pct"],
-        lea_pct: row["lea_pct"],
-        state_pct: row["state_pct"],
-        delta: row["delta"],
-        school_vs_state_delta: row["school_vs_state_delta"]
+        school_pct: to_float(row["school_pct"]),
+        lea_pct: to_float(row["lea_pct"]),
+        state_pct: to_float(row["state_pct"]),
+        delta: to_float(row["delta"]),
+        school_vs_state_delta: to_float(row["school_vs_state_delta"])
       }
     end)
   end
@@ -156,18 +210,19 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   defp snapshot_to_grades(list) do
     Enum.map(list, fn row ->
+      row = if is_binary(row), do: Jason.decode!(row), else: row
       grade = row["grade"]
 
       %{
         grade: "Grade #{grade}",
-        school_ela: row["school_ela"],
-        lea_ela: row["lea_ela"],
-        state_ela: row["state_ela"],
-        ela_delta: row["ela_delta"],
-        school_math: row["school_math"],
-        lea_math: row["lea_math"],
-        state_math: row["state_math"],
-        math_delta: row["math_delta"]
+        school_ela: to_float(row["school_ela"]),
+        lea_ela: to_float(row["lea_ela"]),
+        state_ela: to_float(row["state_ela"]),
+        ela_delta: to_float(row["ela_delta"]),
+        school_math: to_float(row["school_math"]),
+        lea_math: to_float(row["lea_math"]),
+        state_math: to_float(row["state_math"]),
+        math_delta: to_float(row["math_delta"])
       }
     end)
   end
@@ -177,10 +232,10 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   defp snapshot_to_all_subjects_avg(map) do
     %{
-      school_pct: map["school_pct"],
-      lea_pct: map["lea_pct"],
-      state_pct: map["state_pct"],
-      delta: map["delta"]
+      school_pct: to_float(map["school_pct"]),
+      lea_pct: to_float(map["lea_pct"]),
+      state_pct: to_float(map["state_pct"]),
+      delta: to_float(map["delta"])
     }
   end
 end

@@ -239,6 +239,13 @@ defmodule Emisint.Assessments.MdeEntityMasterImporter do
         Map.put(acc, field, nilify(val))
       end)
 
+    attrs =
+      attrs
+      |> Map.update(:entity_code, nil, &normalize_entity_code/1)
+      |> Map.update(:isd_code, nil, &normalize_entity_code/1)
+      |> Map.update(:district_code, nil, &normalize_entity_code/1)
+      |> Map.update(:entity_geographic_lea_district_code, nil, &normalize_entity_code/1)
+
     if is_nil(attrs[:entity_code]), do: nil, else: attrs
   end
 
@@ -283,4 +290,13 @@ defmodule Emisint.Assessments.MdeEntityMasterImporter do
   end
 
   defp nilify(val), do: val
+
+  defp normalize_entity_code(nil), do: nil
+
+  defp normalize_entity_code(code) do
+    case String.trim_leading(code, "0") do
+      "" -> "0"
+      stripped -> stripped
+    end
+  end
 end
