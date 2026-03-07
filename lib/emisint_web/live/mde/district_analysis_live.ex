@@ -39,7 +39,10 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:selected_building_code, nil)
      |> assign(:enrollment, nil)
      |> assign(:school_vs_lea, nil)
-     |> assign(:sat_results, [])}
+     |> assign(:sat_results, [])
+     |> assign(:sat_lea_result, nil)
+     |> assign(:sat_state_result, nil)
+     |> assign(:econ_grade_breakdown, [])}
   end
 
   def handle_params(%{"district_code" => dc} = params, _uri, socket) do
@@ -94,6 +97,29 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         []
       end
 
+    sat_lea_result =
+      if tab == "school_vs_lea" && school_vs_lea && !school_vs_lea.no_lea_found &&
+           school_vs_lea.lea_district_code && year != "" do
+        load_sat_lea_result(school_vs_lea.lea_district_code, year)
+      else
+        nil
+      end
+
+    sat_state_result =
+      if tab == "school_vs_lea" && year != "" do
+        load_sat_state_result(year)
+      else
+        nil
+      end
+
+    econ_grade_breakdown =
+      if tab == "school_vs_lea" && effective_building_code && year != "" do
+        lea_dc = school_vs_lea && school_vs_lea.lea_district_code
+        load_econ_grade_breakdown(effective_building_code, lea_dc, year)
+      else
+        []
+      end
+
     {:noreply,
      socket
      |> assign(:district_code, dc)
@@ -106,6 +132,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:enrollment, enrollment)
      |> assign(:school_vs_lea, school_vs_lea)
      |> assign(:sat_results, sat_results)
+     |> assign(:sat_lea_result, sat_lea_result)
+     |> assign(:sat_state_result, sat_state_result)
+     |> assign(:econ_grade_breakdown, econ_grade_breakdown)
      |> assign(:page_title, page_title(primary, compare))}
   end
 
@@ -161,6 +190,29 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         socket.assigns.sat_results
       end
 
+    sat_lea_result =
+      if tab == "school_vs_lea" && school_vs_lea && !school_vs_lea.no_lea_found &&
+           school_vs_lea.lea_district_code && year != "" do
+        load_sat_lea_result(school_vs_lea.lea_district_code, year)
+      else
+        socket.assigns.sat_lea_result
+      end
+
+    sat_state_result =
+      if tab == "school_vs_lea" && year != "" do
+        load_sat_state_result(year)
+      else
+        socket.assigns.sat_state_result
+      end
+
+    econ_grade_breakdown =
+      if tab == "school_vs_lea" && effective_building_code && year != "" do
+        lea_dc = school_vs_lea && school_vs_lea.lea_district_code
+        load_econ_grade_breakdown(effective_building_code, lea_dc, year)
+      else
+        socket.assigns.econ_grade_breakdown
+      end
+
     {:noreply,
      socket
      |> assign(:selected_year, year)
@@ -168,7 +220,10 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:compare, compare)
      |> assign(:enrollment, enrollment)
      |> assign(:school_vs_lea, school_vs_lea)
-     |> assign(:sat_results, sat_results)}
+     |> assign(:sat_results, sat_results)
+     |> assign(:sat_lea_result, sat_lea_result)
+     |> assign(:sat_state_result, sat_state_result)
+     |> assign(:econ_grade_breakdown, econ_grade_breakdown)}
   end
 
   def handle_event("select_compare", %{"compare" => ""}, socket) do
@@ -676,11 +731,124 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
               </div>
             </div>
 
-            <%!-- SAT College Readiness --%>
+            <%!-- Grade breakdown — Economically Disadvantaged --%>
+            <div :if={@econ_grade_breakdown != []} class="space-y-3">
+              <div class="flex items-center gap-2">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                  Grade-Level Breakdown — ELA &amp; Math
+                </h2>
+                <span class="text-xs font-medium text-warning bg-warning/10 px-2 py-0.5">
+                  Economically Disadvantaged
+                </span>
+                <div class="flex-1 h-px bg-base-200"></div>
+              </div>
+
+              <div class="bg-base-100 border border-base-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-base-200 bg-base-50">
+                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Grade
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          ELA — School
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide">
+                          ELA — LEA
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-success uppercase tracking-wide">
+                          ELA — State
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          Math — School
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide">
+                          Math — LEA
+                        </th>
+                        <th class="text-right px-4 py-3 text-xs font-medium text-success uppercase tracking-wide">
+                          Math — State
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-base-200">
+                      <tr :for={row <- @econ_grade_breakdown} class="hover:bg-base-50">
+                        <td class="px-4 py-2.5 font-medium text-xs">{grade_label(row.grade)}</td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.school_ela} color="info" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.lea_ela} color="warning" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.state_ela} color="success" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.school_math} color="info" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.lea_math} color="warning" />
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <.pct_badge value={row.state_math} color="success" />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <%!-- SAT By Subject --%>
             <div :if={@sat_results != []} class="space-y-3">
               <div class="flex items-center gap-2">
                 <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  SAT College Readiness
+                  SAT College Readiness by Subject
+                </h2>
+                <div class="flex-1 h-px bg-base-200"></div>
+              </div>
+
+              <div class="bg-base-100 border border-base-200 p-5 space-y-5">
+                <% sat_all = Enum.find(@sat_results, &(&1.subgroup == "All Students")) %>
+                <% lea_label =
+                  short_name(
+                    @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA"
+                  ) %>
+                <.sat_score_bar
+                  subject="Math Score"
+                  score={sat_all && sat_all.math_score_average}
+                  compare={@sat_lea_result && @sat_lea_result.math_score_average}
+                  compare_label={@sat_lea_result && lea_label}
+                  state={@sat_state_result && @sat_state_result.math_score_average}
+                  max={800}
+                  label={short_name(@school_vs_lea.school_name)}
+                />
+                <.sat_score_bar
+                  subject="EBRW Score"
+                  score={sat_all && sat_all.ebrw_score_average}
+                  compare={@sat_lea_result && @sat_lea_result.ebrw_score_average}
+                  compare_label={@sat_lea_result && lea_label}
+                  state={@sat_state_result && @sat_state_result.ebrw_score_average}
+                  max={800}
+                  label={short_name(@school_vs_lea.school_name)}
+                />
+                <.sat_score_bar
+                  subject="All Score"
+                  score={sat_all && sat_all.all_subject_score_average}
+                  compare={@sat_lea_result && @sat_lea_result.all_subject_score_average}
+                  compare_label={@sat_lea_result && lea_label}
+                  state={@sat_state_result && @sat_state_result.all_subject_score_average}
+                  max={1600}
+                  label={short_name(@school_vs_lea.school_name)}
+                />
+              </div>
+            </div>
+
+            <%!-- SAT College Readiness by Subgroup --%>
+            <div :if={@sat_results != []} class="space-y-3">
+              <div class="flex items-center gap-2">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
+                  SAT College Readiness by Subgroup
                 </h2>
                 <div class="flex-1 h-px bg-base-200"></div>
               </div>
@@ -708,7 +876,16 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-base-200">
-                      <tr :for={row <- @sat_results} class="hover:bg-base-50">
+                      <tr
+                        :for={
+                          row <-
+                            Enum.filter(@sat_results, &(&1.subgroup in [
+                              "All Students",
+                              "Economically Disadvantaged"
+                            ]))
+                        }
+                        class="hover:bg-base-50"
+                      >
                         <td class="px-4 py-2.5 font-medium text-xs">{row.subgroup || "All Students"}</td>
                         <td class="px-4 py-2.5 text-right text-xs text-base-content/60">
                           {if row.math_num_assessed, do: format_number(row.math_num_assessed), else: "—"}
@@ -1030,6 +1207,215 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     """
   end
 
+  attr :subject, :string, required: true
+  attr :score, :any, default: nil
+  attr :compare, :any, default: nil
+  attr :compare_label, :string, default: nil
+  attr :state, :any, default: nil
+  attr :state_label, :string, default: "State Avg"
+  attr :max, :integer, required: true
+  attr :label, :string, default: ""
+
+  def sat_score_bar(assigns) do
+    score_f = if assigns.score, do: Decimal.to_float(assigns.score), else: nil
+    compare_f = if assigns.compare, do: Decimal.to_float(assigns.compare), else: nil
+    state_f = if assigns.state, do: Decimal.to_float(assigns.state), else: nil
+    pct = if score_f, do: Float.round(score_f / assigns.max * 100, 4), else: 0.0
+    compare_pct = if compare_f, do: Float.round(compare_f / assigns.max * 100, 4), else: nil
+    state_pct = if state_f, do: Float.round(state_f / assigns.max * 100, 4), else: nil
+
+    assigns =
+      assigns
+      |> assign(:score_f, score_f)
+      |> assign(:compare_f, compare_f)
+      |> assign(:state_f, state_f)
+      |> assign(:pct, pct)
+      |> assign(:compare_pct, compare_pct)
+      |> assign(:state_pct, state_pct)
+      |> assign(:score_display, if(assigns.score, do: Decimal.round(assigns.score, 2), else: nil))
+      |> assign(
+        :compare_display,
+        if(assigns.compare, do: Decimal.round(assigns.compare, 2), else: nil)
+      )
+      |> assign(
+        :state_display,
+        if(assigns.state, do: Decimal.round(assigns.state, 2), else: nil)
+      )
+      |> assign(:quarter, div(assigns.max, 4))
+      |> assign(:half, div(assigns.max, 2))
+      |> assign(:three_quarter, div(assigns.max * 3, 4))
+
+    ~H"""
+    <div class="space-y-1">
+      <%!-- Header: subject label + score badges --%>
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="font-semibold text-base-content/70">{@subject}</span>
+        <div class="flex items-center gap-4">
+          <span :if={@state_display} class="flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-success"></span>
+            <span class="tabular-nums text-success font-semibold">{@state_display}</span>
+          </span>
+          <span :if={@compare_display} class="flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-warning"></span>
+            <span class="tabular-nums text-warning font-semibold">{@compare_display}</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-info"></span>
+            <span class="tabular-nums text-info font-semibold">
+              {if @score_display, do: @score_display, else: "—"}
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <%!-- School bar --%>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-base-content/40 w-20 truncate text-right">{@label}</span>
+        <div class="flex-1 bg-base-200 h-5 relative">
+          <div class="h-5 bg-info/70 transition-all duration-500" style={"width: #{@pct}%"}>
+          </div>
+          <div
+            :if={@compare_pct}
+            class="absolute top-0 bottom-0 w-0.5 bg-warning"
+            style={"left: #{@compare_pct}%"}
+            title={"#{@compare_label}: #{@compare_display}"}
+          >
+          </div>
+          <div
+            :if={@state_pct}
+            class="absolute top-0 bottom-0 w-0.5 bg-success"
+            style={"left: #{@state_pct}%"}
+            title={"#{@state_label}: #{@state_display}"}
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 25%"
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 50%"
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 75%"
+          >
+          </div>
+        </div>
+      </div>
+
+      <%!-- LEA compare bar --%>
+      <div :if={@compare_label} class="flex items-center gap-2">
+        <span class="text-xs text-base-content/40 w-20 truncate text-right">{@compare_label}</span>
+        <div class="flex-1 bg-base-200 h-5 relative">
+          <div
+            class="h-5 bg-warning/70 transition-all duration-500"
+            style={"width: #{@compare_pct || 0}%"}
+          >
+          </div>
+          <div
+            :if={@pct > 0}
+            class="absolute top-0 bottom-0 w-0.5 bg-info"
+            style={"left: #{@pct}%"}
+            title={"#{@label}: #{@score_display}"}
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 25%"
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 50%"
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 75%"
+          >
+          </div>
+        </div>
+      </div>
+
+      <%!-- State bar --%>
+      <div :if={@state_f} class="flex items-center gap-2">
+        <span class="text-xs text-base-content/40 w-20 truncate text-right">{@state_label}</span>
+        <div class="flex-1 bg-base-200 h-5 relative">
+          <div
+            class="h-5 bg-success/70 transition-all duration-500"
+            style={"width: #{@state_pct}%"}
+          >
+          </div>
+          <div
+            :if={@pct > 0}
+            class="absolute top-0 bottom-0 w-0.5 bg-info"
+            style={"left: #{@pct}%"}
+            title={"#{@label}: #{@score_display}"}
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 25%"
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 50%"
+          >
+          </div>
+          <div
+            class="absolute top-0 bottom-0 w-px bg-base-400/40 pointer-events-none"
+            style="left: 75%"
+          >
+          </div>
+        </div>
+      </div>
+
+      <%!-- Scale labels --%>
+      <div class="flex items-center gap-2">
+        <span class="w-20 shrink-0"></span>
+        <div class="flex-1 flex justify-between text-xs text-base-content/30 tabular-nums mt-0.5">
+          <span>0</span>
+          <span>{@quarter}</span>
+          <span>{@half}</span>
+          <span>{@three_quarter}</span>
+          <span>{@max}</span>
+        </div>
+      </div>
+
+      <%!-- Delta badges --%>
+      <div :if={@score_f && (@compare_f || @state_f)} class="flex justify-end gap-2">
+        <% delta_compare =
+          if @score_f && @compare_f, do: Float.round(@score_f - @compare_f, 1), else: nil %>
+        <% delta_state =
+          if @score_f && @state_f, do: Float.round(@score_f - @state_f, 1), else: nil %>
+        <span
+          :if={delta_compare}
+          class={[
+            "text-xs font-semibold tabular-nums px-1.5 py-0.5",
+            if(delta_compare >= 0, do: "text-success bg-success/10", else: "text-error bg-error/10")
+          ]}
+        >
+          {if delta_compare >= 0, do: "+#{delta_compare}", else: "#{delta_compare}"} pts vs {@compare_label ||
+            "LEA"}
+        </span>
+        <span
+          :if={delta_state}
+          class={[
+            "text-xs font-semibold tabular-nums px-1.5 py-0.5",
+            if(delta_state >= 0, do: "text-success bg-success/10", else: "text-error bg-error/10")
+          ]}
+        >
+          {if delta_state >= 0, do: "+#{delta_state}", else: "#{delta_state}"} pts vs {@state_label}
+        </span>
+      </div>
+    </div>
+    """
+  end
+
   attr :value, :any, default: nil
   attr :color, :string, default: "info"
 
@@ -1177,6 +1563,120 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     |> Ash.Query.sort(:subgroup)
     |> Ash.read!(authorize?: false)
   end
+
+  defp load_sat_lea_result(lea_district_code, year) do
+    MdeSatResult
+    |> Ash.Query.filter(
+      district_code == ^lea_district_code and school_year == ^year and
+        rollup_level == :district and subgroup == "All Students"
+    )
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  # State aggregate row: ISDCode=0, DistrictCode=0, BuildingCode=0 → stored as rollup_level :isd with isd_code "0"
+  defp load_sat_state_result(year) do
+    MdeSatResult
+    |> Ash.Query.filter(
+      rollup_level == :isd and isd_code == "0" and school_year == ^year and
+        subgroup == "All Students"
+    )
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  defp load_econ_grade_breakdown(building_code, lea_district_code, year) do
+    school_rows =
+      MdeStateAssessmentResult
+      |> Ash.Query.filter(
+        rollup_level == :building and
+          mde_building.building_code == ^building_code and
+          school_year == ^year and
+          report_category == "Economically Disadvantaged" and
+          grade_content_tested != "All"
+      )
+      |> Ash.read!(authorize?: false)
+
+    lea_rows =
+      if lea_district_code do
+        MdeStateAssessmentResult
+        |> Ash.Query.filter(
+          rollup_level == :district and
+            mde_district.district_code == ^lea_district_code and
+            school_year == ^year and
+            report_category == "Economically Disadvantaged" and
+            grade_content_tested != "All"
+        )
+        |> Ash.read!(authorize?: false)
+      else
+        []
+      end
+
+    state_rows =
+      MdeStateAssessmentResult
+      |> Ash.Query.filter(
+        rollup_level == :isd and
+          mde_isd.isd_code == "0" and
+          school_year == ^year and
+          report_category == "Economically Disadvantaged" and
+          grade_content_tested != "All"
+      )
+      |> Ash.read!(authorize?: false)
+
+    school_grades = Enum.group_by(school_rows, & &1.grade_content_tested)
+    lea_grades = Enum.group_by(lea_rows, & &1.grade_content_tested)
+    state_grades = Enum.group_by(state_rows, & &1.grade_content_tested)
+
+    all_grades =
+      (Map.keys(school_grades) ++ Map.keys(lea_grades))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    Enum.map(all_grades, fn grade ->
+      s = Map.get(school_grades, grade, [])
+      l = Map.get(lea_grades, grade, [])
+      st = Map.get(state_grades, grade, [])
+
+      %{
+        grade: grade,
+        school_ela:
+          s |> Enum.filter(&(&1.subject == "ELA")) |> weighted_proficiency_float() |> maybe_decimal(),
+        lea_ela:
+          l |> Enum.filter(&(&1.subject == "ELA")) |> weighted_proficiency_float() |> maybe_decimal(),
+        state_ela:
+          st |> Enum.filter(&(&1.subject == "ELA")) |> weighted_proficiency_float() |> maybe_decimal(),
+        school_math:
+          s
+          |> Enum.filter(&(&1.subject == "Mathematics"))
+          |> weighted_proficiency_float()
+          |> maybe_decimal(),
+        lea_math:
+          l
+          |> Enum.filter(&(&1.subject == "Mathematics"))
+          |> weighted_proficiency_float()
+          |> maybe_decimal(),
+        state_math:
+          st
+          |> Enum.filter(&(&1.subject == "Mathematics"))
+          |> weighted_proficiency_float()
+          |> maybe_decimal()
+      }
+    end)
+  end
+
+  defp weighted_proficiency_float([]), do: nil
+
+  defp weighted_proficiency_float(rows) do
+    {total_assessed, total_prof} =
+      Enum.reduce(rows, {0, 0.0}, fn r, {assessed, prof} ->
+        pct = if r.percent_met, do: Decimal.to_float(r.percent_met), else: 0.0
+        n = r.number_assessed || 0
+        {assessed + n, prof + pct * n / 100.0}
+      end)
+
+    if total_assessed > 0, do: Float.round(total_prof / total_assessed * 100.0, 1), else: nil
+  end
+
+  defp maybe_decimal(nil), do: nil
+  defp maybe_decimal(f), do: Decimal.from_float(f)
 
   defp load_school_vs_lea(building_code, year) do
     snapshot =
