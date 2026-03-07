@@ -697,19 +697,13 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                           Assessed
                         </th>
                         <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
-                          Math
-                        </th>
-                        <th class="text-right px-4 py-3 text-xs font-medium text-secondary uppercase tracking-wide">
-                          Reading
-                        </th>
-                        <th class="text-right px-4 py-3 text-xs font-medium text-accent uppercase tracking-wide">
-                          English
+                          Math Score
                         </th>
                         <th class="text-right px-4 py-3 text-xs font-medium text-success uppercase tracking-wide">
-                          EBRW
+                          EBRW Score
                         </th>
                         <th class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide">
-                          All Subjects
+                          All Score
                         </th>
                       </tr>
                     </thead>
@@ -719,20 +713,14 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                         <td class="px-4 py-2.5 text-right text-xs text-base-content/60">
                           {if row.math_num_assessed, do: format_number(row.math_num_assessed), else: "—"}
                         </td>
-                        <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.math_percent_ready} color="info" />
+                        <td class="px-4 py-2.5 text-right text-xs font-semibold tabular-nums text-info">
+                          {if row.math_score_average, do: Decimal.round(row.math_score_average, 2), else: "—"}
                         </td>
-                        <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.reading_percent_ready} color="secondary" />
+                        <td class="px-4 py-2.5 text-right text-xs font-semibold tabular-nums text-success">
+                          {if row.ebrw_score_average, do: Decimal.round(row.ebrw_score_average, 2), else: "—"}
                         </td>
-                        <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.english_percent_ready} color="accent" />
-                        </td>
-                        <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.ebrw_percent_ready} color="success" />
-                        </td>
-                        <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.all_subject_percent_ready} color="warning" />
+                        <td class="px-4 py-2.5 text-right text-xs font-semibold tabular-nums text-warning">
+                          {if row.all_subject_score_average, do: Decimal.round(row.all_subject_score_average, 2), else: "—"}
                         </td>
                       </tr>
                     </tbody>

@@ -104,8 +104,13 @@
 
 // Proficiency % badge — colour-coded by threshold (value is 0–100)
 #let pct-badge(v, school: false) = {
-  // Coerce strings (e.g. from JSON decode edge cases) to numbers
-  let v = if type(v) == "string" { float(v) } else { v }
+  // Handle none / nil first
+  let v = if v == none { none }
+          else if type(v) == str {
+            let trimmed = v.trim()
+            if trimmed == "nil" or trimmed == "" or trimmed == "N/A" { none }
+            else { float(trimmed) }
+          } else { v }
   if v == none {
     box(fill: c-row-alt, inset: (x: 7pt, y: 3pt), radius: 3pt,
       text(fill: c-muted, weight: "bold", size: 8.5pt, "—"))
