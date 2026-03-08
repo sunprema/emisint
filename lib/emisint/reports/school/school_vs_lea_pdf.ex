@@ -57,6 +57,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           grade_breakdown: [],
           enrollment: enrollment,
           sat_results: sat_results,
+          sat_score_bars: [],
           entity_details: entity_details
         }
 
@@ -64,6 +65,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
         subjects = snapshot_to_subjects(snap.subject_comparison)
         grades = snapshot_to_grades(snap.grade_breakdown)
         all_subjects_avg = snapshot_to_all_subjects_avg(snap.all_subjects_avg)
+        sat_score_bars = load_sat_score_bars(building_code, snap.lea_district_code, year)
 
         %{
           school: %{
@@ -85,6 +87,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           grade_breakdown: grades,
           enrollment: enrollment,
           sat_results: sat_results,
+          sat_score_bars: sat_score_bars,
           entity_details: entity_details
         }
     end
@@ -144,6 +147,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     end
   end
 
+  @sat_subgroups ["All Students", "Economically Disadvantaged"]
+
   defp load_sat_data(building_code, year) do
     MdeSatResult
     |> Ash.Query.filter(
@@ -151,17 +156,76 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     )
     |> Ash.Query.sort(:subgroup)
     |> Ash.read!(authorize?: false)
+    |> Enum.filter(&((&1.subgroup || "All Students") in @sat_subgroups))
     |> Enum.map(fn row ->
       %{
         subgroup: row.subgroup || "All Students",
         num_assessed: row.math_num_assessed,
-        math_percent_ready: decimal_to_float(row.math_percent_ready),
-        reading_percent_ready: decimal_to_float(row.reading_percent_ready),
-        english_percent_ready: decimal_to_float(row.english_percent_ready),
-        ebrw_percent_ready: decimal_to_float(row.ebrw_percent_ready),
-        all_subject_percent_ready: decimal_to_float(row.all_subject_percent_ready)
+        math_score_average: decimal_to_float(row.math_score_average),
+        ebrw_score_average: decimal_to_float(row.ebrw_score_average),
+        all_subject_score_average: decimal_to_float(row.all_subject_score_average)
       }
     end)
+  end
+
+  defp load_sat_score_bars(building_code, lea_district_code, year) do
+    school_row =
+      MdeSatResult
+      |> Ash.Query.filter(
+        building_code == ^building_code and school_year == ^year and
+          rollup_level == :building and subgroup == "All Students"
+      )
+      |> Ash.read_one!(authorize?: false)
+
+    lea_row =
+      if lea_district_code do
+        MdeSatResult
+        |> Ash.Query.filter(
+          district_code == ^lea_district_code and school_year == ^year and
+            rollup_level == :district and subgroup == "All Students"
+        )
+        |> Ash.read_one!(authorize?: false)
+      end
+
+    state_row =
+      MdeSatResult
+      |> Ash.Query.filter(
+        rollup_level == :isd and isd_code == "0" and school_year == ^year and
+          subgroup == "All Students"
+      )
+      |> Ash.read_one!(authorize?: false)
+
+    school_math = school_row && decimal_to_float(school_row.math_score_average)
+    school_ebrw = school_row && decimal_to_float(school_row.ebrw_score_average)
+    school_all = school_row && decimal_to_float(school_row.all_subject_score_average)
+
+    if is_nil(school_math) and is_nil(school_ebrw) and is_nil(school_all) do
+      []
+    else
+      [
+        %{
+          subject: "Math Score",
+          school: school_math,
+          lea: lea_row && decimal_to_float(lea_row.math_score_average),
+          state: state_row && decimal_to_float(state_row.math_score_average),
+          max_val: 800
+        },
+        %{
+          subject: "EBRW Score",
+          school: school_ebrw,
+          lea: lea_row && decimal_to_float(lea_row.ebrw_score_average),
+          state: state_row && decimal_to_float(state_row.ebrw_score_average),
+          max_val: 800
+        },
+        %{
+          subject: "All Score",
+          school: school_all,
+          lea: lea_row && decimal_to_float(lea_row.all_subject_score_average),
+          state: state_row && decimal_to_float(state_row.all_subject_score_average),
+          max_val: 1600
+        }
+      ]
+    end
   end
 
   defp decimal_to_float(nil), do: nil
