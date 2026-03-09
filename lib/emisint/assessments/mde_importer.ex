@@ -50,6 +50,8 @@ defmodule Emisint.Assessments.MdeImporter do
     :percent_attained,
     :percent_emerging_towards,
     :percent_met,
+    :percent_met_suppressed,
+    :percent_met_approximate,
     :percent_did_not_meet,
     :avg_ss,
     :std_dev_ss,
@@ -337,7 +339,9 @@ defmodule Emisint.Assessments.MdeImporter do
       percent_surpassed: parse_decimal(row["PercentSurpassed"]),
       percent_attained: parse_decimal(row["PercentAttained"]),
       percent_emerging_towards: parse_decimal(row["PercentEmergingTowards"]),
-      percent_met: parse_decimal(row["PercentMet"]),
+      percent_met: parse_suppressed_decimal(row["PercentMet"]),
+      percent_met_suppressed: suppressed?(row["PercentMet"]),
+      percent_met_approximate: approximate?(row["PercentMet"]),
       percent_did_not_meet: parse_decimal(row["PercentDidNotMeet"]),
       avg_ss: parse_decimal(row["AvgSS"]),
       std_dev_ss: parse_decimal(row["StdDevSS"]),
@@ -453,6 +457,44 @@ defmodule Emisint.Assessments.MdeImporter do
     case Decimal.parse(String.trim(val)) do
       {d, _} -> d
       :error -> nil
+    end
+  end
+
+  # Returns true when MDE has published "*" — FERPA small-cell suppression.
+  defp suppressed?(val) when is_binary(val), do: String.trim(val) == "*"
+  defp suppressed?(_), do: false
+
+  # Matches Rule 2 range values: "<=5%", ">=95%", ">90%", "<=50%", ">=50%", etc.
+  @range_pattern ~r/^[<>]=?\s*(\d+(?:\.\d+)?)\s*%?$/
+
+  # Returns true when MDE published a Rule 2 range value (e.g. "<=5%", ">=95%").
+  # The numeric boundary is stored; this flag lets the UI indicate approximation.
+  defp approximate?(val) when is_binary(val) do
+    trimmed = String.trim(val)
+    trimmed != "*" && Regex.match?(@range_pattern, trimmed)
+  end
+
+  defp approximate?(_), do: false
+
+  # Like parse_decimal/1 but also handles:
+  #   - "*"      → nil (FERPA suppression, Rule 1)
+  #   - range strings like "<=5%", ">=95%", ">90%", "<=50%", ">=50%" → boundary
+  #     value as decimal (Rule 2). MDE uses these when the exact value would
+  #     identify a small cohort that is not fully suppressed. We use the numeric
+  #     boundary as the stored value.
+  defp parse_suppressed_decimal(val) when is_binary(val) do
+    case String.trim(val) do
+      "*" -> nil
+      trimmed -> trimmed |> strip_range_operators() |> parse_decimal()
+    end
+  end
+
+  defp parse_suppressed_decimal(val), do: parse_decimal(val)
+
+  defp strip_range_operators(val) do
+    case Regex.run(@range_pattern, val, capture: :all_but_first) do
+      [number] -> number
+      nil -> val
     end
   end
 end

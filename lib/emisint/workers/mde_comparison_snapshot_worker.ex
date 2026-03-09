@@ -400,20 +400,27 @@ defmodule Emisint.Workers.MdeComparisonSnapshotWorker do
       l = Map.get(lea_grades, grade, [])
       st = Map.get(state_grades, grade, [])
 
-      school_ela = weighted_proficiency_float(Enum.filter(s, &(&1.subject == "ELA")))
+      school_ela_rows = Enum.filter(s, &(&1.subject == "ELA"))
+      school_math_rows = Enum.filter(s, &(&1.subject == "Mathematics"))
+
+      school_ela = weighted_proficiency_float(school_ela_rows)
       lea_ela = weighted_proficiency_float(Enum.filter(l, &(&1.subject == "ELA")))
       state_ela = weighted_proficiency_float(Enum.filter(st, &(&1.subject == "ELA")))
-      school_math = weighted_proficiency_float(Enum.filter(s, &(&1.subject == "Mathematics")))
+      school_math = weighted_proficiency_float(school_math_rows)
       lea_math = weighted_proficiency_float(Enum.filter(l, &(&1.subject == "Mathematics")))
       state_math = weighted_proficiency_float(Enum.filter(st, &(&1.subject == "Mathematics")))
 
       %{
         "grade" => grade,
         "school_ela" => school_ela,
+        "school_ela_suppressed" => all_suppressed?(school_ela_rows),
+        "school_ela_approximate" => any_approximate?(school_ela_rows),
         "lea_ela" => lea_ela,
         "state_ela" => state_ela,
         "ela_delta" => if(school_ela && lea_ela, do: Float.round(school_ela - lea_ela, 1), else: nil),
         "school_math" => school_math,
+        "school_math_suppressed" => all_suppressed?(school_math_rows),
+        "school_math_approximate" => any_approximate?(school_math_rows),
         "lea_math" => lea_math,
         "state_math" => state_math,
         "math_delta" =>
@@ -422,11 +429,24 @@ defmodule Emisint.Workers.MdeComparisonSnapshotWorker do
     end)
   end
 
+  # True when there are rows but every one is FERPA-suppressed — meaning the
+  # nil value from weighted_proficiency_float/1 represents "*", not missing data.
+  defp all_suppressed?([]), do: false
+  defp all_suppressed?(rows), do: Enum.all?(rows, & &1.percent_met_suppressed)
+
+  # True when any non-suppressed row contributing to the aggregate is a Rule 2
+  # range approximation (e.g. "<=50%" stored as 50). Signals the UI to show a
+  # light gray background so users know the value is a boundary, not exact.
+  defp any_approximate?([]), do: false
+  defp any_approximate?(rows), do: Enum.any?(rows, & &1.percent_met_approximate)
+
   defp weighted_proficiency_float([]), do: nil
 
   defp weighted_proficiency_float(rows) do
     {total_assessed, total_prof} =
-      Enum.reduce(rows, {0, 0.0}, fn r, {assessed, prof} ->
+      rows
+      |> Enum.reject(& &1.percent_met_suppressed)
+      |> Enum.reduce({0, 0.0}, fn r, {assessed, prof} ->
         pct = if r.percent_met, do: Decimal.to_float(r.percent_met), else: 0.0
         n = r.number_assessed || 0
 

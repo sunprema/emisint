@@ -707,7 +707,12 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                       <tr :for={row <- @school_vs_lea.grade_breakdown} class="hover:bg-base-50">
                         <td class="px-4 py-2.5 font-medium text-xs">{grade_label(row.grade)}</td>
                         <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.school_ela} color="info" />
+                          <.pct_badge
+                            value={row.school_ela}
+                            color="info"
+                            suppressed={row.school_ela_suppressed}
+                            approximate={row.school_ela_approximate}
+                          />
                         </td>
                         <td class="px-4 py-2.5 text-right">
                           <.pct_badge value={row.lea_ela} color="warning" />
@@ -716,7 +721,12 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                           <.pct_badge value={row.state_ela} color="success" />
                         </td>
                         <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.school_math} color="info" />
+                          <.pct_badge
+                            value={row.school_math}
+                            color="info"
+                            suppressed={row.school_math_suppressed}
+                            approximate={row.school_math_approximate}
+                          />
                         </td>
                         <td class="px-4 py-2.5 text-right">
                           <.pct_badge value={row.lea_math} color="warning" />
@@ -879,25 +889,38 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                       <tr
                         :for={
                           row <-
-                            Enum.filter(@sat_results, &(&1.subgroup in [
-                              "All Students",
-                              "Economically Disadvantaged"
-                            ]))
+                            Enum.filter(
+                              @sat_results,
+                              &(&1.subgroup in [
+                                  "All Students",
+                                  "Economically Disadvantaged"
+                                ])
+                            )
                         }
                         class="hover:bg-base-50"
                       >
-                        <td class="px-4 py-2.5 font-medium text-xs">{row.subgroup || "All Students"}</td>
+                        <td class="px-4 py-2.5 font-medium text-xs">
+                          {row.subgroup || "All Students"}
+                        </td>
                         <td class="px-4 py-2.5 text-right text-xs text-base-content/60">
-                          {if row.math_num_assessed, do: format_number(row.math_num_assessed), else: "—"}
+                          {if row.math_num_assessed,
+                            do: format_number(row.math_num_assessed),
+                            else: "—"}
                         </td>
                         <td class="px-4 py-2.5 text-right text-xs font-semibold tabular-nums text-info">
-                          {if row.math_score_average, do: Decimal.round(row.math_score_average, 2), else: "—"}
+                          {if row.math_score_average,
+                            do: Decimal.round(row.math_score_average, 2),
+                            else: "—"}
                         </td>
                         <td class="px-4 py-2.5 text-right text-xs font-semibold tabular-nums text-success">
-                          {if row.ebrw_score_average, do: Decimal.round(row.ebrw_score_average, 2), else: "—"}
+                          {if row.ebrw_score_average,
+                            do: Decimal.round(row.ebrw_score_average, 2),
+                            else: "—"}
                         </td>
                         <td class="px-4 py-2.5 text-right text-xs font-semibold tabular-nums text-warning">
-                          {if row.all_subject_score_average, do: Decimal.round(row.all_subject_score_average, 2), else: "—"}
+                          {if row.all_subject_score_average,
+                            do: Decimal.round(row.all_subject_score_average, 2),
+                            else: "—"}
                         </td>
                       </tr>
                     </tbody>
@@ -930,7 +953,12 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     {male_pct, female_pct} =
       if total > 0 do
         m = if is_integer(assigns.male), do: Float.round(assigns.male / total * 100, 1), else: 0.0
-        f = if is_integer(assigns.female), do: Float.round(assigns.female / total * 100, 1), else: 0.0
+
+        f =
+          if is_integer(assigns.female),
+            do: Float.round(assigns.female / total * 100, 1),
+            else: 0.0
+
         {m, f}
       else
         {0.0, 0.0}
@@ -1005,8 +1033,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       <%!-- Legend --%>
       <div class="space-y-2">
         <div class="flex items-center gap-2 text-xs">
-          <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#3b82f6">
-          </span>
+          <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#3b82f6"></span>
           <span class="text-base-content/60">Male</span>
           <span class="font-semibold tabular-nums">
             {if @male, do: format_number(@male), else: "—"}
@@ -1014,8 +1041,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           <span :if={@male_pct > 0} class="text-base-content/40">({@male_pct}%)</span>
         </div>
         <div class="flex items-center gap-2 text-xs">
-          <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#ec4899">
-          </span>
+          <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#ec4899"></span>
           <span class="text-base-content/60">Female</span>
           <span class="font-semibold tabular-nums">
             {if @female, do: format_number(@female), else: "—"}
@@ -1272,8 +1298,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       <div class="flex items-center gap-2">
         <span class="text-xs text-base-content/40 w-20 truncate text-right">{@label}</span>
         <div class="flex-1 bg-base-200 h-5 relative">
-          <div class="h-5 bg-info/70 transition-all duration-500" style={"width: #{@pct}%"}>
-          </div>
+          <div class="h-5 bg-info/70 transition-all duration-500" style={"width: #{@pct}%"}></div>
           <div
             :if={@compare_pct}
             class="absolute top-0 bottom-0 w-0.5 bg-warning"
@@ -1418,11 +1443,21 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
   attr :value, :any, default: nil
   attr :color, :string, default: "info"
+  attr :suppressed, :boolean, default: false
+  attr :approximate, :boolean, default: false
 
   def pct_badge(assigns) do
     ~H"""
-    <span class={"font-semibold tabular-nums text-#{@color}"}>
-      {if @value, do: "#{@value}%", else: "—"}
+    <span class={[
+      "font-semibold tabular-nums",
+      "text-#{@color}",
+      @approximate && "bg-yellow-200 px-1 rounded"
+    ]}>
+      {cond do
+        @value -> "#{@value}%"
+        @suppressed -> "*"
+        true -> "—"
+      end}
     </span>
     """
   end
@@ -1638,11 +1673,20 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       %{
         grade: grade,
         school_ela:
-          s |> Enum.filter(&(&1.subject == "ELA")) |> weighted_proficiency_float() |> maybe_decimal(),
+          s
+          |> Enum.filter(&(&1.subject == "ELA"))
+          |> weighted_proficiency_float()
+          |> maybe_decimal(),
         lea_ela:
-          l |> Enum.filter(&(&1.subject == "ELA")) |> weighted_proficiency_float() |> maybe_decimal(),
+          l
+          |> Enum.filter(&(&1.subject == "ELA"))
+          |> weighted_proficiency_float()
+          |> maybe_decimal(),
         state_ela:
-          st |> Enum.filter(&(&1.subject == "ELA")) |> weighted_proficiency_float() |> maybe_decimal(),
+          st
+          |> Enum.filter(&(&1.subject == "ELA"))
+          |> weighted_proficiency_float()
+          |> maybe_decimal(),
         school_math:
           s
           |> Enum.filter(&(&1.subject == "Mathematics"))
@@ -1666,7 +1710,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
   defp weighted_proficiency_float(rows) do
     {total_assessed, total_prof} =
-      Enum.reduce(rows, {0, 0.0}, fn r, {assessed, prof} ->
+      rows
+      |> Enum.reject(& &1.percent_met_suppressed)
+      |> Enum.reduce({0, 0.0}, fn r, {assessed, prof} ->
         pct = if r.percent_met, do: Decimal.to_float(r.percent_met), else: 0.0
         n = r.number_assessed || 0
         {assessed + n, prof + pct * n / 100.0}
@@ -1794,9 +1840,13 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       %{
         grade: row["grade"],
         school_ela: float_to_decimal(row["school_ela"]),
+        school_ela_suppressed: row["school_ela_suppressed"] || false,
+        school_ela_approximate: row["school_ela_approximate"] || false,
         lea_ela: float_to_decimal(row["lea_ela"]),
         state_ela: float_to_decimal(row["state_ela"]),
         school_math: float_to_decimal(row["school_math"]),
+        school_math_suppressed: row["school_math_suppressed"] || false,
+        school_math_approximate: row["school_math_approximate"] || false,
         lea_math: float_to_decimal(row["lea_math"]),
         state_math: float_to_decimal(row["state_math"])
       }

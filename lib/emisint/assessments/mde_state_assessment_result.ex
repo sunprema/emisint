@@ -48,6 +48,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :percent_attained,
         :percent_emerging_towards,
         :percent_met,
+        :percent_met_suppressed,
+        :percent_met_approximate,
         :percent_did_not_meet,
         :avg_ss,
         :std_dev_ss,
@@ -87,6 +89,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :percent_attained,
         :percent_emerging_towards,
         :percent_met,
+        :percent_met_suppressed,
+        :percent_met_approximate,
         :percent_did_not_meet,
         :avg_ss,
         :std_dev_ss,
@@ -124,6 +128,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :percent_attained,
         :percent_emerging_towards,
         :percent_met,
+        :percent_met_suppressed,
+        :percent_met_approximate,
         :percent_did_not_meet,
         :avg_ss,
         :std_dev_ss,
@@ -161,6 +167,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :percent_attained,
         :percent_emerging_towards,
         :percent_met,
+        :percent_met_suppressed,
+        :percent_met_approximate,
         :percent_did_not_meet,
         :avg_ss,
         :std_dev_ss,
@@ -199,6 +207,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :percent_attained,
         :percent_emerging_towards,
         :percent_met,
+        :percent_met_suppressed,
+        :percent_met_approximate,
         :percent_did_not_meet,
         :avg_ss,
         :std_dev_ss,
@@ -235,6 +245,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :percent_attained,
         :percent_emerging_towards,
         :percent_met,
+        :percent_met_suppressed,
+        :percent_met_approximate,
         :percent_did_not_meet,
         :avg_ss,
         :std_dev_ss,
@@ -273,6 +285,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :percent_attained,
         :percent_emerging_towards,
         :percent_met,
+        :percent_met_suppressed,
+        :percent_met_approximate,
         :percent_did_not_meet,
         :avg_ss,
         :std_dev_ss,
@@ -307,6 +321,8 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
         :percent_attained,
         :percent_emerging_towards,
         :percent_met,
+        :percent_met_suppressed,
+        :percent_met_approximate,
         :percent_did_not_meet,
         :avg_ss,
         :std_dev_ss,
@@ -479,6 +495,25 @@ defmodule Emisint.Assessments.MdeStateAssessmentResult do
 
     attribute :percent_met, :decimal do
       allow_nil? true
+      public? true
+    end
+
+    # True when MDE published "*" for PercentMet — FERPA small-cell suppression
+    # (cohort < 10 students). percent_met will be nil; this flag preserves the
+    # distinction so the UI can display "*" and calculations can exclude the row.
+    attribute :percent_met_suppressed, :boolean do
+      default false
+      allow_nil? false
+      public? true
+    end
+
+    # True when MDE published a range value for PercentMet (Rule 2), e.g. "<=5%",
+    # ">=95%", ">90%". The numeric boundary is stored in percent_met; this flag
+    # signals the UI to show a light gray background indicating the value is
+    # approximate, not an exact percentage.
+    attribute :percent_met_approximate, :boolean do
+      default false
+      allow_nil? false
       public? true
     end
 
