@@ -277,19 +277,42 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
       row = if is_binary(row), do: Jason.decode!(row), else: row
       grade = row["grade"]
 
+      school_ela = to_float(row["school_ela"])
+      school_math = to_float(row["school_math"])
+      school_ela_suppressed = row["school_ela_suppressed"] || false
+      school_ela_approximate = row["school_ela_approximate"] || false
+      school_math_suppressed = row["school_math_suppressed"] || false
+      school_math_approximate = row["school_math_approximate"] || false
+
       %{
         grade: "Grade #{grade}",
-        school_ela: to_float(row["school_ela"]),
+        school_ela: school_ela,
+        school_ela_suppressed: school_ela_suppressed,
+        school_ela_approximate: school_ela_approximate,
+        school_ela_display: grade_display(school_ela, school_ela_suppressed, school_ela_approximate),
         lea_ela: to_float(row["lea_ela"]),
         state_ela: to_float(row["state_ela"]),
         ela_delta: to_float(row["ela_delta"]),
-        school_math: to_float(row["school_math"]),
+        school_math: school_math,
+        school_math_suppressed: school_math_suppressed,
+        school_math_approximate: school_math_approximate,
+        school_math_display: grade_display(school_math, school_math_suppressed, school_math_approximate),
         lea_math: to_float(row["lea_math"]),
         state_math: to_float(row["state_math"]),
         math_delta: to_float(row["math_delta"])
       }
     end)
   end
+
+  # Produces a display string for the PDF template:
+  #   - "*"       when suppressed (FERPA Rule 1)
+  #   - "X.X%*"   when a Rule 2 range approximation (yellow bg in UI)
+  #   - "X.X%"    when an exact value
+  #   - "—"       when no data
+  defp grade_display(nil, true, _approximate), do: "*"
+  defp grade_display(nil, _suppressed, _approximate), do: "—"
+  defp grade_display(value, _suppressed, true), do: "#{Float.round(value * 1.0, 1)}%*"
+  defp grade_display(value, _suppressed, _approximate), do: "#{Float.round(value * 1.0, 1)}%"
 
   defp snapshot_to_all_subjects_avg(nil),
     do: %{school_pct: nil, lea_pct: nil, state_pct: nil, delta: nil}

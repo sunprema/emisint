@@ -785,7 +785,12 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                       <tr :for={row <- @econ_grade_breakdown} class="hover:bg-base-50">
                         <td class="px-4 py-2.5 font-medium text-xs">{grade_label(row.grade)}</td>
                         <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.school_ela} color="info" />
+                          <.pct_badge
+                            value={row.school_ela}
+                            color="info"
+                            suppressed={row.school_ela_suppressed}
+                            approximate={row.school_ela_approximate}
+                          />
                         </td>
                         <td class="px-4 py-2.5 text-right">
                           <.pct_badge value={row.lea_ela} color="warning" />
@@ -794,7 +799,12 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                           <.pct_badge value={row.state_ela} color="success" />
                         </td>
                         <td class="px-4 py-2.5 text-right">
-                          <.pct_badge value={row.school_math} color="info" />
+                          <.pct_badge
+                            value={row.school_math}
+                            color="info"
+                            suppressed={row.school_math_suppressed}
+                            approximate={row.school_math_approximate}
+                          />
                         </td>
                         <td class="px-4 py-2.5 text-right">
                           <.pct_badge value={row.lea_math} color="warning" />
@@ -1454,6 +1464,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       @approximate && "bg-yellow-200 px-1 rounded"
     ]}>
       {cond do
+        @value && @approximate -> "#{@value}%*"
         @value -> "#{@value}%"
         @suppressed -> "*"
         true -> "—"
@@ -1670,13 +1681,14 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       l = Map.get(lea_grades, grade, [])
       st = Map.get(state_grades, grade, [])
 
+      school_ela_rows = Enum.filter(s, &(&1.subject == "ELA"))
+      school_math_rows = Enum.filter(s, &(&1.subject == "Mathematics"))
+
       %{
         grade: grade,
-        school_ela:
-          s
-          |> Enum.filter(&(&1.subject == "ELA"))
-          |> weighted_proficiency_float()
-          |> maybe_decimal(),
+        school_ela: school_ela_rows |> weighted_proficiency_float() |> maybe_decimal(),
+        school_ela_suppressed: all_suppressed?(school_ela_rows),
+        school_ela_approximate: any_approximate?(school_ela_rows),
         lea_ela:
           l
           |> Enum.filter(&(&1.subject == "ELA"))
@@ -1687,11 +1699,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           |> Enum.filter(&(&1.subject == "ELA"))
           |> weighted_proficiency_float()
           |> maybe_decimal(),
-        school_math:
-          s
-          |> Enum.filter(&(&1.subject == "Mathematics"))
-          |> weighted_proficiency_float()
-          |> maybe_decimal(),
+        school_math: school_math_rows |> weighted_proficiency_float() |> maybe_decimal(),
+        school_math_suppressed: all_suppressed?(school_math_rows),
+        school_math_approximate: any_approximate?(school_math_rows),
         lea_math:
           l
           |> Enum.filter(&(&1.subject == "Mathematics"))
@@ -1705,6 +1715,12 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       }
     end)
   end
+
+  defp all_suppressed?([]), do: false
+  defp all_suppressed?(rows), do: Enum.all?(rows, & &1.percent_met_suppressed)
+
+  defp any_approximate?([]), do: false
+  defp any_approximate?(rows), do: Enum.any?(rows, & &1.percent_met_approximate)
 
   defp weighted_proficiency_float([]), do: nil
 

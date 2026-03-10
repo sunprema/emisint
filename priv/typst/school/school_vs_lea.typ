@@ -103,7 +103,11 @@
 )
 
 // Proficiency % badge — colour-coded by threshold (value is 0–100)
-#let pct-badge(v, school: false) = {
+// approximate: true adds a "*" suffix and light gray background to signal a
+// Rule 2 range value (e.g. "<=50%" stored as 50).
+#let pct-badge(v, school: false, approximate: false) = {
+  // JSON round-trip may deliver booleans as strings — normalise to bool
+  let approximate = if type(approximate) == str { approximate == "true" } else { approximate }
   // Handle none / nil first
   let v = if v == none { none }
           else if type(v) == str {
@@ -115,15 +119,18 @@
     box(fill: c-row-alt, inset: (x: 7pt, y: 3pt), radius: 3pt,
       text(fill: c-muted, weight: "bold", size: 8.5pt, "—"))
   } else {
-    let (bg, fg) = if v >= 60 {
+    let (bg, fg) = if approximate {
+      (luma(220), rgb("#555555"))
+    } else if v >= 60 {
       (c-green-bg, c-green)
     } else if v >= 40 {
       (c-amber-bg, c-amber)
     } else {
       (c-red-bg, c-red)
     }
+    let label = str(calc.round(v, digits: 1)) + "%" + if approximate { "*" } else { "" }
     box(fill: bg, inset: (x: 7pt, y: 3pt), radius: 3pt,
-      text(fill: fg, weight: "bold", size: 8.5pt, str(calc.round(v, digits: 1)) + "%"))
+      text(fill: fg, weight: "bold", size: 8.5pt, label))
   }
 }
 
@@ -553,10 +560,10 @@
     th("St Math"),
     ..for row in elixir_data.grade_breakdown {(
       text(size: 9pt, weight: "semibold", row.grade),
-      align(center, pct-badge(row.school_ela)),
+      align(center, pct-badge(row.school_ela, approximate: row.school_ela_approximate)),
       align(center, pct-badge(row.lea_ela)),
       align(center, pct-badge(row.state_ela)),
-      align(center, pct-badge(row.school_math)),
+      align(center, pct-badge(row.school_math, approximate: row.school_math_approximate)),
       align(center, pct-badge(row.lea_math)),
       align(center, pct-badge(row.state_math))
     )}

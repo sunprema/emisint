@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "live-agent": {
+            "type": "http",
+            "url": "http://localhost:4000/live_agent/mcp"
+        }
+    }
+}
