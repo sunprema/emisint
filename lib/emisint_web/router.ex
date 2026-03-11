@@ -31,6 +31,11 @@ defmodule EmisintWeb.Router do
   scope "/", EmisintWeb do
     pipe_through :browser
 
+    ash_authentication_live_session :pending_routes,
+      on_mount: [{EmisintWeb.LiveUserAuth, :live_user_required}] do
+      live "/pending", PendingLive, :index
+    end
+
     ash_authentication_live_session :authenticated_routes,
       on_mount: [
         {EmisintWeb.LiveUserAuth, :live_user_required},
@@ -42,6 +47,8 @@ defmodule EmisintWeb.Router do
       live "/growth/:school_id", Growth.MonitorLive, :index
       live "/admin/import", Admin.DataImportLive, :index
       live "/admin/users", Admin.UsersLive, :index
+      live "/admin/organizations", Admin.OrganizationsLive, :index
+      live "/admin/organizations/:id", Admin.OrganizationShowLive, :show
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
       live "/mde/entities", Mde.EntityMasterLive, :index

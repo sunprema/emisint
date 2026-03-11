@@ -99,6 +99,11 @@ defmodule EmisintWeb.Layouts do
                   <.icon name="hero-users" class="size-4" /> Users
                 </.link>
               </li>
+              <li :if={@current_user && @current_user.role == :system_admin}>
+                <.link navigate={~p"/admin/organizations"} class="flex items-center gap-2">
+                  <.icon name="hero-building-office" class="size-4" /> Organizations
+                </.link>
+              </li>
             </ul>
           </nav>
 
