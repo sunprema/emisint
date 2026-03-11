@@ -5,7 +5,6 @@ defmodule EmisintWeb.Mde.OverviewLive do
 
   alias Emisint.Assessments.{MdeDistrictSnapshot, MdeStateAssessmentResult}
 
-  @subjects ["ELA", "Mathematics", "Science", "Social Studies"]
   @page_size 100
 
   # ---------------------------------------------------------------------------
@@ -16,20 +15,14 @@ defmodule EmisintWeb.Mde.OverviewLive do
     years = load_school_years()
     selected_year = List.last(years)
 
-    {stats, district_rows, total_count} =
-      if selected_year do
-        {rows, count} = load_page(selected_year, 0, "")
-        {load_stats(selected_year), rows, count}
-      else
-        {nil, [], 0}
-      end
+    {district_rows, total_count} =
+      if selected_year, do: load_page(selected_year, 0, ""), else: {[], 0}
 
     {:ok,
      socket
      |> assign(:page_title, "MDE State Assessments")
      |> assign(:school_years, years)
      |> assign(:selected_year, selected_year)
-     |> assign(:stats, stats)
      |> assign(:district_count, total_count)
      |> assign(:page_offset, 0)
      |> assign(:district_search, "")
@@ -47,7 +40,6 @@ defmodule EmisintWeb.Mde.OverviewLive do
     {:noreply,
      socket
      |> assign(:selected_year, year)
-     |> assign(:stats, load_stats(year))
      |> assign(:district_count, count)
      |> assign(:page_offset, 0)
      |> assign(:district_search, "")
@@ -106,7 +98,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
   # ---------------------------------------------------------------------------
 
   def render(assigns) do
-    assigns = assign(assigns, :subjects, @subjects) |> assign(:page_size, @page_size)
+    assigns = assign(assigns, :page_size, @page_size)
 
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
@@ -159,76 +151,6 @@ defmodule EmisintWeb.Mde.OverviewLive do
           >
             Go to Data Import <.icon name="hero-arrow-right" class="size-4" />
           </.link>
-        </div>
-
-        <%!-- ── Summary stat cards ──────────────────────────────────────────────── --%>
-        <div :if={@stats} class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <.stat_card
-            label="Buildings"
-            value={format_number(@stats.buildings)}
-            icon="hero-building-office-2"
-            color="info"
-          />
-          <.stat_card
-            label="Districts"
-            value={format_number(@stats.districts)}
-            icon="hero-map"
-            color="info"
-          />
-          <.stat_card
-            label="ISDs"
-            value={format_number(@stats.isds)}
-            icon="hero-globe-americas"
-            color="info"
-          />
-          <.stat_card
-            label="Students Assessed"
-            value={format_number(@stats.students_assessed)}
-            icon="hero-users"
-            color="info"
-          />
-        </div>
-
-        <%!-- ── M-STEP Proficiency by Subject ─────────────────────────────────── --%>
-        <div :if={@stats} class="space-y-3">
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-              M-STEP Proficiency — All Students, Statewide
-            </h2>
-            <div class="flex-1 h-px bg-base-200"></div>
-          </div>
-
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <.subject_card
-              :for={subject <- @subjects}
-              subject={subject}
-              proficiency={Map.get(@stats.proficiency_by_subject, subject)}
-            />
-          </div>
-        </div>
-
-        <%!-- ── Assessment Coverage ────────────────────────────────────────────── --%>
-        <div :if={@stats && map_size(@stats.by_test_type) > 0} class="space-y-3">
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-              Assessment Coverage
-            </h2>
-            <div class="flex-1 h-px bg-base-200"></div>
-          </div>
-
-          <div class="flex flex-wrap gap-3">
-            <div
-              :for={{test_type, info} <- Enum.sort(@stats.by_test_type)}
-              class="flex items-center gap-3 px-4 py-3 bg-base-100 border border-base-200"
-            >
-              <div>
-                <div class="text-sm font-semibold">{test_type}</div>
-                <div class="text-xs text-base-content/45 mt-0.5">
-                  {format_number(info.buildings)} buildings · {format_number(info.records)} rows
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <%!-- ── District Breakdown Table ──────────────────────────────────────── --%>
@@ -338,7 +260,6 @@ defmodule EmisintWeb.Mde.OverviewLive do
       <.district_modal
         :if={@selected_district}
         district={@selected_district}
-        statewide={@stats && @stats.proficiency_by_subject}
       />
     </Layouts.app>
     """
@@ -347,72 +268,6 @@ defmodule EmisintWeb.Mde.OverviewLive do
   # ---------------------------------------------------------------------------
   # Components
   # ---------------------------------------------------------------------------
-
-  attr :label, :string, required: true
-  attr :value, :any, required: true
-  attr :icon, :string, required: true
-  attr :color, :string, default: "primary"
-
-  def stat_card(assigns) do
-    ~H"""
-    <div class="bg-base-100 border border-base-200 p-5">
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
-          {@label}
-        </span>
-        <div class={"p-1.5 bg-#{@color}/10"}>
-          <.icon name={@icon} class={"size-4 text-#{@color}"} />
-        </div>
-      </div>
-      <div class="text-3xl font-bold tracking-tight tabular-nums">{@value}</div>
-    </div>
-    """
-  end
-
-  attr :subject, :string, required: true
-  attr :proficiency, :any, default: nil
-
-  def subject_card(assigns) do
-    pct_float =
-      case assigns.proficiency do
-        nil -> nil
-        d -> Decimal.to_float(d)
-      end
-
-    color =
-      cond do
-        is_nil(pct_float) -> "base-content/20"
-        pct_float >= 50.0 -> "success"
-        pct_float >= 35.0 -> "warning"
-        true -> "error"
-      end
-
-    assigns = assigns |> assign(:pct_float, pct_float) |> assign(:color, color)
-
-    ~H"""
-    <div class="bg-base-100 border border-base-200 p-5 space-y-3">
-      <div class="text-xs font-medium text-base-content/50 uppercase tracking-wide">
-        {@subject}
-      </div>
-
-      <div class={"text-3xl font-bold tracking-tight tabular-nums text-#{@color}"}>
-        {if @proficiency, do: "#{@proficiency}%", else: "—"}
-      </div>
-
-      <div class="w-full bg-base-200 h-1.5">
-        <div
-          class={"h-1.5 bg-#{@color} transition-all duration-500"}
-          style={"width: #{if @pct_float, do: min(@pct_float, 100), else: 0}%"}
-        >
-        </div>
-      </div>
-
-      <div class="text-xs text-base-content/35">
-        {proficiency_label(@pct_float)}
-      </div>
-    </div>
-    """
-  end
 
   attr :value, :any, default: nil
 
@@ -711,48 +566,6 @@ defmodule EmisintWeb.Mde.OverviewLive do
     |> Enum.uniq()
   end
 
-  # Loads summary stat cards — selects only integer/string columns, no JSONB.
-  defp load_stats(year) do
-    snapshots =
-      MdeDistrictSnapshot
-      |> Ash.Query.for_read(:by_year, %{school_year: year})
-      |> Ash.Query.select([:buildings, :isd_name, :total_assessed])
-      |> Ash.read!(authorize?: false)
-
-    state_rows =
-      MdeStateAssessmentResult
-      |> Ash.Query.filter(
-        school_year == ^year and
-          report_category == "All Students" and
-          rollup_level == :isd and
-          mde_isd.isd_code == "0"
-      )
-      |> Ash.read!(authorize?: false)
-
-    buildings_count = snapshots |> Enum.map(&(&1.buildings || 0)) |> Enum.sum()
-    districts_count = length(snapshots)
-
-    isds_count =
-      snapshots |> Enum.map(& &1.isd_name) |> Enum.reject(&is_nil/1) |> Enum.uniq() |> length()
-
-    students_assessed = snapshots |> Enum.map(&(&1.total_assessed || 0)) |> Enum.sum()
-
-    proficiency_by_subject =
-      Map.new(@subjects, fn subject ->
-        rows = Enum.filter(state_rows, &(&1.subject == subject))
-        {subject, weighted_proficiency(rows)}
-      end)
-
-    %{
-      buildings: buildings_count,
-      districts: districts_count,
-      isds: isds_count,
-      students_assessed: students_assessed,
-      proficiency_by_subject: proficiency_by_subject,
-      by_test_type: %{}
-    }
-  end
-
   # Returns {rows, total_count} for one page of the district table (no JSONB columns).
   defp load_page(year, offset, search) do
     query =
@@ -839,41 +652,12 @@ defmodule EmisintWeb.Mde.OverviewLive do
     }
   end
 
-  # Weighted proficiency = (Σ advanced + Σ proficient) / Σ number_assessed × 100
-  # Used for statewide proficiency_by_subject from ISD aggregate rows.
-  defp weighted_proficiency([]), do: nil
-
-  defp weighted_proficiency(rows) do
-    {total_assessed, total_prof} =
-      Enum.reduce(rows, {0, 0}, fn r, {assessed, prof} ->
-        {
-          assessed + (r.number_assessed || 0),
-          prof + (r.total_advanced || 0) + (r.total_proficient || 0)
-        }
-      end)
-
-    if total_assessed > 0 do
-      total_prof
-      |> Decimal.new()
-      |> Decimal.div(Decimal.new(total_assessed))
-      |> Decimal.mult(Decimal.new(100))
-      |> Decimal.round(1)
-    else
-      nil
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
 
   defp grade_label("11"), do: "Grade 11"
   defp grade_label(g), do: "Grade #{g}"
-
-  defp proficiency_label(nil), do: "No data"
-  defp proficiency_label(f) when f >= 50.0, do: "Above state threshold"
-  defp proficiency_label(f) when f >= 35.0, do: "Approaching threshold"
-  defp proficiency_label(_), do: "Below threshold"
 
   defp format_number(nil), do: "—"
   defp format_number(0), do: "0"
