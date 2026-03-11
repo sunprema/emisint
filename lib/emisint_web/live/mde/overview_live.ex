@@ -3,7 +3,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
 
   require Ash.Query
 
-  alias Emisint.Assessments.{MdeDistrictSnapshot, MdeStateAssessmentResult}
+  alias Emisint.Assessments.MdeDistrictSnapshot
 
   @page_size 100
 
@@ -15,19 +15,25 @@ defmodule EmisintWeb.Mde.OverviewLive do
     years = load_school_years()
     selected_year = List.last(years)
 
-    {district_rows, total_count} =
-      if selected_year, do: load_page(selected_year, 0, ""), else: {[], 0}
+    socket =
+      socket
+      |> assign(:page_title, "MDE State Assessments")
+      |> assign(:school_years, years)
+      |> assign(:selected_year, selected_year)
+      |> assign(:district_count, 0)
+      |> assign(:page_offset, 0)
+      |> assign(:district_search, "")
+      |> stream(:district_rows, [])
+      |> assign(:selected_district, nil)
 
-    {:ok,
-     socket
-     |> assign(:page_title, "MDE State Assessments")
-     |> assign(:school_years, years)
-     |> assign(:selected_year, selected_year)
-     |> assign(:district_count, total_count)
-     |> assign(:page_offset, 0)
-     |> assign(:district_search, "")
-     |> stream(:district_rows, district_rows)
-     |> assign(:selected_district, nil)}
+    # Defer the DB query to the connected mount — the disconnected pass (HTTP)
+    # only renders static HTML so loading data there is wasteful.
+    if connected?(socket) && selected_year do
+      {rows, count} = load_page(selected_year, 0, "")
+      {:ok, socket |> assign(:district_count, count) |> stream(:district_rows, rows, reset: true)}
+    else
+      {:ok, socket}
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -60,7 +66,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
 
   def handle_event("prev_page", _params, socket) do
     new_offset = max(0, socket.assigns.page_offset - @page_size)
-    {rows, _count} = load_page(socket.assigns.selected_year, new_offset, socket.assigns.district_search)
+    rows = load_page_rows(socket.assigns.selected_year, new_offset, socket.assigns.district_search)
 
     {:noreply,
      socket
@@ -70,7 +76,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
 
   def handle_event("next_page", _params, socket) do
     new_offset = socket.assigns.page_offset + @page_size
-    {rows, _count} = load_page(socket.assigns.selected_year, new_offset, socket.assigns.district_search)
+    rows = load_page_rows(socket.assigns.selected_year, new_offset, socket.assigns.district_search)
 
     {:noreply,
      socket
@@ -558,7 +564,9 @@ defmodule EmisintWeb.Mde.OverviewLive do
   # ---------------------------------------------------------------------------
 
   defp load_school_years do
-    MdeStateAssessmentResult
+    # Use the snapshots table — it is small and already has an index on school_year.
+    # MdeStateAssessmentResult can have millions of rows; avoid scanning it just for years.
+    MdeDistrictSnapshot
     |> Ash.Query.select([:school_year])
     |> Ash.Query.sort(:school_year)
     |> Ash.read!(authorize?: false)
@@ -566,25 +574,32 @@ defmodule EmisintWeb.Mde.OverviewLive do
     |> Enum.uniq()
   end
 
-  # Returns {rows, total_count} for one page of the district table (no JSONB columns).
+  # Returns {rows, total_count}. Use when the count is needed (year/search change).
   defp load_page(year, offset, search) do
+    page = build_page_query(year, offset, search) |> Ash.read!(authorize?: false, page: [offset: offset, limit: @page_size, count: true])
+    {Enum.map(page.results, &snapshot_to_district_row_light/1), page.count || 0}
+  end
+
+  # Returns rows only — skips the COUNT(*) query. Use for prev/next navigation
+  # where the total count is already known and stored in socket assigns.
+  defp load_page_rows(year, offset, search) do
+    page = build_page_query(year, offset, search) |> Ash.read!(authorize?: false, page: [offset: offset, limit: @page_size])
+    Enum.map(page.results, &snapshot_to_district_row_light/1)
+  end
+
+  defp build_page_query(year, _offset, search) do
     query =
       MdeDistrictSnapshot
       |> Ash.Query.for_read(:list_by_year, %{school_year: year})
       |> Ash.Query.select([:district_code, :district_name, :entity_type, :isd_name, :buildings])
       |> Ash.Query.sort(:district_name)
 
-    query =
-      if search != "" do
-        pattern = "%#{search}%"
-        Ash.Query.filter(query, ilike(district_name, ^pattern))
-      else
-        query
-      end
-
-    page = Ash.read!(query, authorize?: false, page: [offset: offset, limit: @page_size, count: true])
-    rows = Enum.map(page.results, &snapshot_to_district_row_light/1)
-    {rows, page.count || 0}
+    if search != "" do
+      pattern = "%#{search}%"
+      Ash.Query.filter(query, ilike(district_name, ^pattern))
+    else
+      query
+    end
   end
 
   # Lightweight row for the district table (no JSONB fields loaded).
