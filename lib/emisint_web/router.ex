@@ -41,6 +41,7 @@ defmodule EmisintWeb.Router do
       live "/compliance/:school_id", Compliance.TrackerLive, :index
       live "/growth/:school_id", Growth.MonitorLive, :index
       live "/admin/import", Admin.DataImportLive, :index
+      live "/admin/users", Admin.UsersLive, :index
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
       live "/mde/entities", Mde.EntityMasterLive, :index

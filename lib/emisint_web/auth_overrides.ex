@@ -10,7 +10,7 @@ defmodule EmisintWeb.AuthOverrides do
   # For a complete reference, see https://hexdocs.pm/ash_authentication_phoenix/ui-overrides.html
 
   override AshAuthentication.Phoenix.Components.Banner do
-    set :image_url, "http://localhost:4000/images/emisint.webp"
+    set :image_url, "./images/emisint.webp"
     set :text_class, "bg-red-500"
   end
 

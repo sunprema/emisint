@@ -5,19 +5,18 @@ defmodule EmisintWeb.AuthController do
   def success(conn, activity, user, _token) do
     return_to = get_session(conn, :return_to) || ~p"/dashboard"
 
-    message =
+    flash_conn =
       case activity do
-        {:confirm_new_user, :confirm} -> "Your email address has now been confirmed"
-        {:password, :reset} -> "Your password has successfully been reset"
-        _ -> "You are now signed in"
+        {:password, :sign_in} -> conn
+        {:confirm_new_user, :confirm} -> put_flash(conn, :info, "Your email address has now been confirmed")
+        {:password, :reset} -> put_flash(conn, :info, "Your password has successfully been reset")
+        _ -> conn
       end
 
-    conn
+    flash_conn
     |> delete_session(:return_to)
     |> store_in_session(user)
-    # If your resource has a different name, update the assign name here (i.e :current_admin)
     |> assign(:current_user, user)
-    |> put_flash(:info, message)
     |> redirect(to: return_to)
   end
 

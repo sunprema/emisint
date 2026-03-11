@@ -18,7 +18,7 @@ defmodule Emisint.Accounts.User do
         confirm_on_update? false
         require_interaction? true
         confirmed_at_field :confirmed_at
-        auto_confirm_actions [:sign_in_with_magic_link, :reset_password_with_token]
+        auto_confirm_actions [:sign_in_with_magic_link, :reset_password_with_token, :register_with_password]
         sender Emisint.Accounts.User.Senders.SendNewUserConfirmationEmail
       end
     end
@@ -227,6 +227,10 @@ defmodule Emisint.Accounts.User do
       require_atomic? false
       accept [:organization_id, :role, :school_id]
     end
+
+    update :update_role do
+      accept [:role]
+    end
   end
 
   policies do
@@ -241,6 +245,10 @@ defmodule Emisint.Accounts.User do
     end
 
     policy action(:assign_organization) do
+      authorize_if actor_attribute_equals(:role, :system_admin)
+    end
+
+    policy action(:update_role) do
       authorize_if actor_attribute_equals(:role, :system_admin)
     end
   end

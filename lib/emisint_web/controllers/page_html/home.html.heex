@@ -31,18 +31,36 @@
       <a href="#" class="hover:text-cyan-400 transition-colors">Documentation</a>
     </nav>
     <div class="flex items-center gap-4">
-      <.link
-        navigate={~p"/sign-in"}
-        class="text-sm font-medium hover:text-white transition-colors"
-      >
-        Sign In
-      </.link>
-      <a
-        href="/sign-in"
-        class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-cyan-600/20 hover:scale-105 active:scale-95"
-      >
-        Get Started
-      </a>
+      <%= if @current_user do %>
+        <span class="text-sm text-slate-400 hidden md:block">
+          {@current_user.email |> to_string()}
+        </span>
+        <.link
+          navigate={~p"/dashboard"}
+          class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-cyan-600/20 hover:scale-105 active:scale-95"
+        >
+          Dashboard
+        </.link>
+        <.link
+          href={~p"/sign-out"}
+          class="text-sm font-medium text-slate-400 hover:text-white transition-colors"
+        >
+          Sign Out
+        </.link>
+      <% else %>
+        <.link
+          navigate={~p"/sign-in"}
+          class="text-sm font-medium hover:text-white transition-colors"
+        >
+          Sign In
+        </.link>
+        <.link
+          navigate={~p"/sign-in"}
+          class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-cyan-600/20 hover:scale-105 active:scale-95"
+        >
+          Get Started
+        </.link>
+      <% end %>
     </div>
   </header>
 

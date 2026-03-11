@@ -94,6 +94,11 @@ defmodule EmisintWeb.Layouts do
                   <.icon name="hero-arrow-up-tray" class="size-4" /> Data Import
                 </.link>
               </li>
+              <li :if={@current_user && @current_user.role == :system_admin}>
+                <.link navigate={~p"/admin/users"} class="flex items-center gap-2">
+                  <.icon name="hero-users" class="size-4" /> Users
+                </.link>
+              </li>
             </ul>
           </nav>
 
