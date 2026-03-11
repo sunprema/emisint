@@ -6,6 +6,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
   alias Emisint.Assessments.{MdeDistrictSnapshot, MdeStateAssessmentResult}
 
   @subjects ["ELA", "Mathematics", "Science", "Social Studies"]
+  @page_size 100
 
   # ---------------------------------------------------------------------------
   # Lifecycle
@@ -15,8 +16,13 @@ defmodule EmisintWeb.Mde.OverviewLive do
     years = load_school_years()
     selected_year = List.last(years)
 
-    {stats, district_rows} =
-      if selected_year, do: load_data(selected_year), else: {nil, []}
+    {stats, district_rows, total_count} =
+      if selected_year do
+        {rows, count} = load_page(selected_year, 0, "")
+        {load_stats(selected_year), rows, count}
+      else
+        {nil, [], 0}
+      end
 
     {:ok,
      socket
@@ -24,11 +30,9 @@ defmodule EmisintWeb.Mde.OverviewLive do
      |> assign(:school_years, years)
      |> assign(:selected_year, selected_year)
      |> assign(:stats, stats)
-     |> assign(:all_district_rows, district_rows)
-     |> assign(:district_total, length(district_rows))
+     |> assign(:district_count, total_count)
+     |> assign(:page_offset, 0)
      |> assign(:district_search, "")
-     |> assign(:district_count, length(district_rows))
-     |> assign(:district_lookup, Map.new(district_rows, &{&1.id, &1}))
      |> stream(:district_rows, district_rows)
      |> assign(:selected_district, nil)}
   end
@@ -38,33 +42,58 @@ defmodule EmisintWeb.Mde.OverviewLive do
   # ---------------------------------------------------------------------------
 
   def handle_event("select_year", %{"year" => year}, socket) do
-    {stats, district_rows} = load_data(year)
+    {rows, count} = load_page(year, 0, "")
 
     {:noreply,
      socket
      |> assign(:selected_year, year)
-     |> assign(:stats, stats)
-     |> assign(:all_district_rows, district_rows)
-     |> assign(:district_total, length(district_rows))
+     |> assign(:stats, load_stats(year))
+     |> assign(:district_count, count)
+     |> assign(:page_offset, 0)
      |> assign(:district_search, "")
-     |> assign(:district_count, length(district_rows))
-     |> assign(:district_lookup, Map.new(district_rows, &{&1.id, &1}))
-     |> stream(:district_rows, district_rows, reset: true)
+     |> stream(:district_rows, rows, reset: true)
      |> assign(:selected_district, nil)}
   end
 
   def handle_event("search_districts", %{"search" => search}, socket) do
-    filtered = filter_districts(socket.assigns.all_district_rows, search)
+    {rows, count} = load_page(socket.assigns.selected_year, 0, search)
 
     {:noreply,
      socket
      |> assign(:district_search, search)
-     |> assign(:district_count, length(filtered))
-     |> stream(:district_rows, filtered, reset: true)}
+     |> assign(:district_count, count)
+     |> assign(:page_offset, 0)
+     |> stream(:district_rows, rows, reset: true)}
+  end
+
+  def handle_event("prev_page", _params, socket) do
+    new_offset = max(0, socket.assigns.page_offset - @page_size)
+    {rows, _count} = load_page(socket.assigns.selected_year, new_offset, socket.assigns.district_search)
+
+    {:noreply,
+     socket
+     |> assign(:page_offset, new_offset)
+     |> stream(:district_rows, rows, reset: true)}
+  end
+
+  def handle_event("next_page", _params, socket) do
+    new_offset = socket.assigns.page_offset + @page_size
+    {rows, _count} = load_page(socket.assigns.selected_year, new_offset, socket.assigns.district_search)
+
+    {:noreply,
+     socket
+     |> assign(:page_offset, new_offset)
+     |> stream(:district_rows, rows, reset: true)}
   end
 
   def handle_event("show_district", %{"code" => code}, socket) do
-    selected = Map.get(socket.assigns.district_lookup, code)
+    snapshot =
+      MdeDistrictSnapshot
+      |> Ash.Query.for_read(:by_year, %{school_year: socket.assigns.selected_year})
+      |> Ash.Query.filter(district_code == ^code)
+      |> Ash.read_one!(authorize?: false)
+
+    selected = if snapshot, do: snapshot_to_district_row(snapshot), else: nil
     {:noreply, assign(socket, :selected_district, selected)}
   end
 
@@ -77,7 +106,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
   # ---------------------------------------------------------------------------
 
   def render(assigns) do
-    assigns = assign(assigns, :subjects, @subjects)
+    assigns = assign(assigns, :subjects, @subjects) |> assign(:page_size, @page_size)
 
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
@@ -203,13 +232,13 @@ defmodule EmisintWeb.Mde.OverviewLive do
         </div>
 
         <%!-- ── District Breakdown Table ──────────────────────────────────────── --%>
-        <div :if={@district_total > 0} class="space-y-3">
+        <div :if={@district_count > 0 || @district_search != ""} class="space-y-3">
           <div class="flex items-center gap-2">
             <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-              District Breakdown — M-STEP All Students
+              District Breakdown
             </h2>
             <div class="flex-1 h-px bg-base-200"></div>
-            <span class="text-xs text-base-content/35">sorted by ELA % · click a row for details</span>
+            <span class="text-xs text-base-content/35">click a row for details</span>
           </div>
 
           <%!-- Search --%>
@@ -224,13 +253,11 @@ defmodule EmisintWeb.Mde.OverviewLive do
                 value={@district_search}
                 placeholder="Search districts…"
                 class="w-full pl-9 pr-3 py-2 border border-base-300 bg-base-50 text-sm focus:outline-none focus:ring-2 focus:ring-info/25 focus:border-info transition-all"
-                phx-debounce="200"
+                phx-debounce="300"
               />
             </div>
             <span class="text-xs text-base-content/40">
-              {if @district_search != "",
-                do: "#{@district_count} of #{@district_total}",
-                else: to_string(@district_total)} districts
+              {@district_count} {if @district_search != "", do: "matching", else: "total"} districts
             </span>
           </form>
 
@@ -256,17 +283,8 @@ defmodule EmisintWeb.Mde.OverviewLive do
                     <th class="text-left px-4 py-3 font-medium text-base-content/60 text-xs uppercase tracking-wide hidden sm:table-cell">
                       Type
                     </th>
-                    <th class="text-center px-4 py-3 font-medium text-base-content/60 text-xs uppercase tracking-wide hidden md:table-cell">
+                    <th class="text-center px-4 py-3 font-medium text-base-content/60 text-xs uppercase tracking-wide">
                       Buildings
-                    </th>
-                    <th class="text-right px-4 py-3 font-medium text-base-content/60 text-xs uppercase tracking-wide">
-                      ELA %
-                    </th>
-                    <th class="text-right px-4 py-3 font-medium text-base-content/60 text-xs uppercase tracking-wide">
-                      Math %
-                    </th>
-                    <th class="text-right px-4 py-3 font-medium text-base-content/60 text-xs uppercase tracking-wide hidden lg:table-cell">
-                      Avg Proficient
                     </th>
                   </tr>
                 </thead>
@@ -282,21 +300,35 @@ defmodule EmisintWeb.Mde.OverviewLive do
                     <td class="px-4 py-3 text-xs text-base-content/50 hidden sm:table-cell">
                       {row.entity_type || "—"}
                     </td>
-                    <td class="px-4 py-3 text-center text-base-content/50 hidden md:table-cell">
+                    <td class="px-4 py-3 text-center text-base-content/50">
                       {row.buildings}
-                    </td>
-                    <td class="px-4 py-3 text-right">
-                      <.pct_badge value={row.ela} />
-                    </td>
-                    <td class="px-4 py-3 text-right">
-                      <.pct_badge value={row.math} />
-                    </td>
-                    <td class="px-4 py-3 text-right tabular-nums text-base-content/70 hidden lg:table-cell">
-                      {if row.avg_total_proficient, do: row.avg_total_proficient, else: "—"}
                     </td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <%!-- Pagination --%>
+            <div class="flex items-center justify-between px-4 py-3 border-t border-base-200 bg-base-50">
+              <span class="text-xs text-base-content/50">
+                {min(@page_offset + 1, @district_count)}–{min(@page_offset + @page_size, @district_count)} of {@district_count}
+              </span>
+              <div class="flex gap-1">
+                <button
+                  phx-click="prev_page"
+                  disabled={@page_offset == 0}
+                  class="px-3 py-1.5 text-xs border border-base-300 bg-base-100 hover:bg-base-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ← Previous
+                </button>
+                <button
+                  phx-click="next_page"
+                  disabled={@page_offset + @page_size >= @district_count}
+                  class="px-3 py-1.5 text-xs border border-base-300 bg-base-100 hover:bg-base-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next →
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -679,14 +711,14 @@ defmodule EmisintWeb.Mde.OverviewLive do
     |> Enum.uniq()
   end
 
-  defp load_data(year) do
-    # Fast indexed read — pre-computed by MdeComparisonSnapshotWorker
+  # Loads summary stat cards — selects only integer/string columns, no JSONB.
+  defp load_stats(year) do
     snapshots =
       MdeDistrictSnapshot
       |> Ash.Query.for_read(:by_year, %{school_year: year})
+      |> Ash.Query.select([:buildings, :isd_name, :total_assessed])
       |> Ash.read!(authorize?: false)
 
-    # Small statewide ISD aggregate rows (handful per year) for proficiency stat cards
     state_rows =
       MdeStateAssessmentResult
       |> Ash.Query.filter(
@@ -697,8 +729,6 @@ defmodule EmisintWeb.Mde.OverviewLive do
       )
       |> Ash.read!(authorize?: false)
 
-    # ── Summary stats (computed from snapshot rows in-memory — O(N districts)) ──
-
     buildings_count = snapshots |> Enum.map(&(&1.buildings || 0)) |> Enum.sum()
     districts_count = length(snapshots)
 
@@ -707,22 +737,13 @@ defmodule EmisintWeb.Mde.OverviewLive do
 
     students_assessed = snapshots |> Enum.map(&(&1.total_assessed || 0)) |> Enum.sum()
 
-    # ── Proficiency by subject (statewide, from ISD aggregate rows) ────────────
-
     proficiency_by_subject =
       Map.new(@subjects, fn subject ->
         rows = Enum.filter(state_rows, &(&1.subject == subject))
         {subject, weighted_proficiency(rows)}
       end)
 
-    # ── District breakdown (sorted by ELA % desc) ─────────────────────────────
-
-    district_rows =
-      snapshots
-      |> Enum.sort_by(&(&1.ela_pct || -1.0), :desc)
-      |> Enum.map(&snapshot_to_district_row/1)
-
-    stats = %{
+    %{
       buildings: buildings_count,
       districts: districts_count,
       isds: isds_count,
@@ -730,11 +751,41 @@ defmodule EmisintWeb.Mde.OverviewLive do
       proficiency_by_subject: proficiency_by_subject,
       by_test_type: %{}
     }
-
-    {stats, district_rows}
   end
 
-  # Maps a MdeDistrictSnapshot struct to the shape expected by the template.
+  # Returns {rows, total_count} for one page of the district table (no JSONB columns).
+  defp load_page(year, offset, search) do
+    query =
+      MdeDistrictSnapshot
+      |> Ash.Query.for_read(:list_by_year, %{school_year: year})
+      |> Ash.Query.select([:district_code, :district_name, :entity_type, :isd_name, :buildings])
+      |> Ash.Query.sort(:district_name)
+
+    query =
+      if search != "" do
+        pattern = "%#{search}%"
+        Ash.Query.filter(query, ilike(district_name, ^pattern))
+      else
+        query
+      end
+
+    page = Ash.read!(query, authorize?: false, page: [offset: offset, limit: @page_size, count: true])
+    rows = Enum.map(page.results, &snapshot_to_district_row_light/1)
+    {rows, page.count || 0}
+  end
+
+  # Lightweight row for the district table (no JSONB fields loaded).
+  defp snapshot_to_district_row_light(snapshot) do
+    %{
+      id: snapshot.district_code,
+      district_code: snapshot.district_code,
+      district_name: snapshot.district_name,
+      entity_type: snapshot.entity_type,
+      buildings: snapshot.buildings || 0
+    }
+  end
+
+  # Full row for the district detail modal (all JSONB fields included).
   # JSONB round-trip produces string-keyed maps and floats — converted here so
   # existing components (pct_badge, subject_vs_state) continue to work unchanged.
   defp snapshot_to_district_row(snapshot) do
@@ -810,20 +861,6 @@ defmodule EmisintWeb.Mde.OverviewLive do
     else
       nil
     end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Filtering
-  # ---------------------------------------------------------------------------
-
-  defp filter_districts(rows, ""), do: rows
-
-  defp filter_districts(rows, search) do
-    search_down = String.downcase(search)
-
-    Enum.filter(rows, fn row ->
-      String.contains?(String.downcase(row.district_name || ""), search_down)
-    end)
   end
 
   # ---------------------------------------------------------------------------

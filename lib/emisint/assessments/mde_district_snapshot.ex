@@ -58,6 +58,13 @@ defmodule Emisint.Assessments.MdeDistrictSnapshot do
       argument :school_year, :string, allow_nil?: false
       filter expr(school_year == ^arg(:school_year))
     end
+
+    # Paginated lightweight read for the district table (no JSONB columns selected at call site)
+    read :list_by_year do
+      argument :school_year, :string, allow_nil?: false
+      filter expr(school_year == ^arg(:school_year))
+      pagination offset?: true, countable: true
+    end
   end
 
   policies do
