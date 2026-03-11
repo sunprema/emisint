@@ -5,17 +5,21 @@ defmodule EmisintWeb.LiveScope do
   @doc """
   This is a hook to set the scope in the socket. Should be called after LiveUserAuth hook
   """
-  def on_mount(:default, _params, _session, socket) do
+  def on_mount(:default, _params, session, socket) do
     user = socket.assigns[:current_user]
 
-    if is_nil(user.organization_id) do
-      {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/pending")}
-    else
-      scope = %Emisint.Scope{
-        current_user: user,
-        current_tenant: user.organization_id
-      }
+    tenant =
+      if user.role == :system_admin do
+        session["admin_org_id"] || user.organization_id
+      else
+        user.organization_id
+      end
 
+    if is_nil(tenant) do
+      redirect_to = if user.role == :system_admin, do: ~p"/admin/context", else: ~p"/pending"
+      {:halt, Phoenix.LiveView.redirect(socket, to: redirect_to)}
+    else
+      scope = %Emisint.Scope{current_user: user, current_tenant: tenant}
       {:cont, assign(socket, :scope, scope)}
     end
   end

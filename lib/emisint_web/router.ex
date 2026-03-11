@@ -34,7 +34,10 @@ defmodule EmisintWeb.Router do
     ash_authentication_live_session :pending_routes,
       on_mount: [{EmisintWeb.LiveUserAuth, :live_user_required}] do
       live "/pending", PendingLive, :index
+      live "/admin/context", Admin.OrgContextLive, :index
     end
+
+    post "/admin/context", Admin.OrgContextController, :set
 
     ash_authentication_live_session :authenticated_routes,
       on_mount: [
@@ -49,6 +52,7 @@ defmodule EmisintWeb.Router do
       live "/admin/users", Admin.UsersLive, :index
       live "/admin/organizations", Admin.OrganizationsLive, :index
       live "/admin/organizations/:id", Admin.OrganizationShowLive, :show
+      live "/settings", SettingsLive, :index
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
       live "/mde/entities", Mde.EntityMasterLive, :index

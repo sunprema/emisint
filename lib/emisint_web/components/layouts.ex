@@ -69,6 +69,11 @@ defmodule EmisintWeb.Layouts do
           <%!-- Navigation --%>
           <nav class="flex-1 p-3">
             <ul class="menu menu-sm gap-0.5">
+              <li :if={@current_user && @current_user.role == :system_admin}>
+                <.link navigate={~p"/admin/organizations"} class="flex items-center gap-2">
+                  <.icon name="hero-building-office" class="size-4" /> Organizations
+                </.link>
+              </li>
               <li>
                 <.link navigate={~p"/dashboard"} class="flex items-center gap-2">
                   <.icon name="hero-squares-2x2" class="size-4" /> Portfolio
@@ -99,9 +104,9 @@ defmodule EmisintWeb.Layouts do
                   <.icon name="hero-users" class="size-4" /> Users
                 </.link>
               </li>
-              <li :if={@current_user && @current_user.role == :system_admin}>
-                <.link navigate={~p"/admin/organizations"} class="flex items-center gap-2">
-                  <.icon name="hero-building-office" class="size-4" /> Organizations
+              <li>
+                <.link navigate={~p"/settings"} class="flex items-center gap-2">
+                  <.icon name="hero-cog-6-tooth" class="size-4" /> Settings
                 </.link>
               </li>
             </ul>
@@ -124,8 +129,15 @@ defmodule EmisintWeb.Layouts do
               </div>
             </div>
 
-            <%!-- Sign out + theme --%>
+            <%!-- Sign out --%>
             <div class="px-3 pb-3 space-y-1">
+              <.link
+                :if={@current_user && @current_user.role == :system_admin}
+                navigate={~p"/admin/context"}
+                class="flex items-center gap-2 w-full px-3 py-2 text-sm text-base-content/60 hover:text-base-content hover:bg-base-300/50 transition-colors"
+              >
+                <.icon name="hero-arrows-right-left" class="size-4" /> Switch Org
+              </.link>
               <.link
                 href={~p"/sign-out"}
                 class="flex items-center gap-2 w-full px-3 py-2 text-sm text-base-content/60 hover:text-base-content hover:bg-base-300/50 transition-colors"
@@ -133,9 +145,6 @@ defmodule EmisintWeb.Layouts do
                 <.icon name="hero-arrow-right-on-rectangle" class="size-4" /> Sign Out
               </.link>
 
-              <div class="flex justify-center pt-2">
-                <.theme_toggle />
-              </div>
             </div>
           </div>
         </aside>

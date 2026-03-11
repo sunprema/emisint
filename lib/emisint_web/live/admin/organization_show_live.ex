@@ -240,9 +240,11 @@ defmodule EmisintWeb.Admin.OrganizationShowLive do
 
   defp format_type(:emo), do: "EMO"
   defp format_type(:authorizer), do: "Authorizer"
+  defp format_type(:admin), do: "Admin"
 
   defp type_badge_class(:emo), do: "badge-primary"
   defp type_badge_class(:authorizer), do: "badge-secondary"
+  defp type_badge_class(:admin), do: "badge-neutral"
   defp type_badge_class(_), do: "badge-ghost"
 
   defp format_role(:emo_admin), do: "EMO Admin"

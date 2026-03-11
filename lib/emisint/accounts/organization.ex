@@ -49,7 +49,7 @@ defmodule Emisint.Accounts.Organization do
     attribute :type, :atom do
       allow_nil? false
       public? true
-      constraints one_of: [:emo, :authorizer]
+      constraints one_of: [:emo, :authorizer, :admin]
     end
 
     attribute :slug, :string do

@@ -3,7 +3,7 @@ defmodule EmisintWeb.Admin.OrganizationsLive do
 
   on_mount {EmisintWeb.LiveUserAuth, :live_user_required}
 
-  @org_types [{"EMO (Management Company)", :emo}, {"Authorizer", :authorizer}]
+  @org_types [{"EMO (Management Company)", :emo}, {"Authorizer", :authorizer}, {"Admin", :admin}]
 
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
@@ -160,8 +160,10 @@ defmodule EmisintWeb.Admin.OrganizationsLive do
 
   defp format_type(:emo), do: "EMO"
   defp format_type(:authorizer), do: "Authorizer"
+  defp format_type(:admin), do: "Admin"
 
   defp type_badge_class(:emo), do: "badge-primary"
   defp type_badge_class(:authorizer), do: "badge-secondary"
+  defp type_badge_class(:admin), do: "badge-neutral"
   defp type_badge_class(_), do: "badge-ghost"
 end
