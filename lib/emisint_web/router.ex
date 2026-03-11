@@ -35,6 +35,9 @@ defmodule EmisintWeb.Router do
       on_mount: [{EmisintWeb.LiveUserAuth, :live_user_required}] do
       live "/pending", PendingLive, :index
       live "/admin/context", Admin.OrgContextLive, :index
+      live "/admin/organizations", Admin.OrganizationsLive, :index
+      live "/admin/organizations/:id", Admin.OrganizationShowLive, :show
+      live "/admin/users", Admin.UsersLive, :index
     end
 
     post "/admin/context", Admin.OrgContextController, :set
@@ -49,9 +52,6 @@ defmodule EmisintWeb.Router do
       live "/compliance/:school_id", Compliance.TrackerLive, :index
       live "/growth/:school_id", Growth.MonitorLive, :index
       live "/admin/import", Admin.DataImportLive, :index
-      live "/admin/users", Admin.UsersLive, :index
-      live "/admin/organizations", Admin.OrganizationsLive, :index
-      live "/admin/organizations/:id", Admin.OrganizationShowLive, :show
       live "/settings", SettingsLive, :index
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
