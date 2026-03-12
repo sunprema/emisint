@@ -25,8 +25,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
       end
     end
 
-    schools = Ash.read!(Emisint.Accounts.School, scope: scope)
-    academic_years = Emisint.Registry.list_academic_years!(scope: scope)
+    schools = if oid, do: Ash.read!(Emisint.Accounts.School, scope: scope), else: []
+    academic_years = if oid, do: Emisint.Registry.list_academic_years!(scope: scope), else: []
     recent_logs = load_recent_logs(oid, user)
 
     socket =
@@ -1600,6 +1600,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
+
+  defp load_recent_logs(nil, _user), do: []
 
   defp load_recent_logs(oid, user) do
     Emisint.Analytics.DataSyncLog
