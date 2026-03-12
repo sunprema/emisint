@@ -1590,6 +1590,15 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     |> Ash.Query.filter(mde_district.district_code == ^district_code)
     |> Ash.Query.sort(:building_name)
     |> Ash.read!(authorize?: false)
+    |> Enum.group_by(fn b ->
+      case String.trim_leading(b.building_code || "", "0") do
+        "" -> "0"
+        c -> c
+      end
+    end)
+    |> Map.values()
+    |> Enum.map(fn group -> Enum.min_by(group, &String.length(&1.building_code || "")) end)
+    |> Enum.sort_by(& &1.building_name)
   end
 
   defp load_enrollment(building_code, year) do
