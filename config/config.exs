@@ -114,6 +114,13 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# ExAws compile-time defaults — overridden at runtime from AWS_ENDPOINT_URL_S3
+# env var injected by `fly storage create` (see config/runtime.exs).
+config :ex_aws, :s3,
+  scheme: "https://",
+  host: "fly.storage.tigris.dev",
+  region: "auto"
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

@@ -54,30 +54,14 @@ defmodule EmisintWeb.Admin.DataImportLive do
         max_entries: 1,
         max_file_size: 10_000_000
       )
-      |> allow_upload(:mde_csv_file,
-        accept: ~w(.csv),
-        max_entries: 1,
-        # MDE statewide exports can be 50–300 MB
-        max_file_size: 314_572_800
-      )
-      |> allow_upload(:entity_master_file,
-        accept: ~w(.csv),
-        max_entries: 1,
-        # EntityMaster daily export is typically < 5 MB, allow up to 50 MB
-        max_file_size: 52_428_800
-      )
-      |> allow_upload(:enrollment_file,
-        accept: ~w(.csv),
-        max_entries: 1,
-        # Annual enrollment export is typically < 5 MB, allow up to 50 MB
-        max_file_size: 52_428_800
-      )
-      |> allow_upload(:sat_file,
-        accept: ~w(.csv),
-        max_entries: 1,
-        # SAT aggregate export is typically < 10 MB, allow up to 50 MB
-        max_file_size: 52_428_800
-      )
+      |> assign(:mde_upload, nil)
+      |> assign(:mde_upload_progress, nil)
+      |> assign(:entity_master_upload, nil)
+      |> assign(:entity_master_upload_progress, nil)
+      |> assign(:enrollment_upload, nil)
+      |> assign(:enrollment_upload_progress, nil)
+      |> assign(:sat_upload, nil)
+      |> assign(:sat_upload_progress, nil)
 
     {:ok, socket}
   end
@@ -253,150 +237,111 @@ defmodule EmisintWeb.Admin.DataImportLive do
   end
 
   # ---------------------------------------------------------------------------
-  # Events — MDE CSV upload
+  # Tigris direct-upload events — shared across all MDE import types
   # ---------------------------------------------------------------------------
 
-  def handle_event("validate_mde", _params, socket) do
-    {:noreply, socket}
+  def handle_event("file_selected", %{"upload_type" => type, "name" => name, "size" => size}, socket) do
+    upload_key = String.to_existing_atom("#{type}_upload")
+    progress_key = String.to_existing_atom("#{type}_upload_progress")
+
+    {:noreply,
+     socket
+     |> assign(upload_key, %{name: name, size: size})
+     |> assign(progress_key, nil)}
   end
 
-  def handle_event("import_mde", _params, socket) do
-    case consume_uploaded_entries(socket, :mde_csv_file, fn %{path: temp_path}, entry ->
-           dest = persist_mde_upload(temp_path, entry.client_name)
-           {:ok, %{path: dest, filename: entry.client_name}}
-         end) do
-      [] ->
-        {:noreply, put_flash(socket, :error, "Please select an MDE CSV file to upload.")}
+  def handle_event("file_cleared", %{"upload_type" => type}, socket) do
+    upload_key = String.to_existing_atom("#{type}_upload")
+    progress_key = String.to_existing_atom("#{type}_upload_progress")
 
-      [%{path: dest_path, filename: filename}] ->
-        %{"file_path" => dest_path}
-        |> Emisint.Workers.MdeImportWorker.new()
-        |> Oban.insert!()
+    {:noreply,
+     socket
+     |> assign(upload_key, nil)
+     |> assign(progress_key, nil)}
+  end
 
-        {:noreply,
-         socket
-         |> assign(:mde_importing, true)
-         |> assign(:mde_import_result, nil)
-         |> put_flash(
-           :info,
-           "MDE import queued: #{filename}. This may take several minutes for large files."
-         )}
+  def handle_event("request_upload_url", %{"upload_type" => type, "filename" => filename}, socket) do
+    key = Emisint.Storage.import_key(type, filename)
+
+    case Emisint.Storage.presigned_upload_url(key) do
+      {:ok, url} ->
+        {:noreply, push_event(socket, "presigned_url:#{type}", %{url: url, key: key})}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Could not prepare upload: #{inspect(reason)}")}
     end
   end
 
-  def handle_event("cancel-mde-upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :mde_csv_file, ref)}
+  def handle_event("upload_progress", %{"upload_type" => type, "progress" => pct}, socket) do
+    progress_key = String.to_existing_atom("#{type}_upload_progress")
+    {:noreply, assign(socket, progress_key, pct)}
   end
 
-  # ---------------------------------------------------------------------------
-  # Events — EntityMaster CSV upload
-  # ---------------------------------------------------------------------------
+  def handle_event("upload_complete", %{"upload_type" => "mde", "key" => key, "filename" => filename}, socket) do
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key}
+    |> Emisint.Workers.MdeImportWorker.new()
+    |> Oban.insert!()
 
-  def handle_event("validate_entity_master", _params, socket) do
-    {:noreply, socket}
+    {:noreply,
+     socket
+     |> assign(:mde_importing, true)
+     |> assign(:mde_import_result, nil)
+     |> assign(:mde_upload, nil)
+     |> assign(:mde_upload_progress, nil)
+     |> put_flash(:info, "MDE import queued: #{filename}. Processing in background…")}
   end
 
-  def handle_event("import_entity_master", _params, socket) do
-    case consume_uploaded_entries(socket, :entity_master_file, fn %{path: temp_path}, entry ->
-           dest = persist_upload(temp_path, entry.client_name, "entity_master")
-           {:ok, %{path: dest, filename: entry.client_name}}
-         end) do
-      [] ->
-        {:noreply,
-         put_flash(socket, :error, "Please select an EntityMaster CSV file to upload.")}
+  def handle_event("upload_complete", %{"upload_type" => "entity_master", "key" => key, "filename" => filename}, socket) do
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key}
+    |> Emisint.Workers.EntityMasterImportWorker.new()
+    |> Oban.insert!()
 
-      [%{path: dest_path, filename: filename}] ->
-        %{"file_path" => dest_path}
-        |> Emisint.Workers.EntityMasterImportWorker.new()
-        |> Oban.insert!()
-
-        {:noreply,
-         socket
-         |> assign(:entity_master_importing, true)
-         |> assign(:entity_master_import_result, nil)
-         |> put_flash(
-           :info,
-           "EntityMaster import queued: #{filename}. Processing in background…"
-         )}
-    end
+    {:noreply,
+     socket
+     |> assign(:entity_master_importing, true)
+     |> assign(:entity_master_import_result, nil)
+     |> assign(:entity_master_upload, nil)
+     |> assign(:entity_master_upload_progress, nil)
+     |> put_flash(:info, "EntityMaster import queued: #{filename}. Processing in background…")}
   end
 
-  def handle_event("cancel-entity-master-upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :entity_master_file, ref)}
+  def handle_event("upload_complete", %{"upload_type" => "enrollment", "key" => key, "filename" => filename}, socket) do
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key}
+    |> Emisint.Workers.MdeEnrollmentImportWorker.new()
+    |> Oban.insert!()
+
+    {:noreply,
+     socket
+     |> assign(:enrollment_importing, true)
+     |> assign(:enrollment_import_result, nil)
+     |> assign(:enrollment_upload, nil)
+     |> assign(:enrollment_upload_progress, nil)
+     |> put_flash(:info, "Enrollment import queued: #{filename}. Processing in background…")}
   end
 
-  # ---------------------------------------------------------------------------
-  # Events — Enrollment CSV upload
-  # ---------------------------------------------------------------------------
+  def handle_event("upload_complete", %{"upload_type" => "sat", "key" => key, "filename" => filename}, socket) do
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key}
+    |> Emisint.Workers.MdeSatImportWorker.new()
+    |> Oban.insert!()
 
-  def handle_event("validate_enrollment", _params, socket) do
-    {:noreply, socket}
+    {:noreply,
+     socket
+     |> assign(:sat_importing, true)
+     |> assign(:sat_import_result, nil)
+     |> assign(:sat_upload, nil)
+     |> assign(:sat_upload_progress, nil)
+     |> put_flash(:info, "SAT import queued: #{filename}. Processing in background…")}
   end
 
-  def handle_event("import_enrollment", _params, socket) do
-    case consume_uploaded_entries(socket, :enrollment_file, fn %{path: temp_path}, entry ->
-           dest = persist_upload(temp_path, entry.client_name, "enrollment_import")
-           {:ok, %{path: dest, filename: entry.client_name}}
-         end) do
-      [] ->
-        {:noreply,
-         put_flash(socket, :error, "Please select an enrollment CSV file to upload.")}
+  def handle_event("upload_failed", %{"upload_type" => type, "reason" => reason}, socket) do
+    upload_key = String.to_existing_atom("#{type}_upload")
+    progress_key = String.to_existing_atom("#{type}_upload_progress")
 
-      [%{path: dest_path, filename: filename}] ->
-        %{"file_path" => dest_path}
-        |> Emisint.Workers.MdeEnrollmentImportWorker.new()
-        |> Oban.insert!()
-
-        {:noreply,
-         socket
-         |> assign(:enrollment_importing, true)
-         |> assign(:enrollment_import_result, nil)
-         |> put_flash(
-           :info,
-           "Enrollment import queued: #{filename}. Processing in background…"
-         )}
-    end
-  end
-
-  def handle_event("cancel-enrollment-upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :enrollment_file, ref)}
-  end
-
-  # ---------------------------------------------------------------------------
-  # Events — SAT CSV upload
-  # ---------------------------------------------------------------------------
-
-  def handle_event("validate_sat", _params, socket) do
-    {:noreply, socket}
-  end
-
-  def handle_event("import_sat", _params, socket) do
-    case consume_uploaded_entries(socket, :sat_file, fn %{path: temp_path}, entry ->
-           dest = persist_upload(temp_path, entry.client_name, "sat_import")
-           {:ok, %{path: dest, filename: entry.client_name}}
-         end) do
-      [] ->
-        {:noreply,
-         put_flash(socket, :error, "Please select a SAT CSV file to upload.")}
-
-      [%{path: dest_path, filename: filename}] ->
-        %{"file_path" => dest_path}
-        |> Emisint.Workers.MdeSatImportWorker.new()
-        |> Oban.insert!()
-
-        {:noreply,
-         socket
-         |> assign(:sat_importing, true)
-         |> assign(:sat_import_result, nil)
-         |> put_flash(
-           :info,
-           "SAT import queued: #{filename}. Processing in background…"
-         )}
-    end
-  end
-
-  def handle_event("cancel-sat-upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :sat_file, ref)}
+    {:noreply,
+     socket
+     |> assign(upload_key, nil)
+     |> assign(progress_key, nil)
+     |> put_flash(:error, "Upload failed: #{reason}")}
   end
 
   # ---------------------------------------------------------------------------
@@ -699,7 +644,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <form phx-submit="import_mde" phx-change="validate_mde" class="p-6 space-y-6">
+              <div id="tigris-mde" phx-hook="TigrisUpload" data-upload-type="mde" class="p-6 space-y-6">
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -708,7 +653,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-warning/40 bg-base-50/50 transition-colors group cursor-pointer"
-                    phx-drop-target={@uploads.mde_csv_file.ref}
+                    data-drop-zone
                   >
                     <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
                       <div class="p-3 bg-base-200 group-hover:bg-warning/10 transition-colors mb-3">
@@ -722,48 +667,38 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         <span class="text-warning font-medium hover:underline">browse</span>
                       </p>
                       <p class="text-xs text-base-content/30 mt-1">CSV files up to 300 MB</p>
-                      <.live_file_input upload={@uploads.mde_csv_file} class="hidden" />
+                      <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
 
                   <%!-- File entry preview --%>
                   <div
-                    :for={entry <- @uploads.mde_csv_file.entries}
+                    :if={@mde_upload}
                     class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
                   >
                     <div class="p-2 bg-warning/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-warning" />
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-sm font-medium truncate">{entry.client_name}</div>
+                      <div class="text-sm font-medium truncate">{@mde_upload.name}</div>
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-warning h-1 rounded-full transition-all duration-300"
-                          style={"width: #{entry.progress}%"}
+                          style={"width: #{@mde_upload_progress || 0}%"}
                         >
                         </div>
                       </div>
                     </div>
                     <span class="text-xs text-base-content/40 shrink-0">
-                      {format_bytes(entry.client_size)}
+                      {format_bytes(@mde_upload.size)}
                     </span>
                     <button
                       type="button"
-                      phx-click="cancel-mde-upload"
-                      phx-value-ref={entry.ref}
+                      data-cancel-btn
                       class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
                     >
                       <.icon name="hero-x-mark" class="size-4" />
                     </button>
-                  </div>
-
-                  <%!-- Upload errors --%>
-                  <div
-                    :for={err <- upload_errors(@uploads.mde_csv_file)}
-                    class="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/10 px-3 py-2.5"
-                  >
-                    <.icon name="hero-exclamation-circle" class="size-4 shrink-0" />
-                    {upload_error_msg(err)}
                   </div>
                 </div>
 
@@ -785,21 +720,22 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                 <%!-- Submit button --%>
                 <button
-                  type="submit"
+                  type="button"
+                  data-import-btn
                   class={[
                     "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
-                    !@mde_importing &&
+                    !@mde_importing && !is_nil(@mde_upload) &&
                       "bg-warning text-warning-content hover:opacity-90 active:scale-[0.99]",
-                    @mde_importing &&
+                    (@mde_importing || is_nil(@mde_upload)) &&
                       "bg-warning/50 text-warning-content/70 cursor-not-allowed"
                   ]}
-                  disabled={@mde_importing}
+                  disabled={@mde_importing || is_nil(@mde_upload)}
                 >
                   <span :if={@mde_importing} class="loading loading-spinner loading-sm"></span>
                   <.icon :if={!@mde_importing} name="hero-arrow-up-tray" class="size-4" />
                   {if @mde_importing, do: "Processing…", else: "Import MDE Data"}
                 </button>
-              </form>
+              </div>
             </div>
 
             <%!-- MDE import result / status — 2 cols --%>
@@ -937,11 +873,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <form
-                phx-submit="import_entity_master"
-                phx-change="validate_entity_master"
-                class="p-6 space-y-6"
-              >
+              <div id="tigris-entity-master" phx-hook="TigrisUpload" data-upload-type="entity_master" class="p-6 space-y-6">
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -950,7 +882,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-info/40 bg-base-50/50 transition-colors group cursor-pointer"
-                    phx-drop-target={@uploads.entity_master_file.ref}
+                    data-drop-zone
                   >
                     <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
                       <div class="p-3 bg-base-200 group-hover:bg-info/10 transition-colors mb-3">
@@ -963,49 +895,39 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         Drag & drop the EntityMaster CSV here, or{" "}
                         <span class="text-info font-medium hover:underline">browse</span>
                       </p>
-                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 50 MB</p>
-                      <.live_file_input upload={@uploads.entity_master_file} class="hidden" />
+                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 250 MB</p>
+                      <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
 
                   <%!-- File entry preview --%>
                   <div
-                    :for={entry <- @uploads.entity_master_file.entries}
+                    :if={@entity_master_upload}
                     class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
                   >
                     <div class="p-2 bg-info/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-info" />
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-sm font-medium truncate">{entry.client_name}</div>
+                      <div class="text-sm font-medium truncate">{@entity_master_upload.name}</div>
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-info h-1 rounded-full transition-all duration-300"
-                          style={"width: #{entry.progress}%"}
+                          style={"width: #{@entity_master_upload_progress || 0}%"}
                         >
                         </div>
                       </div>
                     </div>
                     <span class="text-xs text-base-content/40 shrink-0">
-                      {format_bytes(entry.client_size)}
+                      {format_bytes(@entity_master_upload.size)}
                     </span>
                     <button
                       type="button"
-                      phx-click="cancel-entity-master-upload"
-                      phx-value-ref={entry.ref}
+                      data-cancel-btn
                       class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
                     >
                       <.icon name="hero-x-mark" class="size-4" />
                     </button>
-                  </div>
-
-                  <%!-- Upload errors --%>
-                  <div
-                    :for={err <- upload_errors(@uploads.entity_master_file)}
-                    class="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/10 px-3 py-2.5"
-                  >
-                    <.icon name="hero-exclamation-circle" class="size-4 shrink-0" />
-                    {upload_error_msg(err)}
                   </div>
                 </div>
 
@@ -1027,15 +949,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                 <%!-- Submit button --%>
                 <button
-                  type="submit"
+                  type="button"
+                  data-import-btn
                   class={[
                     "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
-                    !@entity_master_importing &&
+                    !@entity_master_importing && !is_nil(@entity_master_upload) &&
                       "bg-info text-info-content hover:opacity-90 active:scale-[0.99]",
-                    @entity_master_importing &&
+                    (@entity_master_importing || is_nil(@entity_master_upload)) &&
                       "bg-info/50 text-info-content/70 cursor-not-allowed"
                   ]}
-                  disabled={@entity_master_importing}
+                  disabled={@entity_master_importing || is_nil(@entity_master_upload)}
                 >
                   <span
                     :if={@entity_master_importing}
@@ -1049,7 +972,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   {if @entity_master_importing, do: "Processing…", else: "Import EntityMaster"}
                 </button>
-              </form>
+              </div>
             </div>
 
             <%!-- EntityMaster import result / status — 2 cols --%>
@@ -1178,11 +1101,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <form
-                phx-submit="import_enrollment"
-                phx-change="validate_enrollment"
-                class="p-6 space-y-6"
-              >
+              <div id="tigris-enrollment" phx-hook="TigrisUpload" data-upload-type="enrollment" class="p-6 space-y-6">
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -1191,7 +1110,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-success/40 bg-base-50/50 transition-colors group cursor-pointer"
-                    phx-drop-target={@uploads.enrollment_file.ref}
+                    data-drop-zone
                   >
                     <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
                       <div class="p-3 bg-base-200 group-hover:bg-success/10 transition-colors mb-3">
@@ -1204,49 +1123,39 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         Drag & drop the Enrollment CSV here, or{" "}
                         <span class="text-success font-medium hover:underline">browse</span>
                       </p>
-                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 50 MB</p>
-                      <.live_file_input upload={@uploads.enrollment_file} class="hidden" />
+                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 250 MB</p>
+                      <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
 
                   <%!-- File entry preview --%>
                   <div
-                    :for={entry <- @uploads.enrollment_file.entries}
+                    :if={@enrollment_upload}
                     class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
                   >
                     <div class="p-2 bg-success/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-success" />
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-sm font-medium truncate">{entry.client_name}</div>
+                      <div class="text-sm font-medium truncate">{@enrollment_upload.name}</div>
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-success h-1 rounded-full transition-all duration-300"
-                          style={"width: #{entry.progress}%"}
+                          style={"width: #{@enrollment_upload_progress || 0}%"}
                         >
                         </div>
                       </div>
                     </div>
                     <span class="text-xs text-base-content/40 shrink-0">
-                      {format_bytes(entry.client_size)}
+                      {format_bytes(@enrollment_upload.size)}
                     </span>
                     <button
                       type="button"
-                      phx-click="cancel-enrollment-upload"
-                      phx-value-ref={entry.ref}
+                      data-cancel-btn
                       class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
                     >
                       <.icon name="hero-x-mark" class="size-4" />
                     </button>
-                  </div>
-
-                  <%!-- Upload errors --%>
-                  <div
-                    :for={err <- upload_errors(@uploads.enrollment_file)}
-                    class="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/10 px-3 py-2.5"
-                  >
-                    <.icon name="hero-exclamation-circle" class="size-4 shrink-0" />
-                    {upload_error_msg(err)}
                   </div>
                 </div>
 
@@ -1277,15 +1186,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                 <%!-- Submit button --%>
                 <button
-                  type="submit"
+                  type="button"
+                  data-import-btn
                   class={[
                     "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
-                    !@enrollment_importing &&
+                    !@enrollment_importing && !is_nil(@enrollment_upload) &&
                       "bg-success text-success-content hover:opacity-90 active:scale-[0.99]",
-                    @enrollment_importing &&
+                    (@enrollment_importing || is_nil(@enrollment_upload)) &&
                       "bg-success/50 text-success-content/70 cursor-not-allowed"
                   ]}
-                  disabled={@enrollment_importing}
+                  disabled={@enrollment_importing || is_nil(@enrollment_upload)}
                 >
                   <span
                     :if={@enrollment_importing}
@@ -1299,7 +1209,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   {if @enrollment_importing, do: "Processing…", else: "Import Enrollment"}
                 </button>
-              </form>
+              </div>
             </div>
 
             <%!-- Enrollment import result / status — 2 cols --%>
@@ -1428,11 +1338,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <form
-                phx-submit="import_sat"
-                phx-change="validate_sat"
-                class="p-6 space-y-6"
-              >
+              <div id="tigris-sat" phx-hook="TigrisUpload" data-upload-type="sat" class="p-6 space-y-6">
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -1441,7 +1347,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-secondary/40 bg-base-50/50 transition-colors group cursor-pointer"
-                    phx-drop-target={@uploads.sat_file.ref}
+                    data-drop-zone
                   >
                     <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
                       <div class="p-3 bg-base-200 group-hover:bg-secondary/10 transition-colors mb-3">
@@ -1454,49 +1360,39 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         Drag & drop the SAT CSV here, or{" "}
                         <span class="text-secondary font-medium hover:underline">browse</span>
                       </p>
-                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 50 MB</p>
-                      <.live_file_input upload={@uploads.sat_file} class="hidden" />
+                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 250 MB</p>
+                      <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
 
                   <%!-- File entry preview --%>
                   <div
-                    :for={entry <- @uploads.sat_file.entries}
+                    :if={@sat_upload}
                     class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
                   >
                     <div class="p-2 bg-secondary/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-secondary" />
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-sm font-medium truncate">{entry.client_name}</div>
+                      <div class="text-sm font-medium truncate">{@sat_upload.name}</div>
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-secondary h-1 rounded-full transition-all duration-300"
-                          style={"width: #{entry.progress}%"}
+                          style={"width: #{@sat_upload_progress || 0}%"}
                         >
                         </div>
                       </div>
                     </div>
                     <span class="text-xs text-base-content/40 shrink-0">
-                      {format_bytes(entry.client_size)}
+                      {format_bytes(@sat_upload.size)}
                     </span>
                     <button
                       type="button"
-                      phx-click="cancel-sat-upload"
-                      phx-value-ref={entry.ref}
+                      data-cancel-btn
                       class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
                     >
                       <.icon name="hero-x-mark" class="size-4" />
                     </button>
-                  </div>
-
-                  <%!-- Upload errors --%>
-                  <div
-                    :for={err <- upload_errors(@uploads.sat_file)}
-                    class="flex items-center gap-2 text-sm text-error bg-error/5 border border-error/10 px-3 py-2.5"
-                  >
-                    <.icon name="hero-exclamation-circle" class="size-4 shrink-0" />
-                    {upload_error_msg(err)}
                   </div>
                 </div>
 
@@ -1520,15 +1416,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
                 <%!-- Submit button --%>
                 <button
-                  type="submit"
+                  type="button"
+                  data-import-btn
                   class={[
                     "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
-                    !@sat_importing &&
+                    !@sat_importing && !is_nil(@sat_upload) &&
                       "bg-secondary text-secondary-content hover:opacity-90 active:scale-[0.99]",
-                    @sat_importing &&
+                    (@sat_importing || is_nil(@sat_upload)) &&
                       "bg-secondary/50 text-secondary-content/70 cursor-not-allowed"
                   ]}
-                  disabled={@sat_importing}
+                  disabled={@sat_importing || is_nil(@sat_upload)}
                 >
                   <span
                     :if={@sat_importing}
@@ -1542,7 +1439,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   {if @sat_importing, do: "Processing…", else: "Import SAT Data"}
                 </button>
-              </form>
+              </div>
             </div>
 
             <%!-- SAT import result / status — 2 cols --%>
@@ -1709,20 +1606,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
     |> Ash.Query.sort(updated_at: :desc)
     |> Ash.Query.limit(20)
     |> Ash.read!(tenant: oid, actor: user)
-  end
-
-  # Copies an uploaded temp file to a stable OS temp path the Oban worker can read.
-  # Phoenix deletes the original temp file after consume_uploaded_entries returns.
-  defp persist_mde_upload(temp_path, client_name) do
-    persist_upload(temp_path, client_name, "mde_import")
-  end
-
-  defp persist_upload(temp_path, client_name, prefix) do
-    ext = Path.extname(client_name)
-    filename = "#{prefix}_#{System.unique_integer([:positive])}#{ext}"
-    dest = Path.join(System.tmp_dir!(), filename)
-    File.cp!(temp_path, dest)
-    dest
   end
 
   defp parse_csv(content) do

@@ -31,39 +31,45 @@ defmodule Emisint.Workers.EntityMasterImportWorker do
   @pubsub_topic "entity_master_import"
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"file_path" => file_path}}) do
-    result = MdeEntityMasterImporter.import_file(file_path)
+  def perform(%Oban.Job{args: %{"bucket" => _bucket, "key" => key}}) do
+    tmp_path =
+      Path.join(System.tmp_dir!(), "entity_master_#{System.unique_integer([:positive])}.csv")
 
-    case result do
-      {:ok, stats} ->
-        Logger.info(
-          "[EntityMasterImportWorker] Completed #{Path.basename(file_path)} — " <>
-            "Records: #{stats.records}, Errors: #{stats.errors}"
-        )
+    try do
+      Emisint.Storage.download_to_file!(key, tmp_path)
+      result = MdeEntityMasterImporter.import_file(tmp_path)
 
-        Phoenix.PubSub.broadcast(
-          Emisint.PubSub,
-          @pubsub_topic,
-          {:entity_master_import_completed, stats}
-        )
+      case result do
+        {:ok, stats} ->
+          Logger.info(
+            "[EntityMasterImportWorker] Completed #{Path.basename(key)} — " <>
+              "Records: #{stats.records}, Errors: #{stats.errors}"
+          )
 
-        :ok
+          Phoenix.PubSub.broadcast(
+            Emisint.PubSub,
+            @pubsub_topic,
+            {:entity_master_import_completed, stats}
+          )
 
-      {:error, reason} ->
-        Logger.error(
-          "[EntityMasterImportWorker] Failed #{Path.basename(file_path)}: #{reason}"
-        )
+          :ok
 
-        Phoenix.PubSub.broadcast(
-          Emisint.PubSub,
-          @pubsub_topic,
-          {:entity_master_import_failed, reason}
-        )
+        {:error, reason} ->
+          Logger.error(
+            "[EntityMasterImportWorker] Failed #{Path.basename(key)}: #{reason}"
+          )
 
-        {:error, reason}
+          Phoenix.PubSub.broadcast(
+            Emisint.PubSub,
+            @pubsub_topic,
+            {:entity_master_import_failed, reason}
+          )
+
+          {:error, reason}
+      end
+    after
+      File.rm(tmp_path)
+      Emisint.Storage.delete(key)
     end
-  after
-    # Always clean up the temp file regardless of outcome
-    File.rm(file_path)
   end
 end

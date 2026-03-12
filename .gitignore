@@ -36,3 +36,4 @@ npm-debug.log
 /assets/node_modules/
 
 temp/EEM_3-11-25_All_Buildings.csv
+.env.local.sh

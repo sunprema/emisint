@@ -33,45 +33,50 @@ defmodule Emisint.Workers.MdeImportWorker do
   @pubsub_topic "mde_import"
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"file_path" => file_path}}) do
-    result = MdeImporter.import_file(file_path)
+  def perform(%Oban.Job{args: %{"bucket" => _bucket, "key" => key}}) do
+    tmp_path = Path.join(System.tmp_dir!(), "mde_#{System.unique_integer([:positive])}.csv")
 
-    case result do
-      {:ok, stats} ->
-        Logger.info(
-          "[MdeImportWorker] Completed #{Path.basename(file_path)} — " <>
-            "ISDs: #{stats.isds}, Districts: #{stats.districts}, " <>
-            "Buildings: #{stats.buildings}, Results: #{stats.results}, " <>
-            "Errors: #{stats.errors}"
-        )
+    try do
+      Emisint.Storage.download_to_file!(key, tmp_path)
+      result = MdeImporter.import_file(tmp_path)
 
-        Phoenix.PubSub.broadcast(
-          Emisint.PubSub,
-          @pubsub_topic,
-          {:mde_import_completed, stats}
-        )
+      case result do
+        {:ok, stats} ->
+          Logger.info(
+            "[MdeImportWorker] Completed #{Path.basename(key)} — " <>
+              "ISDs: #{stats.isds}, Districts: #{stats.districts}, " <>
+              "Buildings: #{stats.buildings}, Results: #{stats.results}, " <>
+              "Errors: #{stats.errors}"
+          )
 
-        if stats.school_year do
-          %{"school_year" => stats.school_year}
-          |> MdeComparisonSnapshotWorker.new()
-          |> Oban.insert!()
-        end
+          Phoenix.PubSub.broadcast(
+            Emisint.PubSub,
+            @pubsub_topic,
+            {:mde_import_completed, stats}
+          )
 
-        :ok
+          if stats.school_year do
+            %{"school_year" => stats.school_year}
+            |> MdeComparisonSnapshotWorker.new()
+            |> Oban.insert!()
+          end
 
-      {:error, reason} ->
-        Logger.error("[MdeImportWorker] Failed #{Path.basename(file_path)}: #{reason}")
+          :ok
 
-        Phoenix.PubSub.broadcast(
-          Emisint.PubSub,
-          @pubsub_topic,
-          {:mde_import_failed, reason}
-        )
+        {:error, reason} ->
+          Logger.error("[MdeImportWorker] Failed #{Path.basename(key)}: #{reason}")
 
-        {:error, reason}
+          Phoenix.PubSub.broadcast(
+            Emisint.PubSub,
+            @pubsub_topic,
+            {:mde_import_failed, reason}
+          )
+
+          {:error, reason}
+      end
+    after
+      File.rm(tmp_path)
+      Emisint.Storage.delete(key)
     end
-  after
-    # Always clean up the temp file regardless of outcome
-    File.rm(file_path)
   end
 end

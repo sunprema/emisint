@@ -117,6 +117,8 @@ defmodule Emisint.MixProject do
       {:imprintor, "~> 0.1.0"},
       {:ash_csv, "~> 0.9.7-rc.0"},
       {:nimble_csv, "~> 1.3"},
+      {:ex_aws, "~> 2.5"},
+      {:ex_aws_s3, "~> 2.5"},
       {:live_agent,
        if(Mix.env() == :dev and File.dir?("/Volumes/x/projects/elixir_libs/live_agent"),
          do: [path: "/Volumes/x/projects/elixir_libs/live_agent", override: true, only: :dev],
