@@ -57,8 +57,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> allow_upload(:mde_csv_file,
         accept: ~w(.csv),
         max_entries: 1,
-        # MDE statewide exports can be 50–200 MB
-        max_file_size: 209_715_200
+        # MDE statewide exports can be 50–300 MB
+        max_file_size: 314_572_800
       )
       |> allow_upload(:entity_master_file,
         accept: ~w(.csv),
@@ -721,7 +721,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         Drag & drop the MDE export here, or{" "}
                         <span class="text-warning font-medium hover:underline">browse</span>
                       </p>
-                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 200 MB</p>
+                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 300 MB</p>
                       <.live_file_input upload={@uploads.mde_csv_file} class="hidden" />
                     </label>
                   </div>
@@ -1774,7 +1774,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
     Calendar.strftime(dt, "%b %d, %Y %H:%M")
   end
 
-  defp upload_error_msg(:too_large), do: "File is too large (max 200MB for MDE / 10MB for other)"
+  defp upload_error_msg(:too_large), do: "File is too large (max 300MB for MDE / 10MB for other)"
   defp upload_error_msg(:not_accepted), do: "Only CSV files are accepted"
   defp upload_error_msg(:too_many_files), do: "Only one file allowed"
   defp upload_error_msg(err), do: inspect(err)
