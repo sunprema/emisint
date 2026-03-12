@@ -20,12 +20,24 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   # ---------------------------------------------------------------------------
 
   def mount(_params, _session, socket) do
-    years = load_school_years()
+    is_connected = connected?(socket)
+
+    # Defer all DB work to the connected mount — the disconnected (HTTP) pass
+    # only renders static HTML so loading data there is wasteful.
+    {years, all_districts} =
+      if is_connected do
+        years_task = Task.async(fn -> load_school_years() end)
+        districts_task = Task.async(fn -> load_all_districts() end)
+        {Task.await(years_task), Task.await(districts_task)}
+      else
+        {[], []}
+      end
+
     selected_year = List.last(years) || ""
-    all_districts = load_all_districts()
 
     {:ok,
      socket
+     |> assign(:is_connected, is_connected)
      |> assign(:page_title, "District Analysis")
      |> assign(:school_years, years)
      |> assign(:selected_year, selected_year)
@@ -51,91 +63,88 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     year = socket.assigns.selected_year
     compare_code = Map.get(params, "compare", "")
 
-    {primary, compare} =
-      if tab == "district_comparison" do
-        p = if year != "", do: load_district_data(dc, year), else: nil
+    # Skip DB work on the disconnected (HTTP) pass — only set URL-derived assigns.
+    if not socket.assigns.is_connected do
+      {:noreply,
+       socket
+       |> assign(:district_code, dc)
+       |> assign(:compare_code, compare_code)
+       |> assign(:active_tab, tab)}
+    else
+      # ── District comparison tab: two independent snapshot lookups → parallel ──
+      {primary, compare} =
+        if tab == "district_comparison" do
+          p_task = if year != "", do: Task.async(fn -> load_district_data(dc, year) end)
 
-        c =
-          if compare_code != "" && year != "",
-            do: load_district_data(compare_code, year),
-            else: nil
+          c_task =
+            if compare_code != "" && year != "",
+              do: Task.async(fn -> load_district_data(compare_code, year) end)
 
-        {p, c}
-      else
-        {socket.assigns.primary, socket.assigns.compare}
-      end
-
-    district_buildings =
-      if tab == "school_vs_lea", do: load_district_buildings(dc), else: []
-
-    # Auto-select building: use URL param first, fall back to sole building in district
-    effective_building_code =
-      building_code ||
-        case district_buildings do
-          [sole] -> sole.building_code
-          _ -> nil
+          {if(p_task, do: Task.await(p_task)), if(c_task, do: Task.await(c_task))}
+        else
+          {socket.assigns.primary, socket.assigns.compare}
         end
 
-    school_vs_lea =
-      if tab == "school_vs_lea" && effective_building_code && year != "" do
-        load_school_vs_lea(effective_building_code, year)
-      else
-        nil
-      end
+      # Buildings lookup runs first — tiny indexed query needed to resolve
+      # effective_building_code before the parallel batches below.
+      district_buildings =
+        if tab == "school_vs_lea", do: load_district_buildings(dc), else: []
 
-    enrollment =
-      if tab == "school_vs_lea" && effective_building_code && year != "" do
-        load_enrollment(effective_building_code, year)
-      else
-        nil
-      end
+      effective_building_code =
+        building_code ||
+          case district_buildings do
+            [sole] -> sole.building_code
+            _ -> nil
+          end
 
-    sat_results =
-      if tab == "school_vs_lea" && effective_building_code && year != "" do
-        load_sat_results(effective_building_code, year)
-      else
-        []
-      end
+      # ── Batch 1: four independent queries → parallel ──────────────────────────
+      {school_vs_lea, enrollment, sat_results, sat_state_result} =
+        if tab == "school_vs_lea" && effective_building_code && year != "" do
+          t1 = Task.async(fn -> load_school_vs_lea(effective_building_code, year) end)
+          t2 = Task.async(fn -> load_enrollment(effective_building_code, year) end)
+          t3 = Task.async(fn -> load_sat_results(effective_building_code, year) end)
+          t4 = Task.async(fn -> load_sat_state_result(year) end)
+          {Task.await(t1), Task.await(t2), Task.await(t3), Task.await(t4)}
+        else
+          {nil, nil, [], nil}
+        end
 
-    sat_lea_result =
-      if tab == "school_vs_lea" && school_vs_lea && !school_vs_lea.no_lea_found &&
-           school_vs_lea.lea_district_code && year != "" do
-        load_sat_lea_result(school_vs_lea.lea_district_code, year)
-      else
-        nil
-      end
+      # ── Batch 2: two queries that depend on lea_dc from batch 1 → parallel ───
+      lea_dc = school_vs_lea && school_vs_lea.lea_district_code
 
-    sat_state_result =
-      if tab == "school_vs_lea" && year != "" do
-        load_sat_state_result(year)
-      else
-        nil
-      end
+      {sat_lea_result, econ_grade_breakdown} =
+        if tab == "school_vs_lea" && effective_building_code && year != "" do
+          sat_lea_task =
+            if school_vs_lea && !school_vs_lea.no_lea_found && lea_dc,
+              do: Task.async(fn -> load_sat_lea_result(lea_dc, year) end)
 
-    econ_grade_breakdown =
-      if tab == "school_vs_lea" && effective_building_code && year != "" do
-        lea_dc = school_vs_lea && school_vs_lea.lea_district_code
-        load_econ_grade_breakdown(effective_building_code, lea_dc, year)
-      else
-        []
-      end
+          econ_task =
+            Task.async(fn ->
+              load_econ_grade_breakdown(effective_building_code, lea_dc, year)
+            end)
 
-    {:noreply,
-     socket
-     |> assign(:district_code, dc)
-     |> assign(:compare_code, compare_code)
-     |> assign(:active_tab, tab)
-     |> assign(:primary, primary)
-     |> assign(:compare, compare)
-     |> assign(:district_buildings, district_buildings)
-     |> assign(:selected_building_code, effective_building_code)
-     |> assign(:enrollment, enrollment)
-     |> assign(:school_vs_lea, school_vs_lea)
-     |> assign(:sat_results, sat_results)
-     |> assign(:sat_lea_result, sat_lea_result)
-     |> assign(:sat_state_result, sat_state_result)
-     |> assign(:econ_grade_breakdown, econ_grade_breakdown)
-     |> assign(:page_title, page_title(primary, compare))}
+          {if(sat_lea_task, do: Task.await(sat_lea_task)), Task.await(econ_task)}
+        else
+          {nil, []}
+        end
+
+      {:noreply,
+       socket
+       |> assign(:district_code, dc)
+       |> assign(:compare_code, compare_code)
+       |> assign(:active_tab, tab)
+       |> assign(:primary, primary)
+       |> assign(:compare, compare)
+       |> assign(:district_buildings, district_buildings)
+       |> assign(:selected_building_code, effective_building_code)
+       |> assign(:enrollment, enrollment)
+       |> assign(:school_vs_lea, school_vs_lea)
+       |> assign(:sat_results, sat_results)
+       |> assign(:sat_lea_result, sat_lea_result)
+       |> assign(:sat_state_result, sat_state_result)
+       |> assign(:econ_grade_breakdown, econ_grade_breakdown)
+       |> assign(:page_title, page_title(primary, compare))}
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -145,72 +154,58 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   def handle_event("select_year", %{"year" => year}, socket) do
     dc = socket.assigns.district_code
     tab = socket.assigns.active_tab
-    building_code = socket.assigns.selected_building_code
 
-    {primary, compare} =
-      if tab == "district_comparison" do
-        p = if dc, do: load_district_data(dc, year), else: nil
-
-        c =
-          if socket.assigns.compare_code != "",
-            do: load_district_data(socket.assigns.compare_code, year),
-            else: nil
-
-        {p, c}
-      else
-        {socket.assigns.primary, socket.assigns.compare}
-      end
-
-    # Honor auto-selected sole building the same way handle_params does
     effective_building_code =
-      building_code ||
+      socket.assigns.selected_building_code ||
         case socket.assigns.district_buildings do
           [sole] -> sole.building_code
           _ -> nil
         end
 
-    school_vs_lea =
+    # ── District comparison tab: two independent snapshot lookups → parallel ──
+    {primary, compare} =
+      if tab == "district_comparison" do
+        p_task = if dc && year != "", do: Task.async(fn -> load_district_data(dc, year) end)
+
+        c_task =
+          if socket.assigns.compare_code != "" && year != "",
+            do: Task.async(fn -> load_district_data(socket.assigns.compare_code, year) end)
+
+        {if(p_task, do: Task.await(p_task)), if(c_task, do: Task.await(c_task))}
+      else
+        {socket.assigns.primary, socket.assigns.compare}
+      end
+
+    # ── Batch 1: four independent queries → parallel ──────────────────────────
+    {school_vs_lea, enrollment, sat_results, sat_state_result} =
       if tab == "school_vs_lea" && effective_building_code && year != "" do
-        load_school_vs_lea(effective_building_code, year)
+        t1 = Task.async(fn -> load_school_vs_lea(effective_building_code, year) end)
+        t2 = Task.async(fn -> load_enrollment(effective_building_code, year) end)
+        t3 = Task.async(fn -> load_sat_results(effective_building_code, year) end)
+        t4 = Task.async(fn -> load_sat_state_result(year) end)
+        {Task.await(t1), Task.await(t2), Task.await(t3), Task.await(t4)}
       else
-        socket.assigns.school_vs_lea
+        {socket.assigns.school_vs_lea, socket.assigns.enrollment,
+         socket.assigns.sat_results, socket.assigns.sat_state_result}
       end
 
-    enrollment =
+    # ── Batch 2: two queries that depend on lea_dc from batch 1 → parallel ───
+    lea_dc = school_vs_lea && school_vs_lea.lea_district_code
+
+    {sat_lea_result, econ_grade_breakdown} =
       if tab == "school_vs_lea" && effective_building_code && year != "" do
-        load_enrollment(effective_building_code, year)
-      else
-        socket.assigns.enrollment
-      end
+        sat_lea_task =
+          if school_vs_lea && !school_vs_lea.no_lea_found && lea_dc,
+            do: Task.async(fn -> load_sat_lea_result(lea_dc, year) end)
 
-    sat_results =
-      if tab == "school_vs_lea" && effective_building_code && year != "" do
-        load_sat_results(effective_building_code, year)
-      else
-        socket.assigns.sat_results
-      end
+        econ_task =
+          Task.async(fn ->
+            load_econ_grade_breakdown(effective_building_code, lea_dc, year)
+          end)
 
-    sat_lea_result =
-      if tab == "school_vs_lea" && school_vs_lea && !school_vs_lea.no_lea_found &&
-           school_vs_lea.lea_district_code && year != "" do
-        load_sat_lea_result(school_vs_lea.lea_district_code, year)
+        {if(sat_lea_task, do: Task.await(sat_lea_task)), Task.await(econ_task)}
       else
-        socket.assigns.sat_lea_result
-      end
-
-    sat_state_result =
-      if tab == "school_vs_lea" && year != "" do
-        load_sat_state_result(year)
-      else
-        socket.assigns.sat_state_result
-      end
-
-    econ_grade_breakdown =
-      if tab == "school_vs_lea" && effective_building_code && year != "" do
-        lea_dc = school_vs_lea && school_vs_lea.lea_district_code
-        load_econ_grade_breakdown(effective_building_code, lea_dc, year)
-      else
-        socket.assigns.econ_grade_breakdown
+        {socket.assigns.sat_lea_result, socket.assigns.econ_grade_breakdown}
       end
 
     {:noreply,
@@ -1547,7 +1542,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   # ---------------------------------------------------------------------------
 
   defp load_school_years do
-    MdeStateAssessmentResult
+    # Use the snapshots table — small, indexed on school_year, avoids scanning
+    # the large MdeStateAssessmentResult table just to get a few distinct years.
+    MdeDistrictSnapshot
     |> Ash.Query.select([:school_year])
     |> Ash.Query.sort(:school_year)
     |> Ash.read!(authorize?: false)
@@ -1556,7 +1553,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   end
 
   defp load_all_districts do
+    # Select only the columns needed for the compare dropdown.
     MdeDistrict
+    |> Ash.Query.select([:district_code, :district_name, :entity_type])
     |> Ash.Query.sort(:district_name)
     |> Ash.read!(authorize?: false)
   end
@@ -1630,42 +1629,53 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   end
 
   defp load_econ_grade_breakdown(building_code, lea_district_code, year) do
-    school_rows =
-      MdeStateAssessmentResult
-      |> Ash.Query.filter(
-        rollup_level == :building and
-          mde_building.building_code == ^building_code and
-          school_year == ^year and
-          report_category == "Economically Disadvantaged" and
-          grade_content_tested != "All"
-      )
-      |> Ash.read!(authorize?: false)
-
-    lea_rows =
-      if lea_district_code do
+    # Three independent queries — run in parallel.
+    school_task =
+      Task.async(fn ->
         MdeStateAssessmentResult
         |> Ash.Query.filter(
-          rollup_level == :district and
-            mde_district.district_code == ^lea_district_code and
+          rollup_level == :building and
+            mde_building.building_code == ^building_code and
             school_year == ^year and
             report_category == "Economically Disadvantaged" and
             grade_content_tested != "All"
         )
         |> Ash.read!(authorize?: false)
-      else
-        []
-      end
+      end)
 
-    state_rows =
-      MdeStateAssessmentResult
-      |> Ash.Query.filter(
-        rollup_level == :isd and
-          mde_isd.isd_code == "0" and
-          school_year == ^year and
-          report_category == "Economically Disadvantaged" and
-          grade_content_tested != "All"
-      )
-      |> Ash.read!(authorize?: false)
+    lea_task =
+      Task.async(fn ->
+        if lea_district_code do
+          MdeStateAssessmentResult
+          |> Ash.Query.filter(
+            rollup_level == :district and
+              mde_district.district_code == ^lea_district_code and
+              school_year == ^year and
+              report_category == "Economically Disadvantaged" and
+              grade_content_tested != "All"
+          )
+          |> Ash.read!(authorize?: false)
+        else
+          []
+        end
+      end)
+
+    state_task =
+      Task.async(fn ->
+        MdeStateAssessmentResult
+        |> Ash.Query.filter(
+          rollup_level == :isd and
+            mde_isd.isd_code == "0" and
+            school_year == ^year and
+            report_category == "Economically Disadvantaged" and
+            grade_content_tested != "All"
+        )
+        |> Ash.read!(authorize?: false)
+      end)
+
+    school_rows = Task.await(school_task)
+    lea_rows = Task.await(lea_task)
+    state_rows = Task.await(state_task)
 
     school_grades = Enum.group_by(school_rows, & &1.grade_content_tested)
     lea_grades = Enum.group_by(lea_rows, & &1.grade_content_tested)
