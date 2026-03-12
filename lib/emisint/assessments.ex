@@ -84,5 +84,15 @@ defmodule Emisint.Assessments do
       define :list_mde_sat_results, action: :read
       define :upsert_mde_sat_result, action: :upsert
     end
+
+    resource Emisint.Assessments.MdeImportLog do
+      define :create_mde_import_log, action: :create
+      define :update_mde_import_log, action: :update
+      define :get_mde_import_log, action: :read, get_by: [:id]
+      define :list_recent_mde_import_logs, action: :list_recent
+      define :mark_mde_import_log_processing, action: :mark_processing
+      define :mark_mde_import_log_completed, action: :mark_completed
+      define :mark_mde_import_log_failed, action: :mark_failed
+    end
   end
 end

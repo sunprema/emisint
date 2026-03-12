@@ -1,25 +1,26 @@
 defmodule Emisint.Assessments.MdeImporter do
-  @batch_size 2000
+  @batch_size 5000
 
   @moduledoc """
   Imports MDE public state assessment CSV data into the normalized relational tables.
 
   The CSV must follow the standard MDE aggregate export format with a header row.
-  File may be very large (millions of rows); the importer uses two streaming passes
-  so the fact rows are never fully loaded into memory.
+  File may be very large (millions of rows); the importer uses a **single streaming
+  pass** so the file is read exactly once.
 
   ## Pipeline
 
-    1. **First pass** — stream the file to collect unique ISDs, districts, and buildings
-       (these are tiny sets: ~57 ISDs, ~900 districts, ~4 000 buildings statewide).
-       Rows with `building_code = "0"` or `district_code = "0"` are sentinel rollup rows
-       and are skipped when collecting dimensions (no phantom "0" entities are created).
-    2. **Upsert dimension tables** in FK order:
-       `MdeIsd → MdeDistrict → MdeBuilding`
-       After each upsert, read back the table to build a `code → UUID` lookup map.
-    3. **Second pass** — stream fact rows in batches of #{@batch_size}, tag each row as
-       `:building`, `:district`, or `:isd` granularity, resolve UUIDs, and bulk-upsert
-       `MdeStateAssessmentResult` via the appropriate action for each granularity.
+    1. **Single pass** — stream the CSV in batches of #{@batch_size} rows.
+       For each batch:
+       a. Extract any dimension records (ISDs, districts, buildings) not yet seen.
+       b. Upsert only the *new* dimensions in FK order, then extend the in-memory
+          `code → UUID` lookup maps with just the new entries (no full table re-read).
+       c. Tag fact rows by rollup granularity, resolve UUIDs, and bulk-upsert via
+          three parallel tasks.
+
+    Dimension sets are tiny (~57 ISDs, ~900 districts, ~4 000 buildings statewide)
+    and stabilise within the first few batches; subsequent batches skip dimension
+    upserts entirely.
 
   ## Usage
 
@@ -27,6 +28,9 @@ defmodule Emisint.Assessments.MdeImporter do
       {:ok, %{isds: 57, districts: 842, buildings: 3891, results: 1_200_000, errors: 0}}
 
   """
+
+  require Ash.Query
+  require Logger
 
   alias Emisint.Assessments.{MdeBuilding, MdeDistrict, MdeIsd, MdeStateAssessmentResult}
 
@@ -70,37 +74,33 @@ defmodule Emisint.Assessments.MdeImporter do
   @spec import_file(Path.t()) :: {:ok, map()} | {:error, String.t()}
   def import_file(path) do
     with :ok <- validate_file(path) do
-      # First pass — cheap: only keeps unique dimension rows in memory.
-      # Skips "0" sentinel codes so no phantom records are created.
-      {isds, districts, buildings, school_year} = collect_dimensions(path)
+      initial_state = %{
+        seen_isd_codes: MapSet.new(),
+        seen_district_codes: MapSet.new(),
+        seen_building_codes: MapSet.new(),
+        isd_map: %{},
+        district_map: %{},
+        building_map: %{},
+        school_year: nil,
+        batch_num: 0,
+        import_start: System.monotonic_time(:millisecond)
+      }
 
-      # Upsert ISDs, then build isd_code → UUID map
-      upsert_isds(isds)
-      isd_map = build_code_map(MdeIsd, :isd_code)
-
-      # Upsert districts (needs ISD UUIDs), then build district_code → UUID map
-      upsert_districts(districts, isd_map)
-      district_map = build_code_map(MdeDistrict, :district_code)
-
-      # Upsert buildings (needs district UUIDs), then build building_code → UUID map
-      upsert_buildings(buildings, district_map)
-      building_map = build_code_map(MdeBuilding, :building_code)
-
-      # Second pass — streamed in batches, never fully in memory.
-      # Routes rows to the correct upsert action by rollup granularity.
-      {result_count, error_count, error_rows} =
-        upsert_results(path, building_map, district_map, isd_map)
+      {result_count, error_count, error_rows, final_state} =
+        stream_as_maps(path)
+        |> Stream.chunk_every(@batch_size)
+        |> Enum.reduce({0, 0, [], initial_state}, &process_batch/2)
 
       error_file = write_error_csv(path, error_rows)
 
       {:ok,
        %{
-         isds: map_size(isds),
-         districts: map_size(districts),
-         buildings: map_size(buildings),
+         isds: MapSet.size(final_state.seen_isd_codes),
+         districts: MapSet.size(final_state.seen_district_codes),
+         buildings: MapSet.size(final_state.seen_building_codes),
          results: result_count,
          errors: error_count,
-         school_year: school_year,
+         school_year: final_state.school_year,
          error_file: error_file
        }}
     end
@@ -109,106 +109,165 @@ defmodule Emisint.Assessments.MdeImporter do
   end
 
   # ---------------------------------------------------------------------------
-  # Streaming helpers
+  # Batch processor — single pass
   # ---------------------------------------------------------------------------
 
-  # Streams the CSV as string-keyed maps, one per data row.
-  # Uses Stream.transform to capture the header row and zip it with each data row.
-  # Handles optional UTF-8 BOM produced by some Windows CSV exports.
-  defp stream_as_maps(path) do
-    File.stream!(path)
-    |> NimbleCSV.RFC4180.parse_stream(skip_headers: false)
-    |> Stream.transform(nil, fn
-      # First row: capture headers, strip BOM if present, emit nothing
-      [first | rest], nil ->
-        headers = [String.trim_leading(first, "\uFEFF") | rest]
-        {[], headers}
+  defp process_batch(batch, {ok_acc, err_acc, err_rows_acc, state}) do
+    batch_num = state.batch_num + 1
+    batch_start = System.monotonic_time(:millisecond)
 
-      # Subsequent rows: zip with headers to produce a string-keyed map
-      row, headers ->
-        row_map = headers |> Enum.zip(row) |> Map.new()
-        {[row_map], headers}
-    end)
+    # Capture school_year from the first row that has one
+    school_year =
+      state.school_year ||
+        Enum.find_value(batch, fn row -> row["SchoolYear"] end)
+
+    # Extract dimensions from this batch that we haven't seen before
+    {new_isds, new_districts, new_buildings} = extract_new_dims(batch, state)
+
+    # Upsert only the newly discovered dimensions and extend the lookup maps
+    state =
+      state
+      |> maybe_upsert_isds(new_isds)
+      |> maybe_upsert_districts(new_districts)
+      |> maybe_upsert_buildings(new_buildings)
+      |> Map.put(:school_year, school_year)
+      |> Map.put(:batch_num, batch_num)
+
+    # Tag fact rows and upsert in parallel by rollup granularity
+    {building_rows, district_rows, isd_rows} =
+      Enum.reduce(batch, {[], [], []}, fn row, {b, d, i} ->
+        case tag_row(row, state.building_map, state.district_map, state.isd_map) do
+          {:building, attrs} -> {[attrs | b], d, i}
+          {:district, attrs} -> {b, [attrs | d], i}
+          {:isd, attrs} -> {b, d, [attrs | i]}
+          nil -> {b, d, i}
+        end
+      end)
+
+    [r1, r2, r3] =
+      [
+        Task.async(fn -> bulk_upsert(building_rows, :upsert) end),
+        Task.async(fn -> bulk_upsert(district_rows, :upsert_district_rollup) end),
+        Task.async(fn -> bulk_upsert(isd_rows, :upsert_isd_rollup) end)
+      ]
+      |> Task.await_many(120_000)
+
+    total_ok =
+      (length(building_rows) - r1.error_count) +
+        (length(district_rows) - r2.error_count) +
+        (length(isd_rows) - r3.error_count)
+
+    batch_ms = System.monotonic_time(:millisecond) - batch_start
+    elapsed_ms = System.monotonic_time(:millisecond) - state.import_start
+    rows_done = ok_acc + total_ok
+
+    Logger.info(
+      "[MdeImporter] Batch #{batch_num} — #{length(batch)} rows in #{batch_ms}ms" <>
+        " | total: #{rows_done} rows, #{div(elapsed_ms, 1000)}s elapsed" <>
+        " | dims: #{MapSet.size(state.seen_isd_codes)} ISDs," <>
+        " #{MapSet.size(state.seen_district_codes)} districts," <>
+        " #{MapSet.size(state.seen_building_codes)} buildings"
+    )
+
+    {ok_acc + total_ok,
+     err_acc + r1.error_count + r2.error_count + r3.error_count,
+     err_rows_acc ++ r1.error_rows ++ r2.error_rows ++ r3.error_rows, state}
   end
 
   # ---------------------------------------------------------------------------
-  # First pass — collect unique dimension records
+  # Incremental dimension extraction
   # ---------------------------------------------------------------------------
 
-  defp collect_dimensions(path) do
-    stream_as_maps(path)
-    |> Enum.reduce({%{}, %{}, %{}, nil}, fn row, {isds, districts, buildings, school_year} ->
+  defp extract_new_dims(batch, state) do
+    Enum.reduce(batch, {%{}, %{}, %{}}, fn row, {new_isds, new_districts, new_buildings} ->
       isd_code = row["ISDCode"]
       district_code = row["DistrictCode"]
       building_code = row["BuildingCode"]
 
-      # Capture the school year from the first row that has it
-      school_year = school_year || row["SchoolYear"]
-
-      # ISDs are always real — isd_code is never "0"
-      isds =
-        Map.put_new(isds, isd_code, %{
-          isd_code: isd_code,
-          isd_name: row["ISDName"]
-        })
-
-      # district_code == "0" means ISD-level rollup — skip, no real district
-      districts =
-        if district_code == "0" do
-          districts
+      new_isds =
+        if isd_code && not MapSet.member?(state.seen_isd_codes, isd_code) do
+          Map.put_new(new_isds, isd_code, %{
+            isd_code: isd_code,
+            isd_name: row["ISDName"]
+          })
         else
-          Map.put_new(districts, district_code, %{
+          new_isds
+        end
+
+      new_districts =
+        if district_code && district_code != "0" &&
+             not MapSet.member?(state.seen_district_codes, district_code) do
+          Map.put_new(new_districts, district_code, %{
             district_code: district_code,
             district_name: row["DistrictName"],
             county_code: nilify(row["CountyCode"]),
             county_name: nilify(row["CountyName"]),
             entity_type: nilify(row["EntityType"]),
-            # Kept as code here; resolved to UUID before upsert
             isd_code: isd_code
           })
+        else
+          new_districts
         end
 
-      # building_code == "0" means district-level rollup — skip, no real building
-      buildings =
-        if building_code == "0" do
-          buildings
-        else
-          Map.put_new(buildings, building_code, %{
+      new_buildings =
+        if building_code && building_code != "0" &&
+             not MapSet.member?(state.seen_building_codes, building_code) do
+          Map.put_new(new_buildings, building_code, %{
             building_code: building_code,
             building_name: row["BuildingName"],
             school_level: nilify(row["SchoolLevel"]),
             locale: nilify(row["Locale"]),
             mistem_name: nilify(row["MISTEM_NAME"]),
             mistem_code: nilify(row["MISTEM_CODE"]),
-            # Kept as code here; resolved to UUID before upsert
             district_code: district_code
           })
+        else
+          new_buildings
         end
 
-      {isds, districts, buildings, school_year}
+      {new_isds, new_districts, new_buildings}
     end)
   end
 
   # ---------------------------------------------------------------------------
-  # Dimension upserts
+  # Incremental dimension upserts — only called when new codes are found
   # ---------------------------------------------------------------------------
 
-  defp upsert_isds(isds_map) do
-    isds_map
+  defp maybe_upsert_isds(state, new_isds) when map_size(new_isds) == 0, do: state
+
+  defp maybe_upsert_isds(state, new_isds) do
+    new_isds
     |> Map.values()
     |> Ash.bulk_create(MdeIsd, :upsert,
       authorize?: false,
       return_errors?: true,
       upsert_fields: [:isd_name]
     )
+
+    new_codes = Map.keys(new_isds)
+
+    new_entries =
+      MdeIsd
+      |> Ash.Query.filter(isd_code in ^new_codes)
+      |> Ash.read!(authorize?: false)
+      |> Map.new(fn r -> {r.isd_code, r.id} end)
+
+    %{
+      state
+      | seen_isd_codes: MapSet.union(state.seen_isd_codes, MapSet.new(new_codes)),
+        isd_map: Map.merge(state.isd_map, new_entries)
+    }
   end
 
-  defp upsert_districts(districts_map, isd_map) do
-    districts_map
+  defp maybe_upsert_districts(state, new_districts) when map_size(new_districts) == 0,
+    do: state
+
+  defp maybe_upsert_districts(state, new_districts) do
+    new_districts
     |> Map.values()
     |> Enum.map(fn d ->
       d
-      |> Map.put(:mde_isd_id, Map.get(isd_map, d.isd_code))
+      |> Map.put(:mde_isd_id, Map.get(state.isd_map, d.isd_code))
       |> Map.delete(:isd_code)
     end)
     |> Ash.bulk_create(MdeDistrict, :upsert,
@@ -216,14 +275,31 @@ defmodule Emisint.Assessments.MdeImporter do
       return_errors?: true,
       upsert_fields: [:district_name, :county_code, :county_name, :entity_type, :mde_isd_id]
     )
+
+    new_codes = Map.keys(new_districts)
+
+    new_entries =
+      MdeDistrict
+      |> Ash.Query.filter(district_code in ^new_codes)
+      |> Ash.read!(authorize?: false)
+      |> Map.new(fn r -> {r.district_code, r.id} end)
+
+    %{
+      state
+      | seen_district_codes: MapSet.union(state.seen_district_codes, MapSet.new(new_codes)),
+        district_map: Map.merge(state.district_map, new_entries)
+    }
   end
 
-  defp upsert_buildings(buildings_map, district_map) do
-    buildings_map
+  defp maybe_upsert_buildings(state, new_buildings) when map_size(new_buildings) == 0,
+    do: state
+
+  defp maybe_upsert_buildings(state, new_buildings) do
+    new_buildings
     |> Map.values()
     |> Enum.map(fn b ->
       b
-      |> Map.put(:mde_district_id, Map.get(district_map, b.district_code))
+      |> Map.put(:mde_district_id, Map.get(state.district_map, b.district_code))
       |> Map.delete(:district_code)
     end)
     |> Ash.bulk_create(MdeBuilding, :upsert,
@@ -238,52 +314,44 @@ defmodule Emisint.Assessments.MdeImporter do
         :mde_district_id
       ]
     )
+
+    new_codes = Map.keys(new_buildings)
+
+    new_entries =
+      MdeBuilding
+      |> Ash.Query.filter(building_code in ^new_codes)
+      |> Ash.read!(authorize?: false)
+      |> Map.new(fn r -> {r.building_code, r.id} end)
+
+    %{
+      state
+      | seen_building_codes: MapSet.union(state.seen_building_codes, MapSet.new(new_codes)),
+        building_map: Map.merge(state.building_map, new_entries)
+    }
   end
 
   # ---------------------------------------------------------------------------
-  # Second pass — stream fact rows in batches
+  # Streaming helper
   # ---------------------------------------------------------------------------
 
-  defp upsert_results(path, building_map, district_map, isd_map) do
-    stream_as_maps(path)
-    |> Stream.map(&tag_row(&1, building_map, district_map, isd_map))
-    |> Stream.reject(&is_nil/1)
-    |> Stream.chunk_every(@batch_size)
-    |> Enum.reduce({0, 0, []}, fn batch, {ok_acc, err_acc, err_rows_acc} ->
-      {building_rows, district_rows, isd_rows} =
-        Enum.reduce(batch, {[], [], []}, fn
-          {:building, attrs}, {b, d, i} -> {[attrs | b], d, i}
-          {:district, attrs}, {b, d, i} -> {b, [attrs | d], i}
-          {:isd, attrs}, {b, d, i} -> {b, d, [attrs | i]}
-        end)
+  defp stream_as_maps(path) do
+    File.stream!(path)
+    |> NimbleCSV.RFC4180.parse_stream(skip_headers: false)
+    |> Stream.transform(nil, fn
+      [first | rest], nil ->
+        headers = [String.trim_leading(first, "\uFEFF") | rest]
+        {[], headers}
 
-      # Three independent upserts — run in parallel.
-      [r1, r2, r3] =
-        [
-          Task.async(fn -> bulk_upsert(building_rows, :upsert) end),
-          Task.async(fn -> bulk_upsert(district_rows, :upsert_district_rollup) end),
-          Task.async(fn -> bulk_upsert(isd_rows, :upsert_isd_rollup) end)
-        ]
-        |> Task.await_many(120_000)
-
-      total_ok =
-        (length(building_rows) - r1.error_count) +
-          (length(district_rows) - r2.error_count) +
-          (length(isd_rows) - r3.error_count)
-
-      batch_err_rows = r1.error_rows ++ r2.error_rows ++ r3.error_rows
-
-      {ok_acc + total_ok,
-       err_acc + r1.error_count + r2.error_count + r3.error_count,
-       err_rows_acc ++ batch_err_rows}
+      row, headers ->
+        row_map = headers |> Enum.zip(row) |> Map.new()
+        {[row_map], headers}
     end)
   end
 
-  # Tags one CSV row as {:building, attrs}, {:district, attrs}, {:isd, attrs}, or nil.
-  # Routing logic:
-  #   district_code == "0"  → ISD-level aggregate
-  #   building_code == "0"  → district-level aggregate
-  #   otherwise             → building-level row
+  # ---------------------------------------------------------------------------
+  # Row tagging
+  # ---------------------------------------------------------------------------
+
   defp tag_row(row, building_map, district_map, isd_map) do
     building_code = row["BuildingCode"]
     district_code = row["DistrictCode"]
@@ -318,7 +386,111 @@ defmodule Emisint.Assessments.MdeImporter do
     end
   end
 
-  # Extracts all dimension + score fields from a CSV row (no FK resolution).
+  # ---------------------------------------------------------------------------
+  # Bulk upsert helper
+  # ---------------------------------------------------------------------------
+
+  defp bulk_upsert([], _action), do: %{error_count: 0, error_rows: []}
+
+  defp bulk_upsert(rows, action) do
+    result =
+      Ash.bulk_create(rows, MdeStateAssessmentResult, action,
+        authorize?: false,
+        return_errors?: true,
+        upsert_fields: @score_upsert_fields
+      )
+
+    %{error_count: result.error_count, error_rows: []}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Error CSV writer
+  # ---------------------------------------------------------------------------
+
+  defp write_error_csv(_path, []), do: nil
+
+  defp write_error_csv(input_path, [first | _] = error_rows) do
+    headers = first |> Map.keys() |> Enum.sort()
+    header_strings = Enum.map(headers, &to_string/1)
+
+    data_rows =
+      Enum.map(error_rows, fn row ->
+        Enum.map(headers, fn key -> to_string(row[key] || "") end)
+      end)
+
+    content = NimbleCSV.RFC4180.dump_to_iodata([header_strings | data_rows])
+
+    base = Path.basename(input_path, ".csv")
+    error_path = Path.join(Path.dirname(input_path), "#{base}_errors.csv")
+    File.write!(error_path, content)
+    error_path
+  end
+
+  # ---------------------------------------------------------------------------
+  # Value coercion helpers
+  # ---------------------------------------------------------------------------
+
+  defp validate_file(path) do
+    if File.exists?(path),
+      do: :ok,
+      else: {:error, "File not found: #{path}"}
+  end
+
+  defp nilify(val) when is_binary(val) do
+    case String.trim(val) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp nilify(val), do: val
+
+  defp parse_integer(val) when val in [nil, ""], do: nil
+
+  defp parse_integer(val) when is_binary(val) do
+    case Integer.parse(String.trim(val)) do
+      {i, _} -> i
+      :error -> nil
+    end
+  end
+
+  defp parse_decimal(val) when val in [nil, ""], do: nil
+
+  defp parse_decimal(val) when is_binary(val) do
+    case Decimal.parse(String.trim(val)) do
+      {d, _} -> d
+      :error -> nil
+    end
+  end
+
+  defp suppressed?(val) when is_binary(val), do: String.trim(val) == "*"
+  defp suppressed?(_), do: false
+
+  @range_pattern ~r/^[<>]=?\s*(\d+(?:\.\d+)?)\s*%?$/
+
+  defp approximate?(val) when is_binary(val) do
+    trimmed = String.trim(val)
+    trimmed != "*" && Regex.match?(@range_pattern, trimmed)
+  end
+
+  defp approximate?(_), do: false
+
+  defp parse_suppressed_decimal(val) when is_binary(val) do
+    case String.trim(val) do
+      "*" -> nil
+      trimmed -> trimmed |> strip_range_operators() |> parse_decimal()
+    end
+  end
+
+  defp parse_suppressed_decimal(val), do: parse_decimal(val)
+
+  defp strip_range_operators(val) do
+    case Regex.run(@range_pattern, val, capture: :all_but_first) do
+      [number] -> number
+      nil -> val
+    end
+  end
+
   defp to_score_attrs(row) do
     %{
       school_year: row["SchoolYear"],
@@ -357,133 +529,5 @@ defmodule Emisint.Assessments.MdeImporter do
       scale_score_50: parse_decimal(row["ScaleScore50"]),
       scale_score_75: parse_decimal(row["ScaleScore75"])
     }
-  end
-
-  # ---------------------------------------------------------------------------
-  # Bulk upsert helper
-  # ---------------------------------------------------------------------------
-
-  defp bulk_upsert([], _action), do: %{error_count: 0, error_rows: []}
-
-  defp bulk_upsert(rows, action) do
-    result =
-      Ash.bulk_create(rows, MdeStateAssessmentResult, action,
-        authorize?: false,
-        return_errors?: true,
-        upsert_fields: @score_upsert_fields
-      )
-
-    %{error_count: result.error_count, error_rows: []}
-  end
-
-  # ---------------------------------------------------------------------------
-  # Post-upsert lookup helper
-  # ---------------------------------------------------------------------------
-
-  # Reads an entire dimension table and returns a map of code_value → UUID.
-  defp build_code_map(resource, code_field) do
-    resource
-    |> Ash.read!(authorize?: false)
-    |> Map.new(fn record -> {Map.get(record, code_field), record.id} end)
-  end
-
-  # ---------------------------------------------------------------------------
-  # Error CSV writer
-  # ---------------------------------------------------------------------------
-
-  defp write_error_csv(_path, []), do: nil
-
-  defp write_error_csv(input_path, [first | _] = error_rows) do
-    headers = first |> Map.keys() |> Enum.sort()
-    header_strings = Enum.map(headers, &to_string/1)
-
-    data_rows =
-      Enum.map(error_rows, fn row ->
-        Enum.map(headers, fn key -> to_string(row[key] || "") end)
-      end)
-
-    content = NimbleCSV.RFC4180.dump_to_iodata([header_strings | data_rows])
-
-    base = Path.basename(input_path, ".csv")
-    error_path = Path.join(Path.dirname(input_path), "#{base}_errors.csv")
-    File.write!(error_path, content)
-    error_path
-  end
-
-  # ---------------------------------------------------------------------------
-  # Value coercion helpers
-  # ---------------------------------------------------------------------------
-
-  defp validate_file(path) do
-    if File.exists?(path),
-      do: :ok,
-      else: {:error, "File not found: #{path}"}
-  end
-
-  # Empty string and whitespace-only values from MDE CSV → nil
-  defp nilify(val) when is_binary(val) do
-    case String.trim(val) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp nilify(val), do: val
-
-  # MDE suppresses cells below 10 students with empty strings
-  defp parse_integer(val) when val in [nil, ""], do: nil
-
-  defp parse_integer(val) when is_binary(val) do
-    case Integer.parse(String.trim(val)) do
-      {i, _} -> i
-      :error -> nil
-    end
-  end
-
-  defp parse_decimal(val) when val in [nil, ""], do: nil
-
-  defp parse_decimal(val) when is_binary(val) do
-    case Decimal.parse(String.trim(val)) do
-      {d, _} -> d
-      :error -> nil
-    end
-  end
-
-  # Returns true when MDE has published "*" — FERPA small-cell suppression.
-  defp suppressed?(val) when is_binary(val), do: String.trim(val) == "*"
-  defp suppressed?(_), do: false
-
-  # Matches Rule 2 range values: "<=5%", ">=95%", ">90%", "<=50%", ">=50%", etc.
-  @range_pattern ~r/^[<>]=?\s*(\d+(?:\.\d+)?)\s*%?$/
-
-  # Returns true when MDE published a Rule 2 range value (e.g. "<=5%", ">=95%").
-  # The numeric boundary is stored; this flag lets the UI indicate approximation.
-  defp approximate?(val) when is_binary(val) do
-    trimmed = String.trim(val)
-    trimmed != "*" && Regex.match?(@range_pattern, trimmed)
-  end
-
-  defp approximate?(_), do: false
-
-  # Like parse_decimal/1 but also handles:
-  #   - "*"      → nil (FERPA suppression, Rule 1)
-  #   - range strings like "<=5%", ">=95%", ">90%", "<=50%", ">=50%" → boundary
-  #     value as decimal (Rule 2). MDE uses these when the exact value would
-  #     identify a small cohort that is not fully suppressed. We use the numeric
-  #     boundary as the stored value.
-  defp parse_suppressed_decimal(val) when is_binary(val) do
-    case String.trim(val) do
-      "*" -> nil
-      trimmed -> trimmed |> strip_range_operators() |> parse_decimal()
-    end
-  end
-
-  defp parse_suppressed_decimal(val), do: parse_decimal(val)
-
-  defp strip_range_operators(val) do
-    case Regex.run(@range_pattern, val, capture: :all_but_first) do
-      [number] -> number
-      nil -> val
-    end
   end
 end

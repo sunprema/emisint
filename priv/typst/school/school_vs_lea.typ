@@ -102,6 +102,17 @@
   text(weight: "bold", size: 8pt, fill: c-muted, upper(t))
 )
 
+// Coerces any Elixir/JSON numeric value to a Typst float, or none.
+// Handles: Typst none, string "nil", empty string, float, integer, numeric string.
+#let to-num(v) = {
+  if v == none { none }
+  else if type(v) == str {
+    let t = v.trim()
+    if t == "nil" or t == "" or t == "N/A" { none }
+    else { float(t) }
+  } else { float(v) }
+}
+
 // Proficiency % badge — colour-coded by threshold (value is 0–100)
 // approximate: true adds a "*" suffix and light gray background to signal a
 // Rule 2 range value (e.g. "<=50%" stored as 50).
@@ -140,6 +151,7 @@
     box(fill: c-row-alt, inset: (x: 6pt, y: 3pt), radius: 3pt,
       text(fill: c-muted, size: 8pt, "—"))
   } else {
+    let v = to-num(v)
     let (bg, fg) = if v >= 0 { (c-green-bg, c-green) } else { (c-red-bg, c-red) }
     let label = if v >= 0 {
       "+" + str(calc.round(v, digits: 1)) + " pts"
@@ -153,6 +165,9 @@
 
 // Tri progress bar: school (blue, top) vs LEA (amber, middle) vs State (green, bottom)
 #let tri-bar(school_v, lea_v, state_v) = {
+  let school_v = to-num(school_v)
+  let lea_v    = to-num(lea_v)
+  let state_v  = to-num(state_v)
   let s_pct  = if school_v != none { calc.min(school_v / 100, 1.0) } else { 0.0 }
   let l_pct  = if lea_v    != none { calc.min(lea_v    / 100, 1.0) } else { 0.0 }
   let st_pct = if state_v  != none { calc.min(state_v  / 100, 1.0) } else { 0.0 }
@@ -191,6 +206,9 @@
 
 // SAT score bar: school (blue) / LEA (amber) / State (green) scaled to max-score
 #let sat-score-bar(subject, school, compare, state, max-score) = {
+  let school  = to-num(school)
+  let compare = to-num(compare)
+  let state   = to-num(state)
   let s_pct  = if school  != none { calc.min(school  / max-score, 1.0) } else { 0.0 }
   let c_pct  = if compare != none { calc.min(compare / max-score, 1.0) } else { 0.0 }
   let st_pct = if state   != none { calc.min(state   / max-score, 1.0) } else { 0.0 }
@@ -265,7 +283,10 @@
 #let fmt-int(v) = if v == none { "—" } else { str(v) }
 
 // Percentage sub-label for stat boxes
-#let fmt-pct-sub(v) = if v == none { "" } else { str(calc.round(v, digits: 1)) + "% of enrollment" }
+#let fmt-pct-sub(v) = {
+  let n = to-num(v)
+  if n == none { "" } else { str(calc.round(n, digits: 1)) + "% of enrollment" }
+}
 
 // ── Page 1: Cover Header ──────────────────────────────────────────────────────
 
@@ -408,29 +429,33 @@
       }
     )
     #v(4pt)
-    // Proportional gender bar
-    #let mp = calc.max(calc.min(elixir_data.enrollment.male_pct / 100, 0.99), 0.01)
-    #let fp = 1.0 - mp
-    #grid(
-      columns: (mp * 100%, fp * 100%),
-      rows: 26pt,
-      rect(
-        width: 100%, height: 100%, fill: c-school,
-        radius: (left: 4pt, right: 0pt),
-        align(center + horizon,
-          text(fill: white, weight: "bold", size: 9pt,
-            str(calc.round(elixir_data.enrollment.male_pct, digits: 1)) + "%")
-        )
-      ),
-      rect(
-        width: 100%, height: 100%, fill: c-pink,
-        radius: (right: 4pt, left: 0pt),
-        align(center + horizon,
-          text(fill: white, weight: "bold", size: 9pt,
-            str(calc.round(elixir_data.enrollment.female_pct, digits: 1)) + "%")
+    // Proportional gender bar — only rendered when percentages are available
+    #let male-pct   = to-num(elixir_data.enrollment.male_pct)
+    #let female-pct = to-num(elixir_data.enrollment.female_pct)
+    #if male-pct != none and female-pct != none {
+      let mp = calc.max(calc.min(male-pct / 100, 0.99), 0.01)
+      let fp = 1.0 - mp
+      grid(
+        columns: (mp * 100%, fp * 100%),
+        rows: 26pt,
+        rect(
+          width: 100%, height: 100%, fill: c-school,
+          radius: (left: 4pt, right: 0pt),
+          align(center + horizon,
+            text(fill: white, weight: "bold", size: 9pt,
+              str(calc.round(male-pct, digits: 1)) + "%")
+          )
+        ),
+        rect(
+          width: 100%, height: 100%, fill: c-pink,
+          radius: (right: 4pt, left: 0pt),
+          align(center + horizon,
+            text(fill: white, weight: "bold", size: 9pt,
+              str(calc.round(female-pct, digits: 1)) + "%")
+          )
         )
       )
-    )
+    }
   ]
 ]
 
@@ -580,7 +605,7 @@
   if v == none {
     text(fill: c-muted, size: 8.5pt, "—")
   } else {
-    text(fill: fg, weight: "bold", size: 8.5pt, str(calc.round(v, digits: 1)))
+    text(fill: fg, weight: "bold", size: 8.5pt, str(calc.round(to-num(v), digits: 1)))
   }
 }
 

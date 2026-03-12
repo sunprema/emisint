@@ -36,24 +36,32 @@ defmodule Emisint.Storage do
   def download_to_file!(key, dest_path) do
     {:ok, url} = ExAws.S3.presigned_url(ex_aws_config(), :get, bucket(), key, expires_in: 300)
 
-    File.open!(dest_path, [:write, :binary], fn file ->
+    # Use raw Erlang file I/O — bypasses the IO server for significantly
+    # faster sequential writes on large files.
+    {:ok, fd} = :file.open(dest_path, [:write, :raw, :binary])
+
+    try do
       Req.get!(url,
         into: fn {:data, chunk}, {req, resp} ->
-          IO.binwrite(file, chunk)
+          :file.write(fd, chunk)
           {:cont, {req, resp}}
         end
       )
-    end)
+    after
+      :file.close(fd)
+    end
 
     dest_path
   end
 
-  @doc "Deletes an object from the bucket. Best-effort, does not raise."
+  @doc "Deletes an object from the bucket. Best-effort, never raises."
   def delete(key) do
     ExAws.S3.delete_object(bucket(), key)
     |> ExAws.request()
 
     :ok
+  rescue
+    _ -> :ok
   end
 
   defp ex_aws_config, do: ExAws.Config.new(:s3)

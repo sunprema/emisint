@@ -100,6 +100,11 @@ defmodule EmisintWeb.Layouts do
                 </.link>
               </li>
               <li :if={@current_user && @current_user.role == :system_admin}>
+                <.link navigate={~p"/admin/import/history"} class="flex items-center gap-2">
+                  <.icon name="hero-clock" class="size-4" /> Import History
+                </.link>
+              </li>
+              <li :if={@current_user && @current_user.role == :system_admin}>
                 <.link navigate={~p"/admin/users"} class="flex items-center gap-2">
                   <.icon name="hero-users" class="size-4" /> Users
                 </.link>

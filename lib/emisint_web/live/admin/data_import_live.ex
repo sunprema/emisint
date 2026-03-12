@@ -62,6 +62,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> assign(:enrollment_upload_progress, nil)
       |> assign(:sat_upload, nil)
       |> assign(:sat_upload_progress, nil)
+      |> assign(:import_history, if(user.role == :system_admin, do: load_import_history(), else: []))
 
     {:ok, socket}
   end
@@ -90,6 +91,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      socket
      |> assign(:mde_importing, false)
      |> assign(:mde_import_result, {:ok, stats})
+     |> assign(:import_history, load_import_history())
      |> put_flash(
        :info,
        "MDE import complete — #{format_number(stats.results)} results loaded across #{stats.buildings} buildings."
@@ -101,6 +103,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      socket
      |> assign(:mde_importing, false)
      |> assign(:mde_import_result, {:error, reason})
+     |> assign(:import_history, load_import_history())
      |> put_flash(:error, "MDE import failed: #{reason}")}
   end
 
@@ -113,6 +116,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      socket
      |> assign(:entity_master_importing, false)
      |> assign(:entity_master_import_result, {:ok, stats})
+     |> assign(:import_history, load_import_history())
      |> put_flash(
        :info,
        "EntityMaster import complete — #{format_number(stats.records)} entities loaded."
@@ -124,6 +128,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      socket
      |> assign(:entity_master_importing, false)
      |> assign(:entity_master_import_result, {:error, reason})
+     |> assign(:import_history, load_import_history())
      |> put_flash(:error, "EntityMaster import failed: #{reason}")}
   end
 
@@ -136,6 +141,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      socket
      |> assign(:enrollment_importing, false)
      |> assign(:enrollment_import_result, {:ok, stats})
+     |> assign(:import_history, load_import_history())
      |> put_flash(
        :info,
        "Enrollment import complete — #{format_number(stats.records)} records loaded."
@@ -147,6 +153,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      socket
      |> assign(:enrollment_importing, false)
      |> assign(:enrollment_import_result, {:error, reason})
+     |> assign(:import_history, load_import_history())
      |> put_flash(:error, "Enrollment import failed: #{reason}")}
   end
 
@@ -159,6 +166,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      socket
      |> assign(:sat_importing, false)
      |> assign(:sat_import_result, {:ok, stats})
+     |> assign(:import_history, load_import_history())
      |> put_flash(
        :info,
        "SAT import complete — #{format_number(stats.records)} records loaded."
@@ -170,6 +178,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      socket
      |> assign(:sat_importing, false)
      |> assign(:sat_import_result, {:error, reason})
+     |> assign(:import_history, load_import_history())
      |> put_flash(:error, "SAT import failed: #{reason}")}
   end
 
@@ -278,7 +287,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
   end
 
   def handle_event("upload_complete", %{"upload_type" => "mde", "key" => key, "filename" => filename}, socket) do
-    %{"bucket" => Emisint.Storage.bucket(), "key" => key}
+    user = socket.assigns.current_user
+    log_id = create_import_log(:mde, filename, socket.assigns.mde_upload, key, user)
+
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
     |> Emisint.Workers.MdeImportWorker.new()
     |> Oban.insert!()
 
@@ -288,11 +300,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:mde_import_result, nil)
      |> assign(:mde_upload, nil)
      |> assign(:mde_upload_progress, nil)
+     |> assign(:import_history, load_import_history())
      |> put_flash(:info, "MDE import queued: #{filename}. Processing in background…")}
   end
 
   def handle_event("upload_complete", %{"upload_type" => "entity_master", "key" => key, "filename" => filename}, socket) do
-    %{"bucket" => Emisint.Storage.bucket(), "key" => key}
+    user = socket.assigns.current_user
+    log_id = create_import_log(:entity_master, filename, socket.assigns.entity_master_upload, key, user)
+
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
     |> Emisint.Workers.EntityMasterImportWorker.new()
     |> Oban.insert!()
 
@@ -302,11 +318,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:entity_master_import_result, nil)
      |> assign(:entity_master_upload, nil)
      |> assign(:entity_master_upload_progress, nil)
+     |> assign(:import_history, load_import_history())
      |> put_flash(:info, "EntityMaster import queued: #{filename}. Processing in background…")}
   end
 
   def handle_event("upload_complete", %{"upload_type" => "enrollment", "key" => key, "filename" => filename}, socket) do
-    %{"bucket" => Emisint.Storage.bucket(), "key" => key}
+    user = socket.assigns.current_user
+    log_id = create_import_log(:enrollment, filename, socket.assigns.enrollment_upload, key, user)
+
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
     |> Emisint.Workers.MdeEnrollmentImportWorker.new()
     |> Oban.insert!()
 
@@ -316,11 +336,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:enrollment_import_result, nil)
      |> assign(:enrollment_upload, nil)
      |> assign(:enrollment_upload_progress, nil)
+     |> assign(:import_history, load_import_history())
      |> put_flash(:info, "Enrollment import queued: #{filename}. Processing in background…")}
   end
 
   def handle_event("upload_complete", %{"upload_type" => "sat", "key" => key, "filename" => filename}, socket) do
-    %{"bucket" => Emisint.Storage.bucket(), "key" => key}
+    user = socket.assigns.current_user
+    log_id = create_import_log(:sat, filename, socket.assigns.sat_upload, key, user)
+
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
     |> Emisint.Workers.MdeSatImportWorker.new()
     |> Oban.insert!()
 
@@ -330,6 +354,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:sat_import_result, nil)
      |> assign(:sat_upload, nil)
      |> assign(:sat_upload_progress, nil)
+     |> assign(:import_history, load_import_history())
      |> put_flash(:info, "SAT import queued: #{filename}. Processing in background…")}
   end
 
@@ -1541,6 +1566,92 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
+        <%!-- ── Section 6: MDE Import History (system_admin only) ──────────────── --%>
+        <div :if={@current_user.role == :system_admin} class="space-y-4">
+          <div class="divider"></div>
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-semibold">Import History</h2>
+            <span class="badge badge-ghost badge-sm">MDE Imports</span>
+          </div>
+
+          <div class="bg-base-100 border border-base-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-base-200">
+              <h3 class="font-semibold">Recent MDE Uploads</h3>
+              <p class="text-xs text-base-content/40 mt-0.5">Last 50 imports across all MDE data types</p>
+            </div>
+
+            <div
+              :if={@import_history == []}
+              class="flex flex-col items-center justify-center py-16 px-6 text-center"
+            >
+              <div class="p-3 bg-base-200 mb-3">
+                <.icon name="hero-inbox" class="size-6 text-base-content/25" />
+              </div>
+              <p class="text-sm font-medium text-base-content/40">No import history yet</p>
+              <p class="text-xs text-base-content/30 mt-1">MDE uploads will appear here once submitted.</p>
+            </div>
+
+            <div :if={@import_history != []} class="overflow-x-auto">
+              <table class="table table-sm w-full">
+                <thead>
+                  <tr class="text-xs text-base-content/50 border-b border-base-200">
+                    <th class="px-4 py-3 font-medium">Type</th>
+                    <th class="px-4 py-3 font-medium">File</th>
+                    <th class="px-4 py-3 font-medium">Size</th>
+                    <th class="px-4 py-3 font-medium">Status</th>
+                    <th class="px-4 py-3 font-medium">Records</th>
+                    <th class="px-4 py-3 font-medium">Errors</th>
+                    <th class="px-4 py-3 font-medium">School Year</th>
+                    <th class="px-4 py-3 font-medium">Uploaded By</th>
+                    <th class="px-4 py-3 font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-base-200">
+                  <tr
+                    :for={log <- @import_history}
+                    class="hover:bg-base-50 transition-colors text-sm"
+                  >
+                    <td class="px-4 py-3">
+                      <span class={[
+                        "badge badge-sm font-medium",
+                        log.import_type == :mde && "badge-warning",
+                        log.import_type == :entity_master && "badge-info",
+                        log.import_type == :enrollment && "badge-success",
+                        log.import_type == :sat && "badge-secondary"
+                      ]}>
+                        {log.import_type |> to_string() |> String.replace("_", " ") |> String.upcase()}
+                      </span>
+                    </td>
+                    <td class="px-4 py-3 max-w-[200px] truncate font-mono text-xs">
+                      {log.original_filename}
+                    </td>
+                    <td class="px-4 py-3 text-base-content/60">
+                      {format_bytes(log.file_size_bytes)}
+                    </td>
+                    <td class="px-4 py-3">
+                      <.import_status_badge status={log.status} />
+                    </td>
+                    <td class="px-4 py-3 tabular-nums">
+                      {if log.records_processed, do: format_number(log.records_processed), else: "—"}
+                    </td>
+                    <td class={["px-4 py-3 tabular-nums", log.error_count && log.error_count > 0 && "text-error"]}>
+                      {if log.error_count, do: log.error_count, else: "—"}
+                    </td>
+                    <td class="px-4 py-3 text-base-content/60">
+                      {log.school_year || "—"}
+                    </td>
+                    <td class="px-4 py-3 text-base-content/60 text-xs">
+                      {if log.uploaded_by, do: log.uploaded_by.email, else: "—"}
+                    </td>
+                    <td class="px-4 py-3 text-base-content/50 text-xs whitespace-nowrap">
+                      {format_datetime(log.inserted_at)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </Layouts.app>
     """
@@ -1594,6 +1705,17 @@ defmodule EmisintWeb.Admin.DataImportLive do
       </span>
       <span class="text-lg font-bold tabular-nums">{@value}</span>
     </div>
+    """
+  end
+
+  def import_status_badge(assigns) do
+    ~H"""
+    <span :if={@status == :uploading} class="badge badge-ghost badge-sm">Uploading</span>
+    <span :if={@status == :processing} class="badge badge-info badge-sm gap-1">
+      <span class="loading loading-spinner loading-xs"></span> Processing
+    </span>
+    <span :if={@status == :completed} class="badge badge-success badge-sm">Completed</span>
+    <span :if={@status == :failed} class="badge badge-error badge-sm">Failed</span>
     """
   end
 
@@ -1663,4 +1785,28 @@ defmodule EmisintWeb.Admin.DataImportLive do
   defp upload_error_msg(:not_accepted), do: "Only CSV files are accepted"
   defp upload_error_msg(:too_many_files), do: "Only one file allowed"
   defp upload_error_msg(err), do: inspect(err)
+
+  defp load_import_history do
+    Emisint.Assessments.MdeImportLog
+    |> Ash.Query.for_read(:list_recent)
+    |> Ash.read!(authorize?: false, load: [:uploaded_by])
+  rescue
+    _ -> []
+  end
+
+  defp create_import_log(import_type, filename, upload_assign, s3_key, user) do
+    attrs = %{
+      import_type: import_type,
+      original_filename: filename,
+      file_size_bytes: upload_assign && upload_assign.size,
+      s3_key: s3_key,
+      status: :processing,
+      uploaded_by_id: user.id
+    }
+
+    case Ash.create(Emisint.Assessments.MdeImportLog, attrs, authorize?: false) do
+      {:ok, log} -> log.id
+      _ -> nil
+    end
+  end
 end
