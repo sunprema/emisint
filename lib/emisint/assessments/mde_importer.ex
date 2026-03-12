@@ -1,5 +1,5 @@
 defmodule Emisint.Assessments.MdeImporter do
-  @batch_size 500
+  @batch_size 2000
 
   @moduledoc """
   Imports MDE public state assessment CSV data into the normalized relational tables.
@@ -257,9 +257,14 @@ defmodule Emisint.Assessments.MdeImporter do
           {:isd, attrs}, {b, d, i} -> {b, d, [attrs | i]}
         end)
 
-      r1 = bulk_upsert(building_rows, :upsert)
-      r2 = bulk_upsert(district_rows, :upsert_district_rollup)
-      r3 = bulk_upsert(isd_rows, :upsert_isd_rollup)
+      # Three independent upserts — run in parallel.
+      [r1, r2, r3] =
+        [
+          Task.async(fn -> bulk_upsert(building_rows, :upsert) end),
+          Task.async(fn -> bulk_upsert(district_rows, :upsert_district_rollup) end),
+          Task.async(fn -> bulk_upsert(isd_rows, :upsert_isd_rollup) end)
+        ]
+        |> Task.await_many(120_000)
 
       total_ok =
         (length(building_rows) - r1.error_count) +
@@ -368,23 +373,7 @@ defmodule Emisint.Assessments.MdeImporter do
         upsert_fields: @score_upsert_fields
       )
 
-    error_rows =
-      if result.error_count > 0 do
-        Enum.filter(rows, fn row ->
-          r =
-            Ash.bulk_create([row], MdeStateAssessmentResult, action,
-              authorize?: false,
-              return_errors?: true,
-              upsert_fields: @score_upsert_fields
-            )
-
-          r.error_count > 0
-        end)
-      else
-        []
-      end
-
-    %{error_count: result.error_count, error_rows: error_rows}
+    %{error_count: result.error_count, error_rows: []}
   end
 
   # ---------------------------------------------------------------------------
