@@ -15,8 +15,13 @@ defmodule EmisintWeb.Admin.OrganizationShowLive do
 
   defp load_data(socket, org_id) do
     actor = socket.assigns.current_user
-    org = Emisint.Accounts.get_organization!(org_id, actor: actor, authorize?: false)
-    all_users = Emisint.Accounts.list_users!(actor: actor, authorize?: false)
+
+    org_task = Task.async(fn -> Emisint.Accounts.get_organization!(org_id, actor: actor, authorize?: false) end)
+    users_task = Task.async(fn -> Emisint.Accounts.list_users!(actor: actor, authorize?: false) end)
+
+    org = Task.await(org_task)
+    all_users = Task.await(users_task)
+
     org_users = Enum.filter(all_users, &(&1.organization_id == org.id))
     unassigned_users = Enum.filter(all_users, &is_nil(&1.organization_id))
     assign(socket, organization: org, users: org_users, unassigned_users: unassigned_users, org_id: org_id)

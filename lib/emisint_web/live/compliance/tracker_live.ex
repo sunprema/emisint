@@ -8,16 +8,29 @@ defmodule EmisintWeb.Compliance.TrackerLive do
   def mount(%{"school_id" => school_id}, _session, socket) do
     scope = socket.assigns.scope
 
-    school = Emisint.Accounts.get_school!(school_id, scope: scope)
-    goals_with_evals = load_goals_with_evals(school_id, scope)
+    socket =
+      socket
+      |> assign(:page_title, "Schedule 7-1 Tracker")
+      |> assign(:school, nil)
+      |> assign(:goals_with_evals, [])
+      |> assign(:filter_status, :all)
+      |> assign(:status_filters, @status_filters)
 
-    {:ok,
-     socket
-     |> assign(:page_title, "#{school.name} — Schedule 7-1")
-     |> assign(:school, school)
-     |> assign(:goals_with_evals, goals_with_evals)
-     |> assign(:filter_status, :all)
-     |> assign(:status_filters, @status_filters)}
+    if connected?(socket) do
+      school_task = Task.async(fn -> Emisint.Accounts.get_school!(school_id, scope: scope) end)
+      goals_task = Task.async(fn -> load_goals_with_evals(school_id, scope) end)
+
+      school = Task.await(school_task)
+      goals_with_evals = Task.await(goals_task)
+
+      {:ok,
+       socket
+       |> assign(:page_title, "#{school.name} — Schedule 7-1")
+       |> assign(:school, school)
+       |> assign(:goals_with_evals, goals_with_evals)}
+    else
+      {:ok, socket}
+    end
   end
 
   def handle_event("filter_status", %{"status" => status}, socket) do
@@ -36,7 +49,7 @@ defmodule EmisintWeb.Compliance.TrackerLive do
 
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
-      <div class="max-w-4xl mx-auto space-y-8">
+      <div :if={@school} class="max-w-4xl mx-auto space-y-8">
         <%!-- Header --%>
         <div class="flex items-center gap-3">
           <.link

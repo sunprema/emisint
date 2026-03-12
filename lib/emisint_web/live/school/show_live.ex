@@ -9,26 +9,44 @@ defmodule EmisintWeb.School.ShowLive do
     user = socket.assigns.current_user
     oid = user.organization_id
 
-    school = Emisint.Accounts.get_school!(school_id, tenant: oid, actor: user)
+    socket =
+      socket
+      |> assign(:page_title, "School")
+      |> assign(:school, nil)
+      |> assign(:active_tab, :proficiency)
+      |> assign(:academic_years, [])
+      |> assign(:selected_year_id, nil)
+      |> assign(:all_snapshots, [])
+      |> assign(:goals_with_evals, [])
+      |> assign(:triggers, [])
+      |> assign(:tabs, [:proficiency, :growth, :compliance, :interventions])
 
-    academic_years = Emisint.Registry.list_academic_years!(tenant: oid, actor: user)
-    active_year = Enum.find(academic_years, & &1.active) || List.first(academic_years)
+    if connected?(socket) do
+      # Batch 1: school + academic_years are independent.
+      school_task = Task.async(fn -> Emisint.Accounts.get_school!(school_id, tenant: oid, actor: user) end)
+      years_task = Task.async(fn -> Emisint.Registry.list_academic_years!(tenant: oid, actor: user) end)
 
-    all_snapshots = load_snapshots(school_id, oid, user)
-    goals_with_evals = load_goals_with_evals(school_id, oid, user)
-    triggers = load_triggers(school_id, oid, user)
+      school = Task.await(school_task)
+      academic_years = Task.await(years_task)
+      active_year = Enum.find(academic_years, & &1.active) || List.first(academic_years)
 
-    {:ok,
-     socket
-     |> assign(:page_title, school.name)
-     |> assign(:school, school)
-     |> assign(:active_tab, :proficiency)
-     |> assign(:academic_years, academic_years)
-     |> assign(:selected_year_id, active_year && active_year.id)
-     |> assign(:all_snapshots, all_snapshots)
-     |> assign(:goals_with_evals, goals_with_evals)
-     |> assign(:triggers, triggers)
-     |> assign(:tabs, [:proficiency, :growth, :compliance, :interventions])}
+      # Batch 2: three independent data queries.
+      snapshots_task = Task.async(fn -> load_snapshots(school_id, oid, user) end)
+      goals_task = Task.async(fn -> load_goals_with_evals(school_id, oid, user) end)
+      triggers_task = Task.async(fn -> load_triggers(school_id, oid, user) end)
+
+      {:ok,
+       socket
+       |> assign(:page_title, school.name)
+       |> assign(:school, school)
+       |> assign(:academic_years, academic_years)
+       |> assign(:selected_year_id, active_year && active_year.id)
+       |> assign(:all_snapshots, Task.await(snapshots_task))
+       |> assign(:goals_with_evals, Task.await(goals_task))
+       |> assign(:triggers, Task.await(triggers_task))}
+    else
+      {:ok, socket}
+    end
   end
 
   def handle_params(%{"tab" => tab}, _url, socket)
@@ -43,7 +61,7 @@ defmodule EmisintWeb.School.ShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
-      <div class="max-w-5xl mx-auto space-y-8">
+      <div :if={@school} class="max-w-5xl mx-auto space-y-8">
         <%!-- Header --%>
         <div class="flex items-start gap-3">
           <.link

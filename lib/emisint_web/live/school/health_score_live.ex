@@ -10,50 +10,66 @@ defmodule EmisintWeb.School.HealthScoreLive do
   def mount(_params, _session, socket) do
     scope = socket.assigns.scope
 
-    schools = Ash.read!(Emisint.Accounts.School, scope: scope)
+    socket = assign(socket, scored_schools: [], page_title: "School Health Scores")
 
-    snapshots =
-      Emisint.Analytics.PerformanceSnapshot
-      |> Ash.Query.filter(snapshot_type == :school_wide)
-      |> Ash.read!(scope: scope)
+    if connected?(socket) do
+      # Four independent queries — run in parallel.
+      schools_task = Task.async(fn -> Ash.read!(Emisint.Accounts.School, scope: scope) end)
 
-    evals =
-      Emisint.Compliance.GoalEvaluation
-      |> Ash.Query.load(:schedule71_goal)
-      |> Ash.read!(scope: scope)
+      snapshots_task =
+        Task.async(fn ->
+          Emisint.Analytics.PerformanceSnapshot
+          |> Ash.Query.filter(snapshot_type == :school_wide)
+          |> Ash.read!(scope: scope)
+        end)
 
-    triggers =
-      Emisint.Analytics.InterventionTrigger
-      |> Ash.Query.filter(status == :active)
-      |> Ash.read!(scope: scope)
+      evals_task =
+        Task.async(fn ->
+          Emisint.Compliance.GoalEvaluation
+          |> Ash.Query.load(:schedule71_goal)
+          |> Ash.read!(scope: scope)
+        end)
 
-    snaps_by_school = Enum.group_by(snapshots, & &1.school_id)
+      triggers_task =
+        Task.async(fn ->
+          Emisint.Analytics.InterventionTrigger
+          |> Ash.Query.filter(status == :active)
+          |> Ash.read!(scope: scope)
+        end)
 
-    evals_by_school =
-      Enum.group_by(evals, fn e ->
-        if e.schedule71_goal, do: e.schedule71_goal.school_id, else: nil
-      end)
+      schools = Task.await(schools_task)
+      snapshots = Task.await(snapshots_task)
+      evals = Task.await(evals_task)
+      triggers = Task.await(triggers_task)
 
-    triggers_by_school = Enum.group_by(triggers, & &1.school_id)
+      snaps_by_school = Enum.group_by(snapshots, & &1.school_id)
+      evals_by_school =
+        Enum.group_by(evals, fn e ->
+          if e.schedule71_goal, do: e.schedule71_goal.school_id, else: nil
+        end)
+      triggers_by_school = Enum.group_by(triggers, & &1.school_id)
 
-    scored_schools =
-      schools
-      |> Enum.map(fn school ->
-        result =
-          HealthScore.compute(
-            school.id,
-            Map.get(snaps_by_school, school.id, []),
-            Map.get(evals_by_school, school.id, []),
-            Map.get(triggers_by_school, school.id, [])
-          )
+      scored_schools =
+        schools
+        |> Enum.map(fn school ->
+          result =
+            HealthScore.compute(
+              school.id,
+              Map.get(snaps_by_school, school.id, []),
+              Map.get(evals_by_school, school.id, []),
+              Map.get(triggers_by_school, school.id, [])
+            )
 
-        {school, result}
-      end)
-      |> Enum.sort_by(fn {_, r} -> r.score end, :desc)
-      |> Enum.with_index(1)
-      |> Enum.map(fn {{school, result}, rank} -> {rank, school, result} end)
+          {school, result}
+        end)
+        |> Enum.sort_by(fn {_, r} -> r.score end, :desc)
+        |> Enum.with_index(1)
+        |> Enum.map(fn {{school, result}, rank} -> {rank, school, result} end)
 
-    {:ok, assign(socket, scored_schools: scored_schools, page_title: "School Health Scores")}
+      {:ok, assign(socket, :scored_schools, scored_schools)}
+    else
+      {:ok, socket}
+    end
   end
 
   def render(assigns) do

@@ -8,33 +8,50 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
   def mount(_params, _session, socket) do
     scope = socket.assigns.scope
 
-    schools = Ash.read!(Emisint.Accounts.School, scope: scope)
+    socket =
+      socket
+      |> assign(:page_title, "Portfolio Overview")
+      |> assign(:schools, [])
+      |> assign(:evals_by_school, %{})
+      |> assign(:trigger_count_by_school, %{})
+      |> assign(:goal_counts, %{on_track: 0, approaching: 0, below: 0, insufficient: 0})
 
-    evals_with_goals =
-      Emisint.Compliance.GoalEvaluation
-      |> Ash.Query.load(:schedule71_goal)
-      |> Ash.read!(scope: scope)
+    if connected?(socket) do
+      # Three independent queries — run in parallel.
+      schools_task = Task.async(fn -> Ash.read!(Emisint.Accounts.School, scope: scope) end)
 
-    evals_by_school =
-      Enum.group_by(evals_with_goals, fn e ->
-        if e.schedule71_goal, do: e.schedule71_goal.school_id, else: nil
-      end)
+      evals_task =
+        Task.async(fn ->
+          Emisint.Compliance.GoalEvaluation
+          |> Ash.Query.load(:schedule71_goal)
+          |> Ash.read!(scope: scope)
+        end)
 
-    triggers =
-      Emisint.Analytics.InterventionTrigger
-      |> Ash.Query.filter(status == :active)
-      |> Ash.read!(scope: scope)
+      triggers_task =
+        Task.async(fn ->
+          Emisint.Analytics.InterventionTrigger
+          |> Ash.Query.filter(status == :active)
+          |> Ash.read!(scope: scope)
+        end)
 
-    trigger_count_by_school = Enum.frequencies_by(triggers, & &1.school_id)
-    goal_counts = tally_statuses(evals_with_goals)
+      schools = Task.await(schools_task)
+      evals_with_goals = Task.await(evals_task)
+      triggers = Task.await(triggers_task)
 
-    {:ok,
-     socket
-     |> assign(:page_title, "Portfolio Overview")
-     |> assign(:schools, schools)
-     |> assign(:evals_by_school, evals_by_school)
-     |> assign(:trigger_count_by_school, trigger_count_by_school)
-     |> assign(:goal_counts, goal_counts)}
+      evals_by_school =
+        Enum.group_by(evals_with_goals, fn e ->
+          if e.schedule71_goal, do: e.schedule71_goal.school_id, else: nil
+        end)
+
+      {:ok,
+       socket
+       |> assign(:schools, schools)
+       |> assign(:evals_by_school, evals_by_school)
+       |> assign(:trigger_count_by_school, Enum.frequencies_by(triggers, & &1.school_id))
+       |> assign(:goal_counts, tally_statuses(evals_with_goals))}
+    else
+      {:ok, socket}
+    end
   end
 
   def render(assigns) do

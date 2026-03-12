@@ -25,17 +25,29 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
   # --- Data fetching ---
 
   defp build_data(building_code, year) do
-    snapshot =
-      MdeSchoolVsLeaSnapshot
-      |> Ash.Query.for_read(:by_building_and_year, %{
-        building_code: building_code,
-        school_year: year
-      })
-      |> Ash.read_one!(authorize?: false)
+    # Batch 1: four independent queries — run in parallel.
+    snapshot_task =
+      Task.async(fn ->
+        MdeSchoolVsLeaSnapshot
+        |> Ash.Query.for_read(:by_building_and_year, %{
+          building_code: building_code,
+          school_year: year
+        })
+        |> Ash.read_one!(authorize?: false)
+      end)
 
-    enrollment = load_enrollment_data(building_code, year)
-    sat_results = load_sat_data(building_code, year)
-    entity_details = load_entity_details(building_code)
+    enrollment_task = Task.async(fn -> load_enrollment_data(building_code, year) end)
+    sat_raw_task = Task.async(fn -> load_sat_raw(building_code, year) end)
+    entity_task = Task.async(fn -> load_entity_details(building_code) end)
+
+    snapshot = Task.await(snapshot_task)
+    enrollment = Task.await(enrollment_task)
+    sat_raw = Task.await(sat_raw_task)
+    entity_details = Task.await(entity_task)
+
+    sat_results = sat_raw_to_display(sat_raw)
+    # Reuse the already-loaded raw rows — no second DB hit needed.
+    school_sat_row = Enum.find(sat_raw, &((&1.subgroup || "All Students") == "All Students"))
 
     case snapshot do
       nil ->
@@ -65,7 +77,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
         subjects = snapshot_to_subjects(snap.subject_comparison)
         grades = snapshot_to_grades(snap.grade_breakdown)
         all_subjects_avg = snapshot_to_all_subjects_avg(snap.all_subjects_avg)
-        sat_score_bars = load_sat_score_bars(building_code, snap.lea_district_code, year)
+        sat_score_bars = load_sat_score_bars(school_sat_row, snap.lea_district_code, year)
 
         %{
           school: %{
@@ -118,10 +130,20 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     end
   end
 
+  @entity_select [
+    :isd_code,
+    :isd_official_name,
+    :entity_chartering_agency_code,
+    :entity_chartering_agency_name,
+    :entity_authorized_grades,
+    :entity_actual_grades
+  ]
+
   defp load_entity_details(building_code) do
     record =
       MdeEntityMaster
       |> Ash.Query.filter(entity_code == ^building_code)
+      |> Ash.Query.select(@entity_select)
       |> Ash.read_one!(authorize?: false)
 
     case record do
@@ -149,7 +171,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   @sat_subgroups ["All Students", "Economically Disadvantaged"]
 
-  defp load_sat_data(building_code, year) do
+  # Returns raw structs so build_data can extract the school row for reuse.
+  defp load_sat_raw(building_code, year) do
     MdeSatResult
     |> Ash.Query.filter(
       building_code == ^building_code and school_year == ^year and rollup_level == :building
@@ -157,7 +180,10 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     |> Ash.Query.sort(:subgroup)
     |> Ash.read!(authorize?: false)
     |> Enum.filter(&((&1.subgroup || "All Students") in @sat_subgroups))
-    |> Enum.map(fn row ->
+  end
+
+  defp sat_raw_to_display(sat_raw) do
+    Enum.map(sat_raw, fn row ->
       %{
         subgroup: row.subgroup || "All Students",
         num_assessed: row.math_num_assessed,
@@ -168,32 +194,33 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     end)
   end
 
-  defp load_sat_score_bars(building_code, lea_district_code, year) do
-    school_row =
-      MdeSatResult
-      |> Ash.Query.filter(
-        building_code == ^building_code and school_year == ^year and
-          rollup_level == :building and subgroup == "All Students"
-      )
-      |> Ash.read_one!(authorize?: false)
+  # school_row is passed in (already fetched by load_sat_raw) — no duplicate query.
+  # lea_row and state_row run in parallel.
+  defp load_sat_score_bars(school_row, lea_district_code, year) do
+    lea_task =
+      Task.async(fn ->
+        if lea_district_code do
+          MdeSatResult
+          |> Ash.Query.filter(
+            district_code == ^lea_district_code and school_year == ^year and
+              rollup_level == :district and subgroup == "All Students"
+          )
+          |> Ash.read_one!(authorize?: false)
+        end
+      end)
 
-    lea_row =
-      if lea_district_code do
+    state_task =
+      Task.async(fn ->
         MdeSatResult
         |> Ash.Query.filter(
-          district_code == ^lea_district_code and school_year == ^year and
-            rollup_level == :district and subgroup == "All Students"
+          rollup_level == :isd and isd_code == "0" and school_year == ^year and
+            subgroup == "All Students"
         )
         |> Ash.read_one!(authorize?: false)
-      end
+      end)
 
-    state_row =
-      MdeSatResult
-      |> Ash.Query.filter(
-        rollup_level == :isd and isd_code == "0" and school_year == ^year and
-          subgroup == "All Students"
-      )
-      |> Ash.read_one!(authorize?: false)
+    lea_row = Task.await(lea_task)
+    state_row = Task.await(state_task)
 
     school_math = school_row && decimal_to_float(school_row.math_score_average)
     school_ebrw = school_row && decimal_to_float(school_row.ebrw_score_average)

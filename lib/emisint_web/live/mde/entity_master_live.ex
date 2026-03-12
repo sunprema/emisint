@@ -9,42 +9,52 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
   # Lifecycle
   # ---------------------------------------------------------------------------
 
+  @empty_stats %{total: 0, active_count: 0, psa_count: 0, traditional_count: 0, by_type_group: %{}}
+
   def mount(_params, _session, socket) do
-    all_entities = load_all_entities()
-
-    # Use entity_type_category_name — holds meaningful values like "PSA",
-    # "Traditional", "ISD", "District" across a full EntityMaster export.
-    type_groups =
-      all_entities
-      |> Enum.map(& &1.entity_type_category_name)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    # Derive status options from actual data rather than hardcoding.
-    statuses =
-      all_entities
-      |> Enum.map(& &1.entity_status)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    stats = compute_stats(all_entities)
-
     socket =
       socket
       |> assign(:page_title, "MDE Entity Master")
-      |> assign(:all_entities, all_entities)
-      |> assign(:type_groups, type_groups)
-      |> assign(:statuses, statuses)
-      |> assign(:stats, stats)
+      |> assign(:all_entities, [])
+      |> assign(:type_groups, [])
+      |> assign(:statuses, [])
+      |> assign(:stats, @empty_stats)
       |> assign(:search, "")
       |> assign(:type_group_filter, "")
       |> assign(:status_filter, "")
       |> assign(:selected_entity, nil)
-      |> assign(:filtered_entities, apply_filters(all_entities, "", "", ""))
+      |> assign(:filtered_entities, [])
 
-    {:ok, socket}
+    if connected?(socket) do
+      all_entities = load_all_entities()
+
+      # Use entity_type_category_name — holds meaningful values like "PSA",
+      # "Traditional", "ISD", "District" across a full EntityMaster export.
+      type_groups =
+        all_entities
+        |> Enum.map(& &1.entity_type_category_name)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      # Derive status options from actual data rather than hardcoding.
+      statuses =
+        all_entities
+        |> Enum.map(& &1.entity_status)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      {:ok,
+       socket
+       |> assign(:all_entities, all_entities)
+       |> assign(:type_groups, type_groups)
+       |> assign(:statuses, statuses)
+       |> assign(:stats, compute_stats(all_entities))
+       |> assign(:filtered_entities, apply_filters(all_entities, "", "", ""))}
+    else
+      {:ok, socket}
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -66,9 +76,12 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
      |> assign(:filtered_entities, filtered)}
   end
 
-  def handle_event("show_entity", %{"index" => idx_str}, socket) do
-    idx = String.to_integer(idx_str)
-    entity = Enum.at(socket.assigns.filtered_entities, idx)
+  def handle_event("show_entity", %{"code" => code}, socket) do
+    entity =
+      MdeEntityMaster
+      |> Ash.Query.filter(entity_code == ^code)
+      |> Ash.read_one!(authorize?: false)
+
     {:noreply, assign(socket, :selected_entity, entity)}
   end
 
@@ -256,10 +269,10 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
                 </thead>
                 <tbody class="divide-y divide-base-200">
                   <tr
-                    :for={{entity, idx} <- Enum.with_index(@filtered_entities)}
+                    :for={entity <- @filtered_entities}
                     class="hover:bg-base-50 transition-colors cursor-pointer"
                     phx-click="show_entity"
-                    phx-value-index={idx}
+                    phx-value-code={entity.entity_code}
                   >
                     <td class="px-4 py-3 font-mono text-xs text-base-content/60">
                       {entity.entity_code || "—"}
@@ -559,8 +572,24 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
   # Data loading
   # ---------------------------------------------------------------------------
 
+  # List columns only — full entity is lazy-loaded on detail click.
+  @list_columns [
+    :entity_code,
+    :entity_official_name,
+    :district_official_name,
+    :isd_official_name,
+    :entity_type_group_name,
+    :entity_type_name,
+    :entity_county_name,
+    :entity_actual_grades,
+    :entity_authorized_grades,
+    :entity_status,
+    :entity_type_category_name
+  ]
+
   defp load_all_entities do
     MdeEntityMaster
+    |> Ash.Query.select(@list_columns)
     |> Ash.Query.sort([:entity_official_name])
     |> Ash.read!(authorize?: false)
   end
