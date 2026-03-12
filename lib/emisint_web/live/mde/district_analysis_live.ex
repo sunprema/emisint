@@ -1736,7 +1736,12 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   end
 
   defp all_suppressed?([]), do: false
-  defp all_suppressed?(rows), do: Enum.all?(rows, & &1.percent_met_suppressed)
+
+  defp all_suppressed?(rows) do
+    Enum.all?(rows, fn r ->
+      r.percent_met_suppressed or (is_nil(r.percent_met) and (r.number_assessed || 0) == 0)
+    end)
+  end
 
   defp any_approximate?([]), do: false
   defp any_approximate?(rows), do: Enum.any?(rows, & &1.percent_met_approximate)

@@ -431,8 +431,17 @@ defmodule Emisint.Workers.MdeComparisonSnapshotWorker do
 
   # True when there are rows but every one is FERPA-suppressed — meaning the
   # nil value from weighted_proficiency_float/1 represents "*", not missing data.
+  #
+  # Also handles stale imports (data imported before percent_met_suppressed was
+  # added): a row with percent_met=nil and number_assessed=0/nil was a "*" row
+  # that didn't get the flag set. Both cases must show "*" not "—".
   defp all_suppressed?([]), do: false
-  defp all_suppressed?(rows), do: Enum.all?(rows, & &1.percent_met_suppressed)
+
+  defp all_suppressed?(rows) do
+    Enum.all?(rows, fn r ->
+      r.percent_met_suppressed or (is_nil(r.percent_met) and (r.number_assessed || 0) == 0)
+    end)
+  end
 
   # True when any non-suppressed row contributing to the aggregate is a Rule 2
   # range approximation (e.g. "<=50%" stored as 50). Signals the UI to show a
