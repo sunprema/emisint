@@ -4,6 +4,8 @@ defmodule EmisintWeb.Mde.OverviewLive do
   require Ash.Query
 
   alias Emisint.Assessments.MdeDistrictSnapshot
+  alias Emisint.Assessments.MdeEntityMaster
+  alias Emisint.Assessments.MdeSatResult
 
   @page_size 100
 
@@ -20,6 +22,9 @@ defmodule EmisintWeb.Mde.OverviewLive do
       |> assign(:page_title, "MDE State Assessments")
       |> assign(:school_years, years)
       |> assign(:selected_year, selected_year)
+      |> assign(:entity_districts, [])
+      |> assign(:all_districts, [])
+      |> assign(:snapshot_map, %{})
       |> assign(:district_count, 0)
       |> assign(:page_offset, 0)
       |> assign(:district_search, "")
@@ -29,8 +34,17 @@ defmodule EmisintWeb.Mde.OverviewLive do
     # Defer the DB query to the connected mount — the disconnected pass (HTTP)
     # only renders static HTML so loading data there is wasteful.
     if connected?(socket) && selected_year do
-      {rows, count} = load_page(selected_year, 0, "")
-      {:ok, socket |> assign(:district_count, count) |> stream(:district_rows, rows, reset: true)}
+      entity_districts = load_entity_master_districts()
+      snapshot_map = load_snapshot_map(selected_year)
+      all_districts = merge_districts(entity_districts, snapshot_map)
+
+      socket =
+        socket
+        |> assign(:entity_districts, entity_districts)
+        |> assign(:snapshot_map, snapshot_map)
+        |> assign(:all_districts, all_districts)
+
+      {:ok, apply_filter_and_page(socket, "", 0)}
     else
       {:ok, socket}
     end
@@ -41,57 +55,44 @@ defmodule EmisintWeb.Mde.OverviewLive do
   # ---------------------------------------------------------------------------
 
   def handle_event("select_year", %{"year" => year}, socket) do
-    {rows, count} = load_page(year, 0, "")
+    snapshot_map = load_snapshot_map(year)
+    all_districts = merge_districts(socket.assigns.entity_districts, snapshot_map)
 
-    {:noreply,
-     socket
-     |> assign(:selected_year, year)
-     |> assign(:district_count, count)
-     |> assign(:page_offset, 0)
-     |> assign(:district_search, "")
-     |> stream(:district_rows, rows, reset: true)
-     |> assign(:selected_district, nil)}
+    socket =
+      socket
+      |> assign(:selected_year, year)
+      |> assign(:snapshot_map, snapshot_map)
+      |> assign(:all_districts, all_districts)
+      |> assign(:selected_district, nil)
+
+    {:noreply, apply_filter_and_page(socket, "", 0)}
   end
 
   def handle_event("search_districts", %{"search" => search}, socket) do
-    {rows, count} = load_page(socket.assigns.selected_year, 0, search)
-
-    {:noreply,
-     socket
-     |> assign(:district_search, search)
-     |> assign(:district_count, count)
-     |> assign(:page_offset, 0)
-     |> stream(:district_rows, rows, reset: true)}
+    {:noreply, apply_filter_and_page(socket, search, 0)}
   end
 
   def handle_event("prev_page", _params, socket) do
     new_offset = max(0, socket.assigns.page_offset - @page_size)
-    rows = load_page_rows(socket.assigns.selected_year, new_offset, socket.assigns.district_search)
-
-    {:noreply,
-     socket
-     |> assign(:page_offset, new_offset)
-     |> stream(:district_rows, rows, reset: true)}
+    {:noreply, apply_filter_and_page(socket, socket.assigns.district_search, new_offset)}
   end
 
   def handle_event("next_page", _params, socket) do
     new_offset = socket.assigns.page_offset + @page_size
-    rows = load_page_rows(socket.assigns.selected_year, new_offset, socket.assigns.district_search)
-
-    {:noreply,
-     socket
-     |> assign(:page_offset, new_offset)
-     |> stream(:district_rows, rows, reset: true)}
+    {:noreply, apply_filter_and_page(socket, socket.assigns.district_search, new_offset)}
   end
 
   def handle_event("show_district", %{"code" => code}, socket) do
-    snapshot =
-      MdeDistrictSnapshot
-      |> Ash.Query.for_read(:by_year, %{school_year: socket.assigns.selected_year})
-      |> Ash.Query.filter(district_code == ^code)
-      |> Ash.read_one!(authorize?: false)
+    snapshot = Map.get(socket.assigns.snapshot_map, code)
 
-    selected = if snapshot, do: snapshot_to_district_row(snapshot), else: nil
+    selected =
+      if snapshot do
+        snapshot_to_district_row(snapshot)
+      else
+        em = Enum.find(socket.assigns.all_districts, &(&1.district_code == code))
+        em && entity_district_to_row(em)
+      end
+
     {:noreply, assign(socket, :selected_district, selected)}
   end
 
@@ -214,6 +215,9 @@ defmodule EmisintWeb.Mde.OverviewLive do
                     <th class="text-center px-4 py-3 font-medium text-base-content/60 text-xs uppercase tracking-wide">
                       Buildings
                     </th>
+                    <th class="text-center px-4 py-3 font-medium text-base-content/60 text-xs uppercase tracking-wide hidden md:table-cell">
+                      M-STEP Data
+                    </th>
                   </tr>
                 </thead>
                 <tbody id="district-rows" phx-update="stream" class="divide-y divide-base-200">
@@ -229,7 +233,11 @@ defmodule EmisintWeb.Mde.OverviewLive do
                       {row.entity_type || "—"}
                     </td>
                     <td class="px-4 py-3 text-center text-base-content/50">
-                      {row.buildings}
+                      {row.buildings || "—"}
+                    </td>
+                    <td class="px-4 py-3 text-center hidden md:table-cell">
+                      <span :if={row.has_mstep} class="badge badge-success badge-xs">Yes</span>
+                      <span :if={!row.has_mstep} class="badge badge-ghost badge-xs">SAT only</span>
                     </td>
                   </tr>
                 </tbody>
@@ -338,8 +346,8 @@ defmodule EmisintWeb.Mde.OverviewLive do
                   do: "building",
                   else: "buildings"}
               </span>
-              <span :if={@district.total_assessed > 0}>·</span>
-              <span :if={@district.total_assessed > 0}>
+              <span :if={@district.has_mstep && @district.total_assessed > 0}>·</span>
+              <span :if={@district.has_mstep && @district.total_assessed > 0}>
                 {format_number(@district.total_assessed)} students assessed
               </span>
             </div>
@@ -361,8 +369,21 @@ defmodule EmisintWeb.Mde.OverviewLive do
         </div>
 
         <div class="p-6 space-y-8">
+          <%!-- No M-STEP data notice --%>
+          <div :if={!@district.has_mstep} class="flex flex-col items-center py-8 text-center">
+            <div class="p-3 bg-base-200 mb-4">
+              <.icon name="hero-chart-bar" class="size-7 text-base-content/25" />
+            </div>
+            <p class="text-sm font-medium text-base-content/50">
+              No M-STEP/PSAT data for this district in the selected year.
+            </p>
+            <p class="text-xs text-base-content/35 mt-1">
+              SAT or other assessment data may be available — click Analysis to view all data.
+            </p>
+          </div>
+
           <%!-- Section: Subject Proficiency vs Statewide --%>
-          <div class="space-y-3">
+          <div :if={@district.has_mstep} class="space-y-3">
             <div class="flex items-center gap-2">
               <h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
                 M-STEP Proficiency by Subject
@@ -384,7 +405,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
           </div>
 
           <%!-- Section: Grade-Level Breakdown --%>
-          <div :if={@district.grade_breakdown != []} class="space-y-3">
+          <div :if={@district.has_mstep && @district.grade_breakdown != []} class="space-y-3">
             <div class="flex items-center gap-2">
               <h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
                 Grade-Level Breakdown (ELA &amp; Math)
@@ -431,7 +452,7 @@ defmodule EmisintWeb.Mde.OverviewLive do
           </div>
 
           <%!-- Section: Proficiency Level Distribution --%>
-          <div :if={@district.proficiency_dist} class="space-y-3">
+          <div :if={@district.has_mstep && @district.proficiency_dist} class="space-y-3">
             <div class="flex items-center gap-2">
               <h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
                 Proficiency Level Distribution (All M-STEP Subjects)
@@ -563,54 +584,110 @@ defmodule EmisintWeb.Mde.OverviewLive do
   # Data loading
   # ---------------------------------------------------------------------------
 
+  # Merge school years from M-STEP snapshots and SAT results so that schools
+  # which only have SAT data still appear in the year selector.
   defp load_school_years do
-    # Use the snapshots table — it is small and already has an index on school_year.
-    # MdeStateAssessmentResult can have millions of rows; avoid scanning it just for years.
-    MdeDistrictSnapshot
-    |> Ash.Query.select([:school_year])
-    |> Ash.Query.sort(:school_year)
-    |> Ash.read!(authorize?: false)
-    |> Enum.map(& &1.school_year)
-    |> Enum.uniq()
-  end
-
-  # Returns {rows, total_count}. Use when the count is needed (year/search change).
-  defp load_page(year, offset, search) do
-    page = build_page_query(year, offset, search) |> Ash.read!(authorize?: false, page: [offset: offset, limit: @page_size, count: true])
-    {Enum.map(page.results, &snapshot_to_district_row_light/1), page.count || 0}
-  end
-
-  # Returns rows only — skips the COUNT(*) query. Use for prev/next navigation
-  # where the total count is already known and stored in socket assigns.
-  defp load_page_rows(year, offset, search) do
-    page = build_page_query(year, offset, search) |> Ash.read!(authorize?: false, page: [offset: offset, limit: @page_size])
-    Enum.map(page.results, &snapshot_to_district_row_light/1)
-  end
-
-  defp build_page_query(year, _offset, search) do
-    query =
+    mstep_years =
       MdeDistrictSnapshot
-      |> Ash.Query.for_read(:list_by_year, %{school_year: year})
-      |> Ash.Query.select([:district_code, :district_name, :entity_type, :isd_name, :buildings])
-      |> Ash.Query.sort(:district_name)
+      |> Ash.Query.select([:school_year])
+      |> Ash.read!(authorize?: false)
+      |> Enum.map(& &1.school_year)
 
-    if search != "" do
-      pattern = "%#{search}%"
-      Ash.Query.filter(query, ilike(district_name, ^pattern))
-    else
-      query
-    end
+    sat_years =
+      MdeSatResult
+      |> Ash.Query.select([:school_year])
+      |> Ash.Query.filter(rollup_level == :district)
+      |> Ash.read!(authorize?: false)
+      |> Enum.map(& &1.school_year)
+
+    (mstep_years ++ sat_years)
+    |> Enum.uniq()
+    |> Enum.sort()
+  rescue
+    _ -> []
   end
 
-  # Lightweight row for the district table (no JSONB fields loaded).
-  defp snapshot_to_district_row_light(snapshot) do
-    %{
-      id: snapshot.district_code,
-      district_code: snapshot.district_code,
-      district_name: snapshot.district_name,
-      entity_type: snapshot.entity_type,
-      buildings: snapshot.buildings || 0
-    }
+  # Load all entity master records with minimal fields, then group by district_code
+  # to get distinct districts with building counts. Michigan has ~540 districts so
+  # this fits comfortably in memory.
+  defp load_entity_master_districts do
+    MdeEntityMaster
+    |> Ash.Query.select([:district_code, :district_official_name, :isd_official_name, :entity_type])
+    |> Ash.read!(authorize?: false)
+    |> Enum.group_by(& &1.district_code)
+    |> Enum.flat_map(fn
+      {nil, _rows} ->
+        # Skip rows with no district code (ISD-level entities)
+        []
+
+      {district_code, rows} ->
+        first = hd(rows)
+
+        [
+          %{
+            id: district_code,
+            district_code: district_code,
+            district_name: first.district_official_name || district_code,
+            isd_name: first.isd_official_name,
+            entity_type: first.entity_type,
+            buildings: length(rows),
+            has_mstep: false
+          }
+        ]
+    end)
+    |> Enum.sort_by(& &1.district_name)
+  rescue
+    _ -> []
+  end
+
+  # Load all snapshots for a school year into a map keyed by district_code.
+  defp load_snapshot_map(nil), do: %{}
+
+  defp load_snapshot_map(year) do
+    MdeDistrictSnapshot
+    |> Ash.Query.for_read(:by_year, %{school_year: year})
+    |> Ash.read!(authorize?: false)
+    |> Map.new(&{&1.district_code, &1})
+  rescue
+    _ -> %{}
+  end
+
+  # Overlay snapshot data onto entity master district list.
+  # Districts with M-STEP snapshots get enriched data; others show entity master info.
+  defp merge_districts(entity_districts, snapshot_map) do
+    Enum.map(entity_districts, fn em ->
+      case Map.get(snapshot_map, em.district_code) do
+        nil ->
+          em
+
+        snap ->
+          %{em | entity_type: snap.entity_type || em.entity_type, has_mstep: true}
+      end
+    end)
+  end
+
+  # Filter by search term and slice to the requested page. Stores all derived
+  # state in socket assigns and resets the stream.
+  defp apply_filter_and_page(socket, search, offset) do
+    filtered =
+      if search != "" do
+        pattern = String.downcase(search)
+
+        Enum.filter(socket.assigns.all_districts, fn d ->
+          String.contains?(String.downcase(d.district_name || ""), pattern)
+        end)
+      else
+        socket.assigns.all_districts
+      end
+
+    count = length(filtered)
+    page_rows = Enum.slice(filtered, offset, @page_size)
+
+    socket
+    |> assign(:district_search, search)
+    |> assign(:district_count, count)
+    |> assign(:page_offset, offset)
+    |> stream(:district_rows, page_rows, reset: true)
   end
 
   # Full row for the district detail modal (all JSONB fields included).
@@ -630,7 +707,28 @@ defmodule EmisintWeb.Mde.OverviewLive do
       avg_total_proficient: float_to_decimal(snapshot.avg_total_proficient),
       all_subjects: convert_snapshot_subjects(snapshot.all_subjects),
       grade_breakdown: convert_snapshot_grade_breakdown(snapshot.grade_breakdown),
-      proficiency_dist: convert_snapshot_proficiency_dist(snapshot.proficiency_dist)
+      proficiency_dist: convert_snapshot_proficiency_dist(snapshot.proficiency_dist),
+      has_mstep: true
+    }
+  end
+
+  # Minimal row for the modal when there is no M-STEP snapshot — entity master only.
+  defp entity_district_to_row(em) do
+    %{
+      id: em.district_code,
+      district_code: em.district_code,
+      district_name: em.district_name,
+      entity_type: em.entity_type,
+      isd_name: em.isd_name,
+      buildings: em.buildings,
+      total_assessed: 0,
+      ela: nil,
+      math: nil,
+      avg_total_proficient: nil,
+      all_subjects: %{},
+      grade_breakdown: [],
+      proficiency_dist: nil,
+      has_mstep: false
     }
   end
 
