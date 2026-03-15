@@ -9,7 +9,14 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
   # Lifecycle
   # ---------------------------------------------------------------------------
 
-  @empty_stats %{total: 0, active_count: 0, psa_count: 0, traditional_count: 0, by_type_group: %{}}
+  @empty_stats %{
+    total: 0,
+    active_count: 0,
+    psa_count: 0,
+    traditional_count: 0,
+    by_type_group: %{},
+    state_count: %{}
+  }
 
   def mount(_params, _session, socket) do
     socket =
@@ -120,7 +127,9 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
           <div class="p-4 bg-base-200 mb-4">
             <.icon name="hero-building-office-2" class="size-10 text-base-content/20" />
           </div>
-          <p class="text-base font-semibold text-base-content/50">No EntityMaster data imported yet</p>
+          <p class="text-base font-semibold text-base-content/50">
+            No EntityMaster data imported yet
+          </p>
           <p class="text-sm text-base-content/35 mt-1 max-w-xs">
             Upload the MDE EntityMaster daily CSV from the Data Import page to populate this view.
           </p>
@@ -135,16 +144,16 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
         <%!-- Content — only rendered when data exists --%>
         <div :if={@all_entities != []} class="space-y-6">
           <%!-- ── Summary stat cards ────────────────────────────────────────────── --%>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-2">
             <.stat_card
               label="Total Entities"
               value={format_number(@stats.total)}
               icon="hero-building-office-2"
             />
             <.stat_card
-              label="PSAs / Charters"
-              value={format_number(@stats.psa_count)}
-              icon="hero-academic-cap"
+              label="Active Entities"
+              value={format_number(@stats.active_count)}
+              icon="hero-check-circle"
             />
             <.stat_card
               label="Traditional Public"
@@ -152,13 +161,19 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
               icon="hero-building-library"
             />
             <.stat_card
-              label="Active Entities"
-              value={format_number(@stats.active_count)}
-              icon="hero-check-circle"
+              label="State"
+              value={format_number(@stats.state_count)}
+              icon="hero-building-library"
+            />
+            <.stat_card
+              label="PSAs / Charters"
+              value={format_number(@stats.psa_count)}
+              icon="hero-academic-cap"
             />
           </div>
 
           <%!-- ── Entity Category distribution chips ────────────────────────────── --%>
+          <%!--
           <div :if={@stats.by_type_group != %{}} class="flex flex-wrap gap-2">
             <div
               :for={{group, count} <- Enum.sort_by(@stats.by_type_group, fn {_, v} -> v end, :desc)}
@@ -169,6 +184,7 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
               <span class="tabular-nums text-base-content/55">{format_number(count)}</span>
             </div>
           </div>
+          -->
 
           <%!-- ── Filters ───────────────────────────────────────────────────────── --%>
           <div class="bg-base-100 border border-base-200 p-4">
@@ -233,10 +249,15 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
               <.icon name="hero-funnel" class="size-6 text-base-content/25" />
             </div>
             <p class="text-sm font-medium text-base-content/40">No entities match your filters</p>
-            <p class="text-xs text-base-content/30 mt-1">Try adjusting the search or filter criteria.</p>
+            <p class="text-xs text-base-content/30 mt-1">
+              Try adjusting the search or filter criteria.
+            </p>
           </div>
 
-          <div :if={@filtered_entities != []} class="bg-base-100 border border-base-200 overflow-hidden">
+          <div
+            :if={@filtered_entities != []}
+            class="bg-base-100 border border-base-200 overflow-hidden"
+          >
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead>
@@ -643,6 +664,9 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
   # Stats
   # ---------------------------------------------------------------------------
 
+  defp open_active?(e),
+    do: is_binary(e.entity_status) && String.downcase(e.entity_status) == "open-active"
+
   defp compute_stats(entities) do
     total = length(entities)
 
@@ -650,25 +674,33 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
     active_count =
       Enum.count(entities, fn e ->
         is_binary(e.entity_status) &&
-          String.contains?(String.downcase(e.entity_status), "active")
+          String.contains?(String.downcase(e.entity_status), "open-active")
       end)
 
     # entity_type_category_name holds "PSA", "Traditional", "ISD", "District", etc.
+    # Only count Open-Active entities in the distribution chips.
     by_type_group =
       entities
+      |> Enum.filter(&open_active?/1)
       |> Enum.group_by(& &1.entity_type_category_name)
       |> Map.new(fn {k, v} -> {k || "Unknown", length(v)} end)
 
     psa_count =
       Enum.count(entities, fn e ->
         c = e.entity_type_category_name
-        c && String.contains?(String.downcase(c), "psa")
+        open_active?(e) && c && String.contains?(String.downcase(c), "psa")
       end)
 
     traditional_count =
       Enum.count(entities, fn e ->
         c = e.entity_type_category_name
-        c && String.contains?(String.downcase(c), "traditional")
+        open_active?(e) && c && String.contains?(String.downcase(c), "lea")
+      end)
+
+    state_count =
+      Enum.count(entities, fn e ->
+        c = e.entity_type_category_name
+        open_active?(e) && c && String.contains?(String.downcase(c), "state")
       end)
 
     %{
@@ -676,6 +708,7 @@ defmodule EmisintWeb.Mde.EntityMasterLive do
       active_count: active_count,
       psa_count: psa_count,
       traditional_count: traditional_count,
+      state_count: state_count,
       by_type_group: by_type_group
     }
   end
