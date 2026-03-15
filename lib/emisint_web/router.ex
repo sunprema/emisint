@@ -33,6 +33,8 @@ defmodule EmisintWeb.Router do
 
     ash_authentication_live_session :pending_routes,
       on_mount: [{EmisintWeb.LiveUserAuth, :live_user_required}] do
+      live "/chat", ChatLive
+      live "/chat/:conversation_id", ChatLive
       live "/pending", PendingLive, :index
       live "/admin/context", Admin.OrgContextLive, :index
       live "/admin/organizations", Admin.OrganizationsLive, :index

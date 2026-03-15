@@ -1,8 +1,13 @@
 defmodule Emisint.Assessments do
-  use Ash.Domain, otp_app: :emisint, extensions: [AshAdmin.Domain]
+  use Ash.Domain, otp_app: :emisint, extensions: [AshAdmin.Domain, AshAi]
 
   admin do
     show? true
+  end
+
+  tools do
+    tool :list_benchmark_providers, Emisint.Assessments.BenchmarkProvider, :read
+    tool :list_mde_isds, Emisint.Assessments.MdeIsd, :read
   end
 
   resources do
@@ -69,7 +74,8 @@ defmodule Emisint.Assessments do
     end
 
     resource Emisint.Assessments.MdeSchoolVsLeaSnapshot do
-      define :get_mde_school_vs_lea_snapshot, action: :by_building_and_year,
+      define :get_mde_school_vs_lea_snapshot,
+        action: :by_building_and_year,
         args: [:building_code, :school_year]
 
       define :upsert_mde_school_vs_lea_snapshot, action: :upsert

@@ -12,7 +12,13 @@ config :ash_oban, pro?: false
 config :emisint, Oban,
   engine: Oban.Engines.Basic,
   notifier: Oban.Notifiers.Postgres,
-  queues: [default: 10, data_ingestion: 5, analytics: 5],
+  queues: [
+    default: 10,
+    data_ingestion: 5,
+    analytics: 5,
+    chat_responses: [limit: 10],
+    conversations: [limit: 10]
+  ],
   repo: Emisint.Repo,
   plugins: [{Oban.Plugins.Cron, []}]
 
@@ -63,7 +69,14 @@ config :spark,
 config :emisint,
   ecto_repos: [Emisint.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Emisint.Accounts, Emisint.Registry, Emisint.Assessments, Emisint.Compliance, Emisint.Analytics]
+  ash_domains: [
+    Emisint.Chat,
+    Emisint.Accounts,
+    Emisint.Registry,
+    Emisint.Assessments,
+    Emisint.Compliance,
+    Emisint.Analytics
+  ]
 
 # Configure the endpoint
 config :emisint, EmisintWeb.Endpoint,
