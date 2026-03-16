@@ -7,7 +7,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     MdeEnrollmentResult,
     MdeEntityMaster,
     MdeSatResult,
-    MdeSchoolVsLeaSnapshot
+    MdeSchoolVsLeaSnapshot,
+    MdeStateAssessmentResult
   }
 
   @doc """
@@ -70,6 +71,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           enrollment: enrollment,
           sat_results: sat_results,
           sat_score_bars: [],
+          econ_grade_breakdown: [],
           entity_details: entity_details
         }
 
@@ -78,6 +80,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
         grades = snapshot_to_grades(snap.grade_breakdown)
         all_subjects_avg = snapshot_to_all_subjects_avg(snap.all_subjects_avg)
         sat_score_bars = load_sat_score_bars(school_sat_row, snap.lea_district_code, year)
+        econ_grade_breakdown = load_econ_grade_breakdown(building_code, snap.lea_district_code, year)
 
         %{
           school: %{
@@ -100,6 +103,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           enrollment: enrollment,
           sat_results: sat_results,
           sat_score_bars: sat_score_bars,
+          econ_grade_breakdown: econ_grade_breakdown,
           entity_details: entity_details
         }
     end
@@ -117,15 +121,13 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
     case record do
       nil ->
-        %{total: nil, male: nil, female: nil, male_pct: nil, female_pct: nil}
+        %{total: nil, econ_disadvantaged: nil, econ_pct: nil}
 
       rec ->
         %{
           total: rec.total_enrollment,
-          male: rec.male_enrollment,
-          female: rec.female_enrollment,
-          male_pct: safe_pct(rec.male_enrollment, rec.total_enrollment),
-          female_pct: safe_pct(rec.female_enrollment, rec.total_enrollment)
+          econ_disadvantaged: rec.economic_disadvantaged_enrollment,
+          econ_pct: safe_pct(rec.economic_disadvantaged_enrollment, rec.total_enrollment)
         }
     end
   end
@@ -254,6 +256,113 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
       ]
     end
   end
+
+  defp load_econ_grade_breakdown(building_code, lea_district_code, year) do
+    school_task =
+      Task.async(fn ->
+        MdeStateAssessmentResult
+        |> Ash.Query.filter(
+          rollup_level == :building and
+            mde_building.building_code == ^building_code and
+            school_year == ^year and
+            report_category == "Economically Disadvantaged" and
+            grade_content_tested != "All"
+        )
+        |> Ash.read!(authorize?: false)
+      end)
+
+    lea_task =
+      Task.async(fn ->
+        if lea_district_code do
+          MdeStateAssessmentResult
+          |> Ash.Query.filter(
+            rollup_level == :district and
+              mde_district.district_code == ^lea_district_code and
+              school_year == ^year and
+              report_category == "Economically Disadvantaged" and
+              grade_content_tested != "All"
+          )
+          |> Ash.read!(authorize?: false)
+        else
+          []
+        end
+      end)
+
+    state_task =
+      Task.async(fn ->
+        MdeStateAssessmentResult
+        |> Ash.Query.filter(
+          rollup_level == :isd and
+            mde_isd.isd_code == "0" and
+            school_year == ^year and
+            report_category == "Economically Disadvantaged" and
+            grade_content_tested != "All"
+        )
+        |> Ash.read!(authorize?: false)
+      end)
+
+    school_rows = Task.await(school_task)
+    lea_rows = Task.await(lea_task)
+    state_rows = Task.await(state_task)
+
+    school_grades = Enum.group_by(school_rows, & &1.grade_content_tested)
+    lea_grades = Enum.group_by(lea_rows, & &1.grade_content_tested)
+    state_grades = Enum.group_by(state_rows, & &1.grade_content_tested)
+
+    all_grades =
+      (Map.keys(school_grades) ++ Map.keys(lea_grades))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    Enum.map(all_grades, fn grade ->
+      s = Map.get(school_grades, grade, [])
+      l = Map.get(lea_grades, grade, [])
+      st = Map.get(state_grades, grade, [])
+
+      school_ela_rows = Enum.filter(s, &(&1.subject == "ELA"))
+      school_math_rows = Enum.filter(s, &(&1.subject == "Mathematics"))
+
+      %{
+        grade: "Grade #{grade}",
+        school_ela: econ_weighted_proficiency(school_ela_rows),
+        school_ela_suppressed: econ_all_suppressed?(school_ela_rows),
+        school_ela_approximate: econ_any_approximate?(school_ela_rows),
+        lea_ela: l |> Enum.filter(&(&1.subject == "ELA")) |> econ_weighted_proficiency(),
+        state_ela: st |> Enum.filter(&(&1.subject == "ELA")) |> econ_weighted_proficiency(),
+        school_math: econ_weighted_proficiency(school_math_rows),
+        school_math_suppressed: econ_all_suppressed?(school_math_rows),
+        school_math_approximate: econ_any_approximate?(school_math_rows),
+        lea_math: l |> Enum.filter(&(&1.subject == "Mathematics")) |> econ_weighted_proficiency(),
+        state_math: st |> Enum.filter(&(&1.subject == "Mathematics")) |> econ_weighted_proficiency()
+      }
+    end)
+  end
+
+  defp econ_weighted_proficiency([]), do: nil
+
+  defp econ_weighted_proficiency(rows) do
+    {total_assessed, total_prof} =
+      rows
+      |> Enum.reject(& &1.percent_met_suppressed)
+      |> Enum.reduce({0, 0.0}, fn r, {assessed, prof} ->
+        pct = if r.percent_met, do: Decimal.to_float(r.percent_met), else: 0.0
+        n = r.number_assessed || 0
+        {assessed + n, prof + pct * n / 100.0}
+      end)
+
+    if total_assessed > 0, do: Float.round(total_prof / total_assessed * 100.0, 1), else: nil
+  end
+
+  defp econ_all_suppressed?([]), do: false
+
+  defp econ_all_suppressed?(rows) do
+    Enum.all?(rows, fn r ->
+      r.percent_met_suppressed or (is_nil(r.percent_met) and (r.number_assessed || 0) == 0)
+    end)
+  end
+
+  defp econ_any_approximate?([]), do: false
+  defp econ_any_approximate?(rows), do: Enum.any?(rows, & &1.percent_met_approximate)
 
   defp decimal_to_float(nil), do: nil
   defp decimal_to_float(%Decimal{} = d), do: Decimal.to_float(d)

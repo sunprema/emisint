@@ -399,59 +399,57 @@
   )
 ] else [
   #grid(
-    columns: (1fr, 1fr, 1fr),
+    columns: (1fr, 1fr),
     gutter: 10pt,
     stat-box("Total Enrolled",
       fmt-int(elixir_data.enrollment.total),
       sub: "all students"),
-    stat-box("Male",
-      fmt-int(elixir_data.enrollment.male),
-      sub: fmt-pct-sub(elixir_data.enrollment.male_pct)),
-    stat-box("Female",
-      fmt-int(elixir_data.enrollment.female),
-      sub: fmt-pct-sub(elixir_data.enrollment.female_pct))
+    stat-box("Econ. Disadvantaged",
+      fmt-int(elixir_data.enrollment.econ_disadvantaged),
+      sub: fmt-pct-sub(elixir_data.enrollment.econ_pct))
   )
-  #if elixir_data.enrollment.male_pct != none [
+  #if elixir_data.enrollment.econ_pct != none [
     #v(14pt)
     // Legend
     #grid(
-      columns: (auto, 1fr, auto),
+      columns: (auto, auto, 1fr),
+      gutter: 14pt,
+      align: horizon,
+      {
+        box(width: 10pt, height: 8pt, fill: c-amber, radius: 1pt)
+        h(5pt)
+        text(size: 8pt, fill: c-muted, "Econ. Disadvantaged")
+      },
       {
         box(width: 10pt, height: 8pt, fill: c-school, radius: 1pt)
         h(5pt)
-        text(size: 8pt, fill: c-muted, "Male")
+        text(size: 8pt, fill: c-muted, "Remaining Students")
       },
-      [],
-      {
-        box(width: 10pt, height: 8pt, fill: c-pink, radius: 1pt)
-        h(5pt)
-        text(size: 8pt, fill: c-muted, "Female")
-      }
+      []
     )
     #v(4pt)
-    // Proportional gender bar — only rendered when percentages are available
-    #let male-pct   = to-num(elixir_data.enrollment.male_pct)
-    #let female-pct = to-num(elixir_data.enrollment.female_pct)
-    #if male-pct != none and female-pct != none {
-      let mp = calc.max(calc.min(male-pct / 100, 0.99), 0.01)
-      let fp = 1.0 - mp
+    // Proportional bar: econ disadvantaged (amber) + remaining (blue)
+    #let econ-pct = to-num(elixir_data.enrollment.econ_pct)
+    #if econ-pct != none {
+      let ep = calc.max(calc.min(econ-pct / 100, 0.99), 0.01)
+      let rp = 1.0 - ep
       grid(
-        columns: (mp * 100%, fp * 100%),
+        columns: (ep * 100%, rp * 100%),
         rows: 26pt,
         rect(
-          width: 100%, height: 100%, fill: c-school,
+          width: 100%, height: 100%, fill: c-amber,
           radius: (left: 4pt, right: 0pt),
           align(center + horizon,
             text(fill: white, weight: "bold", size: 9pt,
-              str(calc.round(male-pct, digits: 1)) + "%")
+              str(calc.round(econ-pct, digits: 1)) + "%")
           )
         ),
         rect(
-          width: 100%, height: 100%, fill: c-pink,
+          width: 100%, height: 100%, fill: c-school,
           radius: (right: 4pt, left: 0pt),
           align(center + horizon,
             text(fill: white, weight: "bold", size: 9pt,
-              str(calc.round(female-pct, digits: 1)) + "%")
+              str(calc.round(100.0 - econ-pct, digits: 1)) + "%")
           )
         )
       )
@@ -584,6 +582,45 @@
     th("LEA Math"),
     th("St Math"),
     ..for row in elixir_data.grade_breakdown {(
+      text(size: 9pt, weight: "semibold", row.grade),
+      align(center, pct-badge(row.school_ela, approximate: row.school_ela_approximate)),
+      align(center, pct-badge(row.lea_ela)),
+      align(center, pct-badge(row.state_ela)),
+      align(center, pct-badge(row.school_math, approximate: row.school_math_approximate)),
+      align(center, pct-badge(row.lea_math)),
+      align(center, pct-badge(row.state_math))
+    )}
+  )
+]
+
+
+// ── Section 3: Grade-Level Breakdown — Economically Disadvantaged ─────────────
+#section-title("Grade-Level Breakdown — Economically Disadvantaged",
+  subtitle: "ELA and Mathematics proficiency by grade · Econ. Disadvantaged subgroup · " + elixir_data.school_year)
+
+#box(fill: c-amber-bg, inset: (x: 8pt, y: 3pt), radius: 3pt,
+  text(fill: c-amber, size: 8pt, weight: "bold", "Economically Disadvantaged"))
+#v(10pt)
+
+#if elixir_data.econ_grade_breakdown.len() == 0 [
+  #rect(
+    width: 100%, inset: 14pt, stroke: 0.5pt + c-border, radius: 2pt,
+    text(fill: c-muted, style: "italic", "No Economically Disadvantaged grade-level data available.")
+  )
+] else [
+  #table(
+    columns: (auto, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr),
+    stroke: (x, y) => if y == 0 { none } else { (bottom: 0.5pt + c-border) },
+    inset: (x: 7pt, y: 8pt),
+    fill: (x, y) => if y == 0 { c-th-bg } else if calc.odd(y) { white } else { c-row-alt },
+    th("Grade"),
+    th("Sch ELA"),
+    th("LEA ELA"),
+    th("St ELA"),
+    th("Sch Math"),
+    th("LEA Math"),
+    th("St Math"),
+    ..for row in elixir_data.econ_grade_breakdown {(
       text(size: 9pt, weight: "semibold", row.grade),
       align(center, pct-badge(row.school_ela, approximate: row.school_ela_approximate)),
       align(center, pct-badge(row.lea_ela)),

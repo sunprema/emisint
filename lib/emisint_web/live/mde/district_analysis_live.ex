@@ -526,8 +526,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                     </div>
                     <.enrollment_donut
                       total={@enrollment.total_enrollment}
-                      male={@enrollment.male_enrollment}
-                      female={@enrollment.female_enrollment}
+                      econ_disadvantaged={@enrollment.economic_disadvantaged_enrollment}
                     />
                   </div>
                   <div :if={is_nil(@enrollment)} class="pt-2 mt-1 text-xs text-base-content/30 italic">
@@ -949,32 +948,23 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   # ---------------------------------------------------------------------------
 
   attr :total, :integer, default: nil
-  attr :male, :integer, default: nil
-  attr :female, :integer, default: nil
+  attr :econ_disadvantaged, :integer, default: nil
 
   def enrollment_donut(assigns) do
     total = assigns.total || 0
 
-    {male_pct, female_pct} =
-      if total > 0 do
-        m = if is_integer(assigns.male), do: Float.round(assigns.male / total * 100, 1), else: 0.0
-
-        f =
-          if is_integer(assigns.female),
-            do: Float.round(assigns.female / total * 100, 1),
-            else: 0.0
-
-        {m, f}
+    econ_pct =
+      if total > 0 && is_integer(assigns.econ_disadvantaged) do
+        Float.round(assigns.econ_disadvantaged / total * 100, 1)
       else
-        {0.0, 0.0}
+        0.0
       end
 
     assigns =
       assigns
-      |> assign(:male_pct, male_pct)
-      |> assign(:female_pct, female_pct)
-      # Female segment starts where male ends: rotate by male's arc degrees
-      |> assign(:female_rotation, -90 + male_pct * 3.6)
+      |> assign(:econ_pct, econ_pct)
+      # Econ segment starts at top (-90°), remaining (non-econ) starts where it ends
+      |> assign(:non_econ_rotation, -90 + econ_pct * 3.6)
 
     ~H"""
     <div class="flex items-center gap-4">
@@ -984,30 +974,30 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           <%!-- Background ring --%>
           <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#e5e7eb" stroke-width="3.5" />
 
-          <%!-- Male segment (blue), starts at top (rotate -90°) --%>
+          <%!-- Econ disadvantaged segment (amber), starts at top (rotate -90°) --%>
           <circle
-            :if={@male_pct > 0}
+            :if={@econ_pct > 0}
+            cx="18"
+            cy="18"
+            r="15.9155"
+            fill="none"
+            stroke="#f59e0b"
+            stroke-width="3.5"
+            stroke-dasharray={"#{@econ_pct} #{100 - @econ_pct}"}
+            transform="rotate(-90 18 18)"
+          />
+
+          <%!-- Remaining (non-econ) segment (blue), starts where econ ends --%>
+          <circle
+            :if={@econ_pct < 100}
             cx="18"
             cy="18"
             r="15.9155"
             fill="none"
             stroke="#3b82f6"
             stroke-width="3.5"
-            stroke-dasharray={"#{@male_pct} #{100 - @male_pct}"}
-            transform="rotate(-90 18 18)"
-          />
-
-          <%!-- Female segment (pink), starts where male ends --%>
-          <circle
-            :if={@female_pct > 0}
-            cx="18"
-            cy="18"
-            r="15.9155"
-            fill="none"
-            stroke="#ec4899"
-            stroke-width="3.5"
-            stroke-dasharray={"#{@female_pct} #{100 - @female_pct}"}
-            transform={"rotate(#{@female_rotation} 18 18)"}
+            stroke-dasharray={"#{100 - @econ_pct} #{@econ_pct}"}
+            transform={"rotate(#{@non_econ_rotation} 18 18)"}
           />
 
           <%!-- Center label --%>
@@ -1039,19 +1029,18 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       <div class="space-y-2">
         <div class="flex items-center gap-2 text-xs">
           <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#3b82f6"></span>
-          <span class="text-base-content/60">Male</span>
+          <span class="text-base-content/60">All Students</span>
           <span class="font-semibold tabular-nums">
-            {if @male, do: format_number(@male), else: "—"}
+            {if @total, do: format_number(@total), else: "—"}
           </span>
-          <span :if={@male_pct > 0} class="text-base-content/40">({@male_pct}%)</span>
         </div>
         <div class="flex items-center gap-2 text-xs">
-          <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#ec4899"></span>
-          <span class="text-base-content/60">Female</span>
+          <span class="inline-block size-2.5 rounded-sm shrink-0" style="background:#f59e0b"></span>
+          <span class="text-base-content/60">Econ. Disadvantaged</span>
           <span class="font-semibold tabular-nums">
-            {if @female, do: format_number(@female), else: "—"}
+            {if @econ_disadvantaged, do: format_number(@econ_disadvantaged), else: "—"}
           </span>
-          <span :if={@female_pct > 0} class="text-base-content/40">({@female_pct}%)</span>
+          <span :if={@econ_pct > 0} class="text-base-content/40">({@econ_pct}%)</span>
         </div>
       </div>
     </div>
