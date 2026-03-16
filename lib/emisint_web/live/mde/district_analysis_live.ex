@@ -8,6 +8,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     MdeDistrict,
     MdeDistrictSnapshot,
     MdeEnrollmentResult,
+    MdeSchoolIndexResult,
     MdeSatResult,
     MdeSchoolVsLeaSnapshot,
     MdeStateAssessmentResult
@@ -54,7 +55,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:sat_results, [])
      |> assign(:sat_lea_result, nil)
      |> assign(:sat_state_result, nil)
-     |> assign(:econ_grade_breakdown, [])}
+     |> assign(:econ_grade_breakdown, [])
+     |> assign(:school_index, nil)
+     |> assign(:index_thresholds, %{})}
   end
 
   def handle_params(%{"district_code" => dc} = params, _uri, socket) do
@@ -98,15 +101,16 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           end
 
       # ── Batch 1: four independent queries → parallel ──────────────────────────
-      {school_vs_lea, enrollment, sat_results, sat_state_result} =
+      {school_vs_lea, enrollment, sat_results, sat_state_result, school_index} =
         if tab == "school_vs_lea" && effective_building_code && year != "" do
           t1 = Task.async(fn -> load_school_vs_lea(effective_building_code, year) end)
           t2 = Task.async(fn -> load_enrollment(effective_building_code, year) end)
           t3 = Task.async(fn -> load_sat_results(effective_building_code, year) end)
           t4 = Task.async(fn -> load_sat_state_result(year) end)
-          {Task.await(t1), Task.await(t2), Task.await(t3), Task.await(t4)}
+          t5 = Task.async(fn -> load_school_index(effective_building_code, year) end)
+          {Task.await(t1), Task.await(t2), Task.await(t3), Task.await(t4), Task.await(t5)}
         else
-          {nil, nil, [], nil}
+          {nil, nil, [], nil, nil}
         end
 
       # ── Batch 2: two queries that depend on lea_dc from batch 1 → parallel ───
@@ -128,6 +132,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           {nil, []}
         end
 
+      index_thresholds = if year != "", do: load_index_thresholds(year), else: %{}
+
       {:noreply,
        socket
        |> assign(:district_code, dc)
@@ -143,6 +149,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
        |> assign(:sat_lea_result, sat_lea_result)
        |> assign(:sat_state_result, sat_state_result)
        |> assign(:econ_grade_breakdown, econ_grade_breakdown)
+       |> assign(:school_index, school_index)
+       |> assign(:index_thresholds, index_thresholds)
        |> assign(:page_title, page_title(primary, compare))}
     end
   end
@@ -177,16 +185,17 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       end
 
     # ── Batch 1: four independent queries → parallel ──────────────────────────
-    {school_vs_lea, enrollment, sat_results, sat_state_result} =
+    {school_vs_lea, enrollment, sat_results, sat_state_result, school_index} =
       if tab == "school_vs_lea" && effective_building_code && year != "" do
         t1 = Task.async(fn -> load_school_vs_lea(effective_building_code, year) end)
         t2 = Task.async(fn -> load_enrollment(effective_building_code, year) end)
         t3 = Task.async(fn -> load_sat_results(effective_building_code, year) end)
         t4 = Task.async(fn -> load_sat_state_result(year) end)
-        {Task.await(t1), Task.await(t2), Task.await(t3), Task.await(t4)}
+        t5 = Task.async(fn -> load_school_index(effective_building_code, year) end)
+        {Task.await(t1), Task.await(t2), Task.await(t3), Task.await(t4), Task.await(t5)}
       else
         {socket.assigns.school_vs_lea, socket.assigns.enrollment,
-         socket.assigns.sat_results, socket.assigns.sat_state_result}
+         socket.assigns.sat_results, socket.assigns.sat_state_result, socket.assigns.school_index}
       end
 
     # ── Batch 2: two queries that depend on lea_dc from batch 1 → parallel ───
@@ -208,6 +217,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         {socket.assigns.sat_lea_result, socket.assigns.econ_grade_breakdown}
       end
 
+    index_thresholds = if year != "", do: load_index_thresholds(year), else: %{}
+
     {:noreply,
      socket
      |> assign(:selected_year, year)
@@ -218,7 +229,9 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:sat_results, sat_results)
      |> assign(:sat_lea_result, sat_lea_result)
      |> assign(:sat_state_result, sat_state_result)
-     |> assign(:econ_grade_breakdown, econ_grade_breakdown)}
+     |> assign(:econ_grade_breakdown, econ_grade_breakdown)
+     |> assign(:school_index, school_index)
+     |> assign(:index_thresholds, index_thresholds)}
   end
 
   def handle_event("select_compare", %{"compare" => ""}, socket) do
@@ -592,6 +605,63 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
               class="bg-base-50 border border-base-200 p-4 text-sm text-base-content/50"
             >
               No Michigan state-wide average found for {@selected_year}. State benchmark not available for this year.
+            </div>
+
+            <%!-- School Index Score --%>
+            <div :if={@school_index} class="bg-base-100 border border-base-200 overflow-hidden">
+              <%!-- Header: title + overall score --%>
+              <div class="flex items-center justify-between px-5 py-3 bg-primary/5 border-b border-primary/15">
+                <div class="flex items-center gap-2">
+                  <.icon name="hero-trophy" class="size-4 text-primary" />
+                  <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+                    School Index Score
+                  </span>
+                </div>
+                <div class="flex items-baseline gap-1.5">
+                  <span class={"text-3xl font-black tabular-nums #{overall_score_class(@school_index.overall_index, Map.get(@index_thresholds, :overall))}"}>
+                    {format_index(@school_index.overall_index)}
+                  </span>
+                  <span class="text-xs text-base-content/40 font-medium">/ 100</span>
+                </div>
+              </div>
+
+              <%!-- Sub-index rows --%>
+              <div class="divide-y divide-base-200">
+                <.index_row label="Growth" value={@school_index.growth_index} threshold={Map.get(@index_thresholds, :growth)} />
+                <.index_row label="Proficiency" value={@school_index.proficiency_index} threshold={Map.get(@index_thresholds, :proficiency)} />
+                <.index_row label="Graduation" value={@school_index.graduation_index} threshold={Map.get(@index_thresholds, :graduation)} />
+                <.index_row label="EL Progress" value={@school_index.el_progress_index} threshold={Map.get(@index_thresholds, :el_progress)} />
+                <.index_row label="School Quality" value={@school_index.school_quality_index} threshold={Map.get(@index_thresholds, :school_quality)} />
+                <.index_row
+                  label="Subject Participation"
+                  value={@school_index.subject_participation_index}
+                  threshold={Map.get(@index_thresholds, :subject_participation)}
+                />
+                <.index_row
+                  label="EL Participation"
+                  value={@school_index.el_participation_index}
+                  threshold={Map.get(@index_thresholds, :el_participation)}
+                />
+              </div>
+
+              <%!-- Support category footer --%>
+              <div
+                :if={@school_index.support_category_name}
+                class="flex items-start gap-3 px-5 py-3 bg-warning/5 border-t border-warning/20"
+              >
+                <.icon name="hero-flag" class="size-3.5 text-warning shrink-0 mt-0.5" />
+                <div>
+                  <span class="badge badge-warning badge-sm">
+                    {@school_index.support_category_name}
+                  </span>
+                  <p
+                    :if={@school_index.support_category_reason}
+                    class="text-xs text-base-content/50 mt-0.5"
+                  >
+                    {@school_index.support_category_reason}
+                  </p>
+                </div>
+              </div>
             </div>
 
             <%!-- All Subjects Average --%>
@@ -1082,6 +1152,50 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           {format_number(@district.total_assessed)} students
         </span>
       </div>
+    </div>
+    """
+  end
+
+  attr :label, :string, required: true
+  attr :value, :any, default: nil
+  attr :threshold, :any, default: nil
+
+  def index_row(assigns) do
+    pct =
+      case assigns.value do
+        nil -> 0
+        d -> d |> Decimal.to_float() |> min(100.0) |> max(0.0)
+      end
+
+    score_class =
+      cond do
+        is_nil(assigns.value) or is_nil(assigns.threshold) -> "text-base-content/70"
+        Decimal.compare(assigns.value, assigns.threshold) == :lt -> "text-error"
+        true -> "text-success"
+      end
+
+    bar_class =
+      cond do
+        is_nil(assigns.value) or is_nil(assigns.threshold) -> "bg-primary/60"
+        Decimal.compare(assigns.value, assigns.threshold) == :lt -> "bg-error/60"
+        true -> "bg-success/60"
+      end
+
+    assigns = assigns |> assign(:pct, pct) |> assign(:score_class, score_class) |> assign(:bar_class, bar_class)
+
+    ~H"""
+    <div class="flex items-center gap-4 px-5 py-2.5">
+      <span class="text-xs text-base-content/50 w-36 shrink-0">{@label}</span>
+      <div class="flex-1 bg-base-200 h-2 relative overflow-hidden">
+        <div
+          class={"absolute inset-y-0 left-0 transition-all duration-500 #{@bar_class}"}
+          style={"width: #{@pct}%"}
+        >
+        </div>
+      </div>
+      <span class={"text-xs font-semibold tabular-nums w-10 text-right #{@score_class}"}>
+        {format_index(@value)}
+      </span>
     </div>
     """
   end
@@ -1752,6 +1866,48 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
   defp maybe_decimal(nil), do: nil
   defp maybe_decimal(f), do: Decimal.from_float(f)
+
+  defp format_index(nil), do: "—"
+  defp format_index(d), do: d |> Decimal.round(2, :floor) |> Decimal.to_string()
+
+  defp overall_score_class(nil, _threshold), do: "text-primary"
+  defp overall_score_class(_value, nil), do: "text-primary"
+
+  defp overall_score_class(value, threshold) do
+    if Decimal.compare(value, threshold) == :lt, do: "text-error", else: "text-success"
+  end
+
+  defp load_index_thresholds(year) do
+    si_year = school_index_year(year)
+
+    Emisint.Assessments.MdeIndexThreshold
+    |> Ash.Query.filter(school_year == ^si_year)
+    |> Ash.read!(authorize?: false)
+    |> Map.new(fn t -> {t.component, t.threshold_value} end)
+  rescue
+    _ -> %{}
+  end
+
+  defp load_school_index(building_code, year) do
+    si_year = school_index_year(year)
+
+    MdeSchoolIndexResult
+    |> Ash.Query.filter(mde_building.building_code == ^building_code and school_year == ^si_year)
+    |> Ash.read_one!(authorize?: false)
+  rescue
+    _ -> nil
+  end
+
+  # Converts "24 - 25 School Year" → "2024-2025"
+  defp school_index_year(year) do
+    year
+    |> String.replace(" School Year", "")
+    |> String.split(" - ")
+    |> case do
+      [y1, y2] -> "20#{String.trim(y1)}-20#{String.trim(y2)}"
+      _ -> year
+    end
+  end
 
   defp load_school_vs_lea(building_code, year) do
     snapshot =

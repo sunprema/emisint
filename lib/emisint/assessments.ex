@@ -104,5 +104,15 @@ defmodule Emisint.Assessments do
       define :mark_mde_import_log_completed, action: :mark_completed
       define :mark_mde_import_log_failed, action: :mark_failed
     end
+
+    resource Emisint.Assessments.MdeSchoolIndexResult do
+      define :list_mde_school_index_results, action: :read
+      define :upsert_mde_school_index_result, action: :upsert
+    end
+
+    resource Emisint.Assessments.MdeIndexThreshold do
+      define :list_mde_index_thresholds, action: :read
+      define :upsert_mde_index_threshold, action: :upsert
+    end
   end
 end

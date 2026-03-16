@@ -22,6 +22,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
         Phoenix.PubSub.subscribe(Emisint.PubSub, "entity_master_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "enrollment_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "sat_import")
+        Phoenix.PubSub.subscribe(Emisint.PubSub, "school_index_import")
       end
     end
 
@@ -49,6 +50,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> assign(:enrollment_import_result, nil)
       |> assign(:sat_importing, false)
       |> assign(:sat_import_result, nil)
+      |> assign(:school_index_importing, false)
+      |> assign(:school_index_import_result, nil)
       |> allow_upload(:csv_file,
         accept: ~w(.csv),
         max_entries: 1,
@@ -62,6 +65,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> assign(:enrollment_upload_progress, nil)
       |> assign(:sat_upload, nil)
       |> assign(:sat_upload_progress, nil)
+      |> assign(:school_index_upload, nil)
+      |> assign(:school_index_upload_progress, nil)
       |> assign(:import_history, if(user.role == :system_admin, do: load_import_history(), else: []))
 
     {:ok, socket}
@@ -180,6 +185,31 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:sat_import_result, {:error, reason})
      |> assign(:import_history, load_import_history())
      |> put_flash(:error, "SAT import failed: #{reason}")}
+  end
+
+  # ---------------------------------------------------------------------------
+  # PubSub — School Index import status updates
+  # ---------------------------------------------------------------------------
+
+  def handle_info({:school_index_import_completed, stats}, socket) do
+    {:noreply,
+     socket
+     |> assign(:school_index_importing, false)
+     |> assign(:school_index_import_result, {:ok, stats})
+     |> assign(:import_history, load_import_history())
+     |> put_flash(
+       :info,
+       "School Index import complete — #{format_number(stats.records)} records loaded."
+     )}
+  end
+
+  def handle_info({:school_index_import_failed, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:school_index_importing, false)
+     |> assign(:school_index_import_result, {:error, reason})
+     |> assign(:import_history, load_import_history())
+     |> put_flash(:error, "School Index import failed: #{reason}")}
   end
 
   # ---------------------------------------------------------------------------
@@ -356,6 +386,24 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:sat_upload_progress, nil)
      |> assign(:import_history, load_import_history())
      |> put_flash(:info, "SAT import queued: #{filename}. Processing in background…")}
+  end
+
+  def handle_event("upload_complete", %{"upload_type" => "school_index", "key" => key, "filename" => filename}, socket) do
+    user = socket.assigns.current_user
+    log_id = create_import_log(:school_index, filename, socket.assigns.school_index_upload, key, user)
+
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
+    |> Emisint.Workers.MdeSchoolIndexImportWorker.new()
+    |> Oban.insert!()
+
+    {:noreply,
+     socket
+     |> assign(:school_index_importing, true)
+     |> assign(:school_index_import_result, nil)
+     |> assign(:school_index_upload, nil)
+     |> assign(:school_index_upload_progress, nil)
+     |> assign(:import_history, load_import_history())
+     |> put_flash(:info, "School Index import queued: #{filename}. Processing in background…")}
   end
 
   def handle_event("upload_failed", %{"upload_type" => type, "reason" => reason}, socket) do
@@ -1566,7 +1614,241 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
-        <%!-- ── Section 6: MDE Import History (system_admin only) ──────────────── --%>
+        <%!-- ── Section 6: MDE School Index Results (system_admin only) ──────────── --%>
+        <div class="divider"></div>
+        <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
+          <div class="flex items-center gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold">MDE School Index Results</h2>
+                <span class="badge badge-primary badge-sm">System Admin</span>
+              </div>
+              <p class="text-xs text-base-content/50 mt-0.5">
+                Import the MDE annual School Index Results CSV — building-level accountability
+                index scores (overall, growth, proficiency, graduation, EL progress, and support
+                category). Upserts one row per building per school year.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+            <%!-- School Index upload form — 3 cols --%>
+            <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200">
+                <h3 class="font-semibold">Upload School Index CSV</h3>
+                <p class="text-xs text-base-content/40 mt-0.5">
+                  Annual MDE School Index export. No school or year selection needed.
+                </p>
+              </div>
+
+              <div id="tigris-school-index" phx-hook="TigrisUpload" data-upload-type="school_index" class="p-6 space-y-6">
+                <%!-- File upload drop zone --%>
+                <div class="space-y-2">
+                  <label class="text-sm font-medium">
+                    School Index CSV File <span class="text-error text-xs">*</span>
+                  </label>
+
+                  <div
+                    class="relative border-2 border-dashed border-base-300 hover:border-primary/40 bg-base-50/50 transition-colors group cursor-pointer"
+                    data-drop-zone
+                  >
+                    <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
+                      <div class="p-3 bg-base-200 group-hover:bg-primary/10 transition-colors mb-3">
+                        <.icon
+                          name="hero-trophy"
+                          class="size-7 text-base-content/30 group-hover:text-primary transition-colors"
+                        />
+                      </div>
+                      <p class="text-sm text-base-content/50">
+                        Drag & drop the School Index CSV here, or{" "}
+                        <span class="text-primary font-medium hover:underline">browse</span>
+                      </p>
+                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 50 MB</p>
+                      <input type="file" accept=".csv" class="hidden" data-file-input />
+                    </label>
+                  </div>
+
+                  <%!-- File entry preview --%>
+                  <div
+                    :if={@school_index_upload}
+                    class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
+                  >
+                    <div class="p-2 bg-primary/10 shrink-0">
+                      <.icon name="hero-document-text" class="size-4 text-primary" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium truncate">{@school_index_upload.name}</div>
+                      <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
+                        <div
+                          class="bg-primary h-1 rounded-full transition-all duration-300"
+                          style={"width: #{@school_index_upload_progress || 0}%"}
+                        >
+                        </div>
+                      </div>
+                    </div>
+                    <span class="text-xs text-base-content/40 shrink-0">
+                      {format_bytes(@school_index_upload.size)}
+                    </span>
+                    <button
+                      type="button"
+                      data-cancel-btn
+                      class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <%!-- Expected format hint --%>
+                <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
+                  <.icon
+                    name="hero-information-circle"
+                    class="size-4 shrink-0 mt-0.5 text-base-content/35"
+                  />
+                  <div>
+                    <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+                    <p class="font-mono leading-relaxed">
+                      SchoolYear, ISDCode, ISDName, DistrictCode, DistrictName,
+                      BuildingCode, BuildingName, CountyCode, CountyName, EntityType,
+                      SchoolLevel, LOCALE_NAME, MISTEM_NAME, MISTEM_CODE,
+                      OverallIndex, GrowthIndex, ProficiencyIndex, GraduationIndex,
+                      ELProgressIndex, SchoolQualityIndex, SubjectParticipationIndex,
+                      ELParticipationIndex, SupportCategoryName, SupportCategoryReason
+                    </p>
+                  </div>
+                </div>
+
+                <%!-- Submit button --%>
+                <button
+                  type="button"
+                  data-import-btn
+                  class={[
+                    "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
+                    !@school_index_importing && !is_nil(@school_index_upload) &&
+                      "bg-primary text-primary-content hover:opacity-90 active:scale-[0.99]",
+                    (@school_index_importing || is_nil(@school_index_upload)) &&
+                      "bg-primary/50 text-primary-content/70 cursor-not-allowed"
+                  ]}
+                  disabled={@school_index_importing || is_nil(@school_index_upload)}
+                >
+                  <span
+                    :if={@school_index_importing}
+                    class="loading loading-spinner loading-sm"
+                  >
+                  </span>
+                  <.icon
+                    :if={!@school_index_importing}
+                    name="hero-arrow-up-tray"
+                    class="size-4"
+                  />
+                  {if @school_index_importing, do: "Processing…", else: "Import School Index"}
+                </button>
+              </div>
+            </div>
+
+            <%!-- School Index import result / status — 2 cols --%>
+            <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
+                <div>
+                  <h3 class="font-semibold">Import Status</h3>
+                  <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
+                </div>
+                <div
+                  :if={@school_index_importing}
+                  class="flex items-center gap-1.5 text-xs text-base-content/40"
+                >
+                  <span class="loading loading-spinner loading-xs"></span> Running…
+                </div>
+              </div>
+
+              <%!-- Idle / no result yet --%>
+              <div
+                :if={!@school_index_importing && is_nil(@school_index_import_result)}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-base-200 mb-3">
+                  <.icon name="hero-trophy" class="size-6 text-base-content/25" />
+                </div>
+                <p class="text-sm font-medium text-base-content/40">No import yet</p>
+                <p class="text-xs text-base-content/30 mt-1">
+                  Upload a School Index CSV to populate the results table.
+                </p>
+              </div>
+
+              <%!-- In-progress pulse --%>
+              <div
+                :if={@school_index_importing}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-primary/10 mb-3">
+                  <span class="loading loading-spinner loading-md text-primary"></span>
+                </div>
+                <p class="text-sm font-medium">Processing School Index data…</p>
+                <p class="text-xs text-base-content/40 mt-1">
+                  Upserting index scores per building in the background.
+                </p>
+              </div>
+
+              <%!-- Success result --%>
+              <div
+                :if={match?({:ok, _}, @school_index_import_result)}
+                class="p-6 space-y-4"
+              >
+                <div class="flex items-center gap-2 text-success">
+                  <.icon name="hero-check-circle" class="size-5" />
+                  <span class="font-semibold text-sm">Import completed</span>
+                </div>
+                <dl class="grid grid-cols-2 gap-3">
+                  <.mde_stat
+                    label="Records"
+                    value={format_number(elem(@school_index_import_result, 1).records)}
+                    icon="hero-trophy"
+                  />
+                  <.mde_stat
+                    label="Errors"
+                    value={elem(@school_index_import_result, 1).errors}
+                    icon="hero-exclamation-circle"
+                  />
+                </dl>
+                <div class="text-xs text-base-content/50 bg-base-50 border border-base-200 px-3 py-2">
+                  School Year: <span class="font-medium">{elem(@school_index_import_result, 1).school_year}</span>
+                </div>
+                <div
+                  :if={elem(@school_index_import_result, 1).errors > 0}
+                  class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
+                >
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
+                  {elem(@school_index_import_result, 1).errors} rows had errors and were skipped.
+                </div>
+                <a
+                  :if={elem(@school_index_import_result, 1).error_file}
+                  href={~p"/admin/import/errors/download?#{%{path: elem(@school_index_import_result, 1).error_file}}"}
+                  class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
+                >
+                  <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
+                  Download error rows — {Path.basename(elem(@school_index_import_result, 1).error_file)}
+                </a>
+              </div>
+
+              <%!-- Error result --%>
+              <div
+                :if={match?({:error, _}, @school_index_import_result)}
+                class="p-6"
+              >
+                <div class="flex items-start gap-3 p-4 bg-error/5 border border-error/15">
+                  <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
+                  <div>
+                    <p class="text-sm font-semibold text-error">Import failed</p>
+                    <p class="text-xs text-base-content/50 mt-1 break-all">
+                      {elem(@school_index_import_result, 1)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <%!-- ── Section 7: MDE Import History (system_admin only) ──────────────── --%>
         <div :if={@current_user.role == :system_admin} class="space-y-4">
           <div class="divider"></div>
           <div class="flex items-center gap-2">
@@ -1617,7 +1899,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         log.import_type == :mde && "badge-warning",
                         log.import_type == :entity_master && "badge-info",
                         log.import_type == :enrollment && "badge-success",
-                        log.import_type == :sat && "badge-secondary"
+                        log.import_type == :sat && "badge-secondary",
+                        log.import_type == :school_index && "badge-primary"
                       ]}>
                         {log.import_type |> to_string() |> String.replace("_", " ") |> String.upcase()}
                       </span>
