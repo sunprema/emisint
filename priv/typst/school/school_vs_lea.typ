@@ -531,14 +531,14 @@
         text(size: 8pt, fill: c-muted, "Econ. Disadvantaged")
       },
       {
-        box(width: 10pt, height: 8pt, fill: c-lea, radius: 1pt)
+        box(width: 10pt, height: 8pt, fill: c-school, radius: 1pt)
         h(5pt)
         text(size: 8pt, fill: c-muted, "Remaining Students")
       },
       []
     )
     #v(4pt)
-    // Proportional bar: econ disadvantaged (amber) + remaining (lea amber)
+    // Proportional bar: econ disadvantaged (amber) + remaining (blue)
     #let econ-pct = to-num(elixir_data.lea_enrollment.econ_pct)
     #if econ-pct != none {
       let ep = calc.max(calc.min(econ-pct / 100, 0.99), 0.01)
@@ -555,7 +555,7 @@
           )
         ),
         rect(
-          width: 100%, height: 100%, fill: c-lea,
+          width: 100%, height: 100%, fill: c-school,
           radius: (right: 4pt, left: 0pt),
           align(center + horizon,
             text(fill: white, weight: "bold", size: 9pt,
