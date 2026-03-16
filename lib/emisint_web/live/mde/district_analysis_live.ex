@@ -54,6 +54,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:school_vs_lea, nil)
      |> assign(:sat_results, [])
      |> assign(:sat_lea_result, nil)
+     |> assign(:lea_enrollment, nil)
      |> assign(:sat_state_result, nil)
      |> assign(:econ_grade_breakdown, [])
      |> assign(:school_index, nil)
@@ -116,20 +117,26 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       # ── Batch 2: two queries that depend on lea_dc from batch 1 → parallel ───
       lea_dc = school_vs_lea && school_vs_lea.lea_district_code
 
-      {sat_lea_result, econ_grade_breakdown} =
+      {sat_lea_result, lea_enrollment, econ_grade_breakdown} =
         if tab == "school_vs_lea" && effective_building_code && year != "" do
           sat_lea_task =
             if school_vs_lea && !school_vs_lea.no_lea_found && lea_dc,
               do: Task.async(fn -> load_sat_lea_result(lea_dc, year) end)
+
+          lea_enrollment_task =
+            if school_vs_lea && !school_vs_lea.no_lea_found && lea_dc,
+              do: Task.async(fn -> load_lea_enrollment(lea_dc, year) end)
 
           econ_task =
             Task.async(fn ->
               load_econ_grade_breakdown(effective_building_code, lea_dc, year)
             end)
 
-          {if(sat_lea_task, do: Task.await(sat_lea_task)), Task.await(econ_task)}
+          {if(sat_lea_task, do: Task.await(sat_lea_task)),
+           if(lea_enrollment_task, do: Task.await(lea_enrollment_task)),
+           Task.await(econ_task)}
         else
-          {nil, []}
+          {nil, nil, []}
         end
 
       index_thresholds = if year != "", do: load_index_thresholds(year), else: %{}
@@ -144,6 +151,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
        |> assign(:district_buildings, district_buildings)
        |> assign(:selected_building_code, effective_building_code)
        |> assign(:enrollment, enrollment)
+       |> assign(:lea_enrollment, lea_enrollment)
        |> assign(:school_vs_lea, school_vs_lea)
        |> assign(:sat_results, sat_results)
        |> assign(:sat_lea_result, sat_lea_result)
@@ -201,20 +209,27 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     # ── Batch 2: two queries that depend on lea_dc from batch 1 → parallel ───
     lea_dc = school_vs_lea && school_vs_lea.lea_district_code
 
-    {sat_lea_result, econ_grade_breakdown} =
+    {sat_lea_result, lea_enrollment, econ_grade_breakdown} =
       if tab == "school_vs_lea" && effective_building_code && year != "" do
         sat_lea_task =
           if school_vs_lea && !school_vs_lea.no_lea_found && lea_dc,
             do: Task.async(fn -> load_sat_lea_result(lea_dc, year) end)
+
+        lea_enrollment_task =
+          if school_vs_lea && !school_vs_lea.no_lea_found && lea_dc,
+            do: Task.async(fn -> load_lea_enrollment(lea_dc, year) end)
 
         econ_task =
           Task.async(fn ->
             load_econ_grade_breakdown(effective_building_code, lea_dc, year)
           end)
 
-        {if(sat_lea_task, do: Task.await(sat_lea_task)), Task.await(econ_task)}
+        {if(sat_lea_task, do: Task.await(sat_lea_task)),
+         if(lea_enrollment_task, do: Task.await(lea_enrollment_task)),
+         Task.await(econ_task)}
       else
-        {socket.assigns.sat_lea_result, socket.assigns.econ_grade_breakdown}
+        {socket.assigns.sat_lea_result, socket.assigns.lea_enrollment,
+         socket.assigns.econ_grade_breakdown}
       end
 
     index_thresholds = if year != "", do: load_index_thresholds(year), else: %{}
@@ -225,6 +240,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:primary, primary)
      |> assign(:compare, compare)
      |> assign(:enrollment, enrollment)
+     |> assign(:lea_enrollment, lea_enrollment)
      |> assign(:school_vs_lea, school_vs_lea)
      |> assign(:sat_results, sat_results)
      |> assign(:sat_lea_result, sat_lea_result)
@@ -567,6 +583,23 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                     {@school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code}
                   </div>
                   <div class="text-xs text-base-content/50">{@school_vs_lea.lea_district_code}</div>
+
+                  <%!-- LEA Enrollment breakdown --%>
+                  <div :if={@lea_enrollment} class="pt-4 mt-3 border-t border-base-200">
+                    <div class="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-3">
+                      Enrollment — {@selected_year}
+                    </div>
+                    <.enrollment_donut
+                      total={@lea_enrollment.total_enrollment}
+                      econ_disadvantaged={@lea_enrollment.economic_disadvantaged_enrollment}
+                    />
+                  </div>
+                  <div
+                    :if={is_nil(@lea_enrollment)}
+                    class="pt-2 mt-1 text-xs text-base-content/30 italic"
+                  >
+                    No enrollment data for this year
+                  </div>
                 </div>
               </div>
 
@@ -1734,6 +1767,14 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     MdeEnrollmentResult
     |> Ash.Query.filter(
       building_code == ^building_code and school_year == ^year and rollup_level == :building
+    )
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  defp load_lea_enrollment(lea_district_code, year) do
+    MdeEnrollmentResult
+    |> Ash.Query.filter(
+      district_code == ^lea_district_code and school_year == ^year and rollup_level == :district
     )
     |> Ash.read_one!(authorize?: false)
   end

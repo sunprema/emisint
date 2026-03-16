@@ -75,6 +75,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           all_subjects_avg: %{school_pct: nil, lea_pct: nil, state_pct: nil, delta: nil},
           grade_breakdown: [],
           enrollment: enrollment,
+          lea_enrollment: %{total: nil, econ_disadvantaged: nil, econ_pct: nil},
           sat_results: sat_results,
           sat_score_bars: [],
           econ_grade_breakdown: [],
@@ -87,8 +88,10 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
         subjects = snapshot_to_subjects(snap.subject_comparison)
         grades = snapshot_to_grades(snap.grade_breakdown)
         all_subjects_avg = snapshot_to_all_subjects_avg(snap.all_subjects_avg)
+        lea_enrollment_task = Task.async(fn -> load_lea_enrollment_data(snap.lea_district_code, year) end)
         sat_score_bars = load_sat_score_bars(school_sat_row, snap.lea_district_code, year)
         econ_grade_breakdown = load_econ_grade_breakdown(building_code, snap.lea_district_code, year)
+        lea_enrollment = Task.await(lea_enrollment_task)
 
         %{
           school: %{
@@ -109,6 +112,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           all_subjects_avg: all_subjects_avg,
           grade_breakdown: grades,
           enrollment: enrollment,
+          lea_enrollment: lea_enrollment,
           sat_results: sat_results,
           sat_score_bars: sat_score_bars,
           econ_grade_breakdown: econ_grade_breakdown,
@@ -194,6 +198,31 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
         building_code == ^building_code and
           school_year == ^year and
           rollup_level == :building
+      )
+      |> Ash.read_one!(authorize?: false)
+
+    case record do
+      nil ->
+        %{total: nil, econ_disadvantaged: nil, econ_pct: nil}
+
+      rec ->
+        %{
+          total: rec.total_enrollment,
+          econ_disadvantaged: rec.economic_disadvantaged_enrollment,
+          econ_pct: safe_pct(rec.economic_disadvantaged_enrollment, rec.total_enrollment)
+        }
+    end
+  end
+
+  defp load_lea_enrollment_data(nil, _year), do: %{total: nil, econ_disadvantaged: nil, econ_pct: nil}
+
+  defp load_lea_enrollment_data(lea_district_code, year) do
+    record =
+      MdeEnrollmentResult
+      |> Ash.Query.filter(
+        district_code == ^lea_district_code and
+          school_year == ^year and
+          rollup_level == :district
       )
       |> Ash.read_one!(authorize?: false)
 

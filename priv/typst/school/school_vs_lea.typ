@@ -428,6 +428,7 @@
 #detail-row("Authorized Grades", ed.entity_authorized_grades)
 #detail-row("Actual Grades", ed.entity_actual_grades)
 
+#pagebreak()
 // ── Section 1 (Page 1): Student Enrollment ────────────────────────────────────
 #section-title("Student Enrollment",
   subtitle: "Building-level student body composition · " + elixir_data.school_year)
@@ -486,6 +487,75 @@
         ),
         rect(
           width: 100%, height: 100%, fill: c-school,
+          radius: (right: 4pt, left: 0pt),
+          align(center + horizon,
+            text(fill: white, weight: "bold", size: 9pt,
+              str(calc.round(100.0 - econ-pct, digits: 1)) + "%")
+          )
+        )
+      )
+    }
+  ]
+]
+
+// ── Section 1b: Geographic LEA District Enrollment ────────────────────────────
+#section-title("Geographic LEA District Enrollment",
+  subtitle: "District-level student body composition · " + elixir_data.school_year)
+
+#if elixir_data.lea_enrollment.total == none [
+  #rect(
+    width: 100%, inset: 14pt, stroke: 0.5pt + c-border, radius: 2pt,
+    text(fill: c-muted, style: "italic", "No enrollment data available for this district in this school year.")
+  )
+] else [
+  #grid(
+    columns: (1fr, 1fr),
+    gutter: 10pt,
+    stat-box("Total Enrolled",
+      fmt-int(elixir_data.lea_enrollment.total),
+      sub: "all students"),
+    stat-box("Econ. Disadvantaged",
+      fmt-int(elixir_data.lea_enrollment.econ_disadvantaged),
+      sub: fmt-pct-sub(elixir_data.lea_enrollment.econ_pct))
+  )
+  #if elixir_data.lea_enrollment.econ_pct != none [
+    #v(14pt)
+    // Legend
+    #grid(
+      columns: (auto, auto, 1fr),
+      gutter: 14pt,
+      align: horizon,
+      {
+        box(width: 10pt, height: 8pt, fill: c-amber, radius: 1pt)
+        h(5pt)
+        text(size: 8pt, fill: c-muted, "Econ. Disadvantaged")
+      },
+      {
+        box(width: 10pt, height: 8pt, fill: c-lea, radius: 1pt)
+        h(5pt)
+        text(size: 8pt, fill: c-muted, "Remaining Students")
+      },
+      []
+    )
+    #v(4pt)
+    // Proportional bar: econ disadvantaged (amber) + remaining (lea amber)
+    #let econ-pct = to-num(elixir_data.lea_enrollment.econ_pct)
+    #if econ-pct != none {
+      let ep = calc.max(calc.min(econ-pct / 100, 0.99), 0.01)
+      let rp = 1.0 - ep
+      grid(
+        columns: (ep * 100%, rp * 100%),
+        rows: 26pt,
+        rect(
+          width: 100%, height: 100%, fill: c-amber,
+          radius: (left: 4pt, right: 0pt),
+          align(center + horizon,
+            text(fill: white, weight: "bold", size: 9pt,
+              str(calc.round(econ-pct, digits: 1)) + "%")
+          )
+        ),
+        rect(
+          width: 100%, height: 100%, fill: c-lea,
           radius: (right: 4pt, left: 0pt),
           align(center + horizon,
             text(fill: white, weight: "bold", size: 9pt,
