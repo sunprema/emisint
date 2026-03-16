@@ -32,5 +32,7 @@ defmodule Emisint.Accounts do
       define :list_schools, action: :read
       define :update_school, action: :update
     end
+
+    resource Emisint.Accounts.ApiKey
   end
 end

@@ -37,7 +37,8 @@ defmodule Emisint.Assessments.MdeIsd do
     end
 
     policy action_type(:read) do
-      authorize_if actor_present()
+      # authorize_if actor_present()
+      authorize_if always()
     end
 
     policy action_type([:create, :update, :destroy]) do

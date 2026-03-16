@@ -18,7 +18,13 @@ defmodule Emisint.Accounts.User do
         confirm_on_update? false
         require_interaction? true
         confirmed_at_field :confirmed_at
-        auto_confirm_actions [:sign_in_with_magic_link, :reset_password_with_token, :register_with_password]
+
+        auto_confirm_actions [
+          :sign_in_with_magic_link,
+          :reset_password_with_token,
+          :register_with_password
+        ]
+
         sender Emisint.Accounts.User.Senders.SendNewUserConfirmationEmail
       end
     end
@@ -45,6 +51,11 @@ defmodule Emisint.Accounts.User do
       end
 
       remember_me :remember_me
+
+      api_key :api_key do
+        api_key_relationship :valid_api_keys
+        api_key_hash_attribute :api_key_hash
+      end
     end
   end
 
@@ -231,6 +242,11 @@ defmodule Emisint.Accounts.User do
     update :update_role do
       accept [:role]
     end
+
+    read :sign_in_with_api_key do
+      argument :api_key, :string, allow_nil?: false
+      prepare AshAuthentication.Strategy.ApiKey.SignInPreparation
+    end
   end
 
   policies do
@@ -287,6 +303,10 @@ defmodule Emisint.Accounts.User do
       allow_nil? true
       attribute_writable? true
       public? true
+    end
+
+    has_many :valid_api_keys, Emisint.Accounts.ApiKey do
+      filter expr(valid)
     end
   end
 

@@ -38,7 +38,13 @@ defmodule Emisint.Chat.Message.Changes.Respond do
       |> LLMChain.add_messages(message_chain)
       # add the names of tools you want available in your conversation here.
       # i.e tools: [:lookup_weather]
-      |> AshAi.setup_ash_ai(otp_app: :emisint, tools: [], actor: context.actor)
+      |> AshAi.setup_ash_ai(
+        otp_app: :emisint,
+        tools: [
+          :list_mde_isds
+        ],
+        actor: context.actor
+      )
       |> LLMChain.add_callback(%{
         on_llm_new_delta: fn _chain, deltas ->
           deltas
@@ -55,7 +61,9 @@ defmodule Emisint.Chat.Message.Changes.Respond do
                   response_to_id: message.id,
                   conversation_id: message.conversation_id,
                   text: content
-                }, actor: %AshAi{})
+                },
+                actor: %AshAi{}
+              )
               |> Ash.create!()
             end
           end)

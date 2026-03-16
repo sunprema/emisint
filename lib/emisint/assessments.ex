@@ -6,8 +6,12 @@ defmodule Emisint.Assessments do
   end
 
   tools do
-    tool :list_benchmark_providers, Emisint.Assessments.BenchmarkProvider, :read
-    tool :list_mde_isds, Emisint.Assessments.MdeIsd, :read
+    tool :list_mde_isds, Emisint.Assessments.MdeIsd, :read do
+      description """
+      List the MDE isd available.
+      Dont pass any inputs.
+      """
+    end
   end
 
   resources do

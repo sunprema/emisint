@@ -1,4 +1,4 @@
-defmodule Emisint.Repo.Migrations.MigrateResources1 do
+defmodule Emisint.Repo.Migrations.AddApiKeyAuth do
   @moduledoc """
   Updates resources based on their most recent snapshots.
 

@@ -26,6 +26,20 @@ defmodule EmisintWeb.Router do
     plug :accepts, ["json"]
     plug :load_from_bearer
     plug :set_actor, :user
+
+    plug AshAuthentication.Strategy.ApiKey.Plug,
+      resource: Emisint.Accounts.User,
+      # if you want to require an api key to be supplied, set `required?` to true
+      required?: false
+  end
+
+  pipeline :mcp do
+    plug AshAuthentication.Strategy.ApiKey.Plug,
+      resource: Emisint.Accounts.User,
+      # Use `required?: false` to allow unauthenticated
+      # users to connect, for example if some tools
+      # are publicly accessible.
+      required?: false
   end
 
   scope "/", EmisintWeb do
@@ -65,6 +79,16 @@ defmodule EmisintWeb.Router do
     get "/schools/:school_id/report.pdf", SchoolReportController, :show
     get "/mde/lea-comparison.pdf", MdeLeaReportController, :show
     get "/admin/import/errors/download", ErrorFileDownloadController, :download
+  end
+
+  scope "/mcp" do
+    pipe_through :mcp
+
+    forward "/", AshAi.Mcp.Router,
+      tools: [:list_mde_isds],
+      # For many tools, you will need to set the `protocol_version_statement` to the older version.
+      protocol_version_statement: "2024-11-05",
+      otp_app: :my_app
   end
 
   scope "/", EmisintWeb do
