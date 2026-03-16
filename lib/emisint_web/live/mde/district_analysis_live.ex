@@ -611,10 +611,18 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
             <div :if={@school_index} class="bg-base-100 border border-base-200 overflow-hidden">
               <%!-- Header: title + overall score --%>
               <div class="flex items-center justify-between px-5 py-3 bg-primary/5 border-b border-primary/15">
-                <div class="flex items-center gap-2">
-                  <.icon name="hero-trophy" class="size-4 text-primary" />
-                  <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                    School Index Score
+                <div class="flex flex-col gap-0.5">
+                  <div class="flex items-center gap-2">
+                    <.icon name="hero-trophy" class="size-4 text-primary" />
+                    <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+                      School Index Score
+                    </span>
+                  </div>
+                  <span
+                    :if={Map.get(@index_thresholds, :overall)}
+                    class="text-xs text-base-content/40 pl-6"
+                  >
+                    Bottom 5% Threshold [{format_index(Map.get(@index_thresholds, :overall))}]
                   </span>
                 </div>
                 <div class="flex items-baseline gap-1.5">
@@ -1181,7 +1189,18 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         true -> "bg-success/60"
       end
 
-    assigns = assigns |> assign(:pct, pct) |> assign(:score_class, score_class) |> assign(:bar_class, bar_class)
+    threshold_pct =
+      case assigns.threshold do
+        nil -> nil
+        d -> d |> Decimal.to_float() |> min(99.5) |> max(0.0)
+      end
+
+    assigns =
+      assigns
+      |> assign(:pct, pct)
+      |> assign(:score_class, score_class)
+      |> assign(:bar_class, bar_class)
+      |> assign(:threshold_pct, threshold_pct)
 
     ~H"""
     <div class="flex items-center gap-4 px-5 py-2.5">
@@ -1190,6 +1209,13 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         <div
           class={"absolute inset-y-0 left-0 transition-all duration-500 #{@bar_class}"}
           style={"width: #{@pct}%"}
+        >
+        </div>
+        <div
+          :if={@threshold_pct}
+          class="absolute top-0 bottom-0 w-0.5 bg-base-content/40"
+          style={"left: #{@threshold_pct}%"}
+          title={"Threshold: #{format_index(@threshold)}"}
         >
         </div>
       </div>

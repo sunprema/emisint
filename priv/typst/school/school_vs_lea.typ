@@ -279,6 +279,46 @@
   })
 }
 
+// Single index score row: label | bar with threshold line | score value
+#let index-row(label, value, threshold) = {
+  let v = to-num(value)
+  let t = to-num(threshold)
+  let v_pct = if v != none { calc.min(calc.max(v / 100.0, 0.0), 1.0) } else { 0.0 }
+  let t_pct = if t != none { calc.min(calc.max(t / 100.0, 0.0), 0.995) } else { none }
+
+  let bar-color = if v == none or t == none { c-school }
+                  else if v < t { c-red }
+                  else { c-green }
+  let score-color = if v == none or t == none { c-muted }
+                    else if v < t { c-red }
+                    else { c-green }
+  let score-str = if v == none { "—" } else { str(calc.round(v, digits: 2)) }
+
+  grid(
+    columns: (80pt, 1fr, 40pt),
+    gutter: 10pt,
+    align: (left + horizon, horizon, right + horizon),
+    text(size: 8.5pt, fill: c-muted, label),
+    block(width: 100%, height: 7pt, clip: true, {
+      rect(width: 100%, height: 100%, fill: c-border, radius: 2pt)
+      place(left + horizon,
+        rect(
+          width: v_pct * 100%, height: 100%, fill: bar-color,
+          radius: (top-left: 2pt, bottom-left: 2pt,
+                   top-right: if v_pct >= 0.99 { 2pt } else { 0pt },
+                   bottom-right: if v_pct >= 0.99 { 2pt } else { 0pt })
+        )
+      )
+      if t_pct != none {
+        place(left + horizon, dx: t_pct * 100%,
+          line(start: (0pt, 0pt), end: (0pt, 7pt), stroke: 1.5pt + c-text.lighten(20%))
+        )
+      }
+    }),
+    text(size: 8.5pt, weight: "bold", fill: score-color, score-str)
+  )
+}
+
 // Integer formatter (nil → em dash)
 #let fmt-int(v) = if v == none { "—" } else { str(v) }
 
@@ -454,6 +494,105 @@
         )
       )
     }
+  ]
+]
+
+#pagebreak()
+
+// ── Section 2: School Index Score ─────────────────────────────────────────────
+#let si = elixir_data.school_index
+#let thr = elixir_data.index_thresholds
+
+#let fmt-index(v) = {
+  let n = to-num(v)
+  if n == none { "—" } else { str(calc.round(n, digits: 2)) }
+}
+
+#let index-score-color(v, t) = {
+  let vn = to-num(v)
+  let tn = to-num(t)
+  if vn == none or tn == none { c-blue }
+  else if vn < tn { c-red }
+  else { c-green }
+}
+
+#let index-score-bg(v, t) = {
+  let vn = to-num(v)
+  let tn = to-num(t)
+  if vn == none or tn == none { c-blue-bg }
+  else if vn < tn { c-red-bg }
+  else { c-green-bg }
+}
+
+#let thr-overall = to-num(thr.overall)
+
+#section-title("MDE School Index Score",
+  subtitle: "State accountability index scores · " + elixir_data.school_year +
+    if thr-overall != none {
+      " · Bottom 5% Threshold: " + str(calc.round(thr-overall, digits: 2))
+    } else { "" }
+)
+
+#let si-overall = to-num(si.overall)
+
+#if si-overall == none [
+  #rect(
+    width: 100%, inset: 14pt, stroke: 0.5pt + c-border, radius: 2pt,
+    text(fill: c-muted, style: "italic", "No school index data available for this school year.")
+  )
+] else [
+  // Overall score header
+  #rect(
+    width: 100%, inset: (x: 14pt, y: 10pt),
+    stroke: 0.75pt + c-border, radius: 2pt,
+    fill: index-score-bg(si.overall, thr.overall),
+    grid(
+      columns: (1fr, auto),
+      align: (left + horizon, right + horizon),
+      {
+        text(size: 8pt, fill: c-muted, upper("Overall Index Score"))
+        if thr-overall != none {
+          linebreak()
+          text(size: 7.5pt, fill: c-muted, "Bottom 5% Threshold: " + str(calc.round(thr-overall, digits: 2)))
+        }
+      },
+      text(
+        size: 28pt, weight: "bold",
+        fill: index-score-color(si.overall, thr.overall),
+        str(calc.round(si-overall, digits: 2))
+      )
+    )
+  )
+  #v(10pt)
+  // Component rows
+  #rect(width: 100%, inset: (x: 12pt, y: 10pt), stroke: 0.75pt + c-border, radius: 2pt, {
+    let rows = (
+      ("Growth", si.growth, thr.growth),
+      ("Proficiency", si.proficiency, thr.proficiency),
+      ("Graduation Rate", si.graduation, thr.graduation),
+      ("EL Progress", si.el_progress, thr.el_progress),
+      ("School Quality", si.school_quality, thr.school_quality),
+      ("Subject Participation", si.subject_participation, thr.subject_participation),
+      ("EL Participation", si.el_participation, thr.el_participation),
+    )
+    for (i, row) in rows.enumerate() {
+      if i > 0 { v(8pt) }
+      index-row(row.at(0), row.at(1), row.at(2))
+    }
+  })
+  #if si.support_category_name != none and si.support_category_name != "nil" [
+    #v(6pt)
+    #rect(
+      width: 100%, inset: (x: 12pt, y: 8pt),
+      stroke: 0.75pt + c-amber.lighten(40%), radius: 2pt, fill: c-amber-bg,
+      {
+        text(size: 8pt, weight: "bold", fill: c-amber, si.support_category_name)
+        if si.support_category_reason != none and si.support_category_reason != "nil" {
+          linebreak()
+          text(size: 7.5pt, fill: c-amber, si.support_category_reason)
+        }
+      }
+    )
   ]
 ]
 

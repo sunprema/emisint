@@ -6,6 +6,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
   alias Emisint.Assessments.{
     MdeEnrollmentResult,
     MdeEntityMaster,
+    MdeIndexThreshold,
+    MdeSchoolIndexResult,
     MdeSatResult,
     MdeSchoolVsLeaSnapshot,
     MdeStateAssessmentResult
@@ -40,11 +42,15 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     enrollment_task = Task.async(fn -> load_enrollment_data(building_code, year) end)
     sat_raw_task = Task.async(fn -> load_sat_raw(building_code, year) end)
     entity_task = Task.async(fn -> load_entity_details(building_code) end)
+    school_index_task = Task.async(fn -> load_school_index_result(building_code, year) end)
+    thresholds_task = Task.async(fn -> load_index_thresholds(year) end)
 
     snapshot = Task.await(snapshot_task)
     enrollment = Task.await(enrollment_task)
     sat_raw = Task.await(sat_raw_task)
     entity_details = Task.await(entity_task)
+    school_index = build_school_index_map(Task.await(school_index_task))
+    index_thresholds = build_thresholds_map(Task.await(thresholds_task))
 
     sat_results = sat_raw_to_display(sat_raw)
     # Reuse the already-loaded raw rows — no second DB hit needed.
@@ -72,7 +78,9 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           sat_results: sat_results,
           sat_score_bars: [],
           econ_grade_breakdown: [],
-          entity_details: entity_details
+          entity_details: entity_details,
+          school_index: school_index,
+          index_thresholds: index_thresholds
         }
 
       snap ->
@@ -104,9 +112,79 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           sat_results: sat_results,
           sat_score_bars: sat_score_bars,
           econ_grade_breakdown: econ_grade_breakdown,
-          entity_details: entity_details
+          entity_details: entity_details,
+          school_index: school_index,
+          index_thresholds: index_thresholds
         }
     end
+  end
+
+  # Converts "24 - 25 School Year" → "2024-2025" to match stored school_year format.
+  defp to_index_year(year) do
+    year
+    |> String.replace(" School Year", "")
+    |> String.split(" - ")
+    |> case do
+      [y1, y2] -> "20#{String.trim(y1)}-20#{String.trim(y2)}"
+      _ -> year
+    end
+  end
+
+  defp load_school_index_result(building_code, year) do
+    si_year = to_index_year(year)
+
+    MdeSchoolIndexResult
+    |> Ash.Query.filter(mde_building.building_code == ^building_code and school_year == ^si_year)
+    |> Ash.read_one!(authorize?: false)
+  rescue
+    _ -> nil
+  end
+
+  defp load_index_thresholds(year) do
+    si_year = to_index_year(year)
+
+    MdeIndexThreshold
+    |> Ash.Query.filter(school_year == ^si_year)
+    |> Ash.read!(authorize?: false)
+    |> Map.new(fn t -> {t.component, t.threshold_value} end)
+  rescue
+    _ -> %{}
+  end
+
+  defp build_school_index_map(nil) do
+    %{
+      overall: nil, growth: nil, proficiency: nil, graduation: nil,
+      el_progress: nil, school_quality: nil, subject_participation: nil,
+      el_participation: nil, support_category_name: nil, support_category_reason: nil
+    }
+  end
+
+  defp build_school_index_map(si) do
+    %{
+      overall: decimal_to_float(si.overall_index),
+      growth: decimal_to_float(si.growth_index),
+      proficiency: decimal_to_float(si.proficiency_index),
+      graduation: decimal_to_float(si.graduation_index),
+      el_progress: decimal_to_float(si.el_progress_index),
+      school_quality: decimal_to_float(si.school_quality_index),
+      subject_participation: decimal_to_float(si.subject_participation_index),
+      el_participation: decimal_to_float(si.el_participation_index),
+      support_category_name: si.support_category_name,
+      support_category_reason: si.support_category_reason
+    }
+  end
+
+  defp build_thresholds_map(raw) do
+    %{
+      overall: raw[:overall] && decimal_to_float(raw[:overall]),
+      growth: raw[:growth] && decimal_to_float(raw[:growth]),
+      proficiency: raw[:proficiency] && decimal_to_float(raw[:proficiency]),
+      graduation: raw[:graduation] && decimal_to_float(raw[:graduation]),
+      el_progress: raw[:el_progress] && decimal_to_float(raw[:el_progress]),
+      school_quality: raw[:school_quality] && decimal_to_float(raw[:school_quality]),
+      subject_participation: raw[:subject_participation] && decimal_to_float(raw[:subject_participation]),
+      el_participation: raw[:el_participation] && decimal_to_float(raw[:el_participation])
+    }
   end
 
   defp load_enrollment_data(building_code, year) do
