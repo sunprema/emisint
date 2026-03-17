@@ -73,6 +73,7 @@ defmodule EmisintWeb.Router do
     end
 
     get "/mde/lea-comparison.pdf", MdeLeaReportController, :show
+    get "/dashboard/portfolio.pdf", PortfolioReportController, :show
     get "/admin/import/errors/download", ErrorFileDownloadController, :download
   end
 
