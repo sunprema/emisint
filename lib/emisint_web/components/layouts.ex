@@ -80,11 +80,6 @@ defmodule EmisintWeb.Layouts do
                 </.link>
               </li>
               <li>
-                <.link navigate={~p"/health-scores"} class="flex items-center gap-2">
-                  <.icon name="hero-chart-bar" class="size-4" /> Health Scores
-                </.link>
-              </li>
-              <li>
                 <.link navigate={~p"/mde"} class="flex items-center gap-2">
                   <.icon name="hero-chart-bar-square" class="size-4" /> MDE Data
                 </.link>

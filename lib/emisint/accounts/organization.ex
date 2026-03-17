@@ -20,7 +20,13 @@ defmodule Emisint.Accounts.Organization do
 
     update :update do
       primary? true
-      accept [:name, :active]
+      accept [:name, :active, :primary_contact_name, :primary_contact_phone, :primary_contact_email]
+    end
+
+    create :upsert do
+      upsert? true
+      upsert_identity :unique_slug
+      accept [:name, :type, :slug, :mde_district_code, :primary_contact_name, :primary_contact_phone, :primary_contact_email]
     end
   end
 
@@ -49,7 +55,7 @@ defmodule Emisint.Accounts.Organization do
     attribute :type, :atom do
       allow_nil? false
       public? true
-      constraints one_of: [:emo, :authorizer, :admin]
+      constraints one_of: [:emo, :authorizer, :admin, :self_managed]
     end
 
     attribute :slug, :string do
@@ -59,6 +65,22 @@ defmodule Emisint.Accounts.Organization do
 
     attribute :active, :boolean do
       default true
+      public? true
+    end
+
+    attribute :mde_district_code, :string do
+      public? true
+    end
+
+    attribute :primary_contact_name, :string do
+      public? true
+    end
+
+    attribute :primary_contact_phone, :string do
+      public? true
+    end
+
+    attribute :primary_contact_email, :string do
       public? true
     end
 
