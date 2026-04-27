@@ -24,12 +24,14 @@
         Emisint <span class="text-cyan-500">APM</span>
       </span>
     </div>
+    <!--
     <nav class="hidden md:flex items-center gap-8 text-sm font-medium">
       <a href="#" class="hover:text-cyan-400 transition-colors">Portfolios</a>
       <a href="#" class="hover:text-cyan-400 transition-colors">Compliance</a>
       <a href="#" class="hover:text-cyan-400 transition-colors">Analytics</a>
       <a href="#" class="hover:text-cyan-400 transition-colors">Documentation</a>
     </nav>
+    -->
     <div class="flex items-center gap-4">
       <%= if @current_user do %>
         <span class="text-sm text-slate-400 hidden md:block">
@@ -83,7 +85,7 @@
         </p>
         <div class="flex flex-wrap gap-4 pt-4">
           <a
-            href="/sign-in"
+            href="/dashboard"
             class="px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-600 text-white rounded-xl font-bold transition-all shadow-xl shadow-cyan-600/30 hover:scale-105 active:scale-95 flex items-center gap-2"
           >
             Explore Dashboards
@@ -216,7 +218,7 @@
               />
             </svg>
           </div>
-          <h3 class="text-xl font-bold text-white mb-4">Schedule 7-1 Tracker</h3>
+          <h3 class="text-xl font-bold text-white mb-4">Education Goals Tracker</h3>
           <p class="text-slate-400 leading-relaxed">
             Digitized contractual goals for every school. Automated monitoring ensures you know exactly where you stand for reauthorization.
           </p>
@@ -244,24 +246,6 @@
           <p class="text-slate-400 leading-relaxed">
             Simplified Michigan state-level accountability views. Drill down into subgroups and ESSA targets with a single click.
           </p>
-        </div>
-      </div>
-    </div>
-    
-<!-- "The Michigan Connector" -->
-    <div class="max-w-5xl mx-auto mt-40 p-1 bg-gradient-to-r from-cyan-500/20 via-blue-600/20 to-indigo-500/20 rounded-[2.5rem]">
-      <div class="bg-slate-950 rounded-[2.4rem] p-12 md:p-20 text-center space-y-8 relative overflow-hidden">
-        <div class="absolute inset-0 bg-blue-600/5 blur-[80px]"></div>
-        <div class="relative z-10 space-y-6">
-          <h2 class="text-4xl font-bold text-white tracking-tight">The Michigan Connector</h2>
-          <p class="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
-            Harnessing the power of MiDataHub and MDE data pipelines. Emisint seamlessly integrates with the specialized Michigan educational data ecosystem.
-          </p>
-          <div class="flex flex-wrap justify-center gap-8 pt-8 opacity-60">
-            <div class="font-bold text-2xl tracking-tighter italic">MiDataHub</div>
-            <div class="font-bold text-2xl tracking-tighter italic">Ed-Fi</div>
-            <div class="font-bold text-2xl tracking-tighter italic">MDE Accountability</div>
-          </div>
         </div>
       </div>
     </div>

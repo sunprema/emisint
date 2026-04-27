@@ -64,20 +64,16 @@ defmodule EmisintWeb.Router do
         EmisintWeb.LiveScope
       ] do
       live "/dashboard", Dashboard.PortfolioLive, :index
-      live "/schools/:id", School.ShowLive, :show
-      live "/compliance/:school_id", Compliance.TrackerLive, :index
-      live "/growth/:school_id", Growth.MonitorLive, :index
       live "/admin/import", Admin.DataImportLive, :index
       live "/admin/import/history", Admin.ImportHistoryLive, :index
       live "/settings", SettingsLive, :index
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
       live "/mde/entities", Mde.EntityMasterLive, :index
-      live "/health-scores", School.HealthScoreLive, :index
     end
 
-    get "/schools/:school_id/report.pdf", SchoolReportController, :show
     get "/mde/lea-comparison.pdf", MdeLeaReportController, :show
+    get "/dashboard/portfolio.pdf", PortfolioReportController, :show
     get "/admin/import/errors/download", ErrorFileDownloadController, :download
   end
 

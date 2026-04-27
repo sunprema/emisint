@@ -1,64 +1,150 @@
 defmodule EmisintWeb.Dashboard.PortfolioLive do
   use EmisintWeb, :live_view
 
+  import Ecto.Query, only: [from: 2]
+
   require Ash.Query
 
+  alias Emisint.Assessments.MdeEntityMaster
+  alias Emisint.Repo
+
   on_mount {EmisintWeb.LiveUserAuth, :live_user_required}
+  on_mount {EmisintWeb.LiveScope, :default}
+
+  @stats_years ["24 - 25 School Year", "22 - 23 School Year"]
+
+  # ---------------------------------------------------------------------------
+  # Lifecycle
+  # ---------------------------------------------------------------------------
 
   def mount(_params, _session, socket) do
-    scope = socket.assigns.scope
-
     socket =
       socket
       |> assign(:page_title, "Portfolio Overview")
+      |> assign(:chartering_agencies, [])
+      |> assign(:selected_agency, nil)
       |> assign(:schools, [])
-      |> assign(:evals_by_school, %{})
-      |> assign(:trigger_count_by_school, %{})
-      |> assign(:goal_counts, %{on_track: 0, approaching: 0, below: 0, insufficient: 0})
+      |> assign(:school_search, "")
+      |> assign(:filtered_schools, [])
+      |> assign(:agency_search, "")
+      |> assign(:filtered_agencies, [])
+      |> assign(:active_tab, :schools)
+      |> assign(:stats_years, @stats_years)
+      |> assign(:stats_year, hd(@stats_years))
+      |> assign(:portfolio_stats, [])
+      |> assign(:sat_portfolio_stats, [])
 
     if connected?(socket) do
-      # Three independent queries — run in parallel.
-      schools_task = Task.async(fn -> Ash.read!(Emisint.Accounts.School, scope: scope) end)
-
-      evals_task =
-        Task.async(fn ->
-          Emisint.Compliance.GoalEvaluation
-          |> Ash.Query.load(:schedule71_goal)
-          |> Ash.read!(scope: scope)
-        end)
-
-      triggers_task =
-        Task.async(fn ->
-          Emisint.Analytics.InterventionTrigger
-          |> Ash.Query.filter(status == :active)
-          |> Ash.read!(scope: scope)
-        end)
-
-      schools = Task.await(schools_task)
-      evals_with_goals = Task.await(evals_task)
-      triggers = Task.await(triggers_task)
-
-      evals_by_school =
-        Enum.group_by(evals_with_goals, fn e ->
-          if e.schedule71_goal, do: e.schedule71_goal.school_id, else: nil
-        end)
+      agencies = load_chartering_agencies()
 
       {:ok,
        socket
-       |> assign(:schools, schools)
-       |> assign(:evals_by_school, evals_by_school)
-       |> assign(:trigger_count_by_school, Enum.frequencies_by(triggers, & &1.school_id))
-       |> assign(:goal_counts, tally_statuses(evals_with_goals))}
+       |> assign(:chartering_agencies, agencies)
+       |> assign(:filtered_agencies, agencies)}
     else
       {:ok, socket}
     end
   end
 
+  def handle_params(%{"agency" => code}, _uri, socket) do
+    agency =
+      Enum.find(socket.assigns.chartering_agencies, &(&1.code == code))
+
+    if agency do
+      schools = load_schools_for_agency(code)
+      building_codes = Enum.map(schools, & &1.entity_code) |> Enum.reject(&is_nil/1)
+      year = socket.assigns.stats_year
+      stats = load_portfolio_stats(building_codes, year)
+      sat_stats = load_sat_portfolio_stats(building_codes, year)
+
+      {:noreply,
+       socket
+       |> assign(:selected_agency, agency)
+       |> assign(:schools, schools)
+       |> assign(:school_search, "")
+       |> assign(:filtered_schools, schools)
+       |> assign(:portfolio_stats, stats)
+       |> assign(:sat_portfolio_stats, sat_stats)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_params(_params, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(:selected_agency, nil)
+     |> assign(:schools, [])
+     |> assign(:school_search, "")
+     |> assign(:filtered_schools, [])
+     |> assign(:active_tab, :schools)
+     |> assign(:portfolio_stats, [])
+     |> assign(:sat_portfolio_stats, [])}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Events
+  # ---------------------------------------------------------------------------
+
+  def handle_event("search_agencies", %{"value" => search}, socket) do
+    filtered = filter_agencies(socket.assigns.chartering_agencies, search)
+
+    {:noreply,
+     socket
+     |> assign(:agency_search, search)
+     |> assign(:filtered_agencies, filtered)}
+  end
+
+  def handle_event("clear_search", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:agency_search, "")
+     |> assign(:filtered_agencies, socket.assigns.chartering_agencies)}
+  end
+
+  def handle_event("search_schools", %{"value" => search}, socket) do
+    filtered = filter_schools(socket.assigns.schools, search)
+
+    {:noreply,
+     socket
+     |> assign(:school_search, search)
+     |> assign(:filtered_schools, filtered)}
+  end
+
+  def handle_event("clear_school_search", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:school_search, "")
+     |> assign(:filtered_schools, socket.assigns.schools)}
+  end
+
+  def handle_event("switch_tab", %{"tab" => tab}, socket) do
+    {:noreply, assign(socket, :active_tab, String.to_existing_atom(tab))}
+  end
+
+  def handle_event("select_stats_year", %{"year" => year}, socket) do
+    building_codes =
+      Enum.map(socket.assigns.schools, & &1.entity_code) |> Enum.reject(&is_nil/1)
+
+    stats = load_portfolio_stats(building_codes, year)
+    sat_stats = load_sat_portfolio_stats(building_codes, year)
+
+    {:noreply,
+     socket
+     |> assign(:stats_year, year)
+     |> assign(:portfolio_stats, stats)
+     |> assign(:sat_portfolio_stats, sat_stats)}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Render
+  # ---------------------------------------------------------------------------
+
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
-      <div class="max-w-6xl mx-auto space-y-8">
-        <%!-- Header --%>
+      <div class="max-w-7xl mx-auto space-y-6">
+        <%!-- Page header --%>
         <div class="flex items-center gap-4">
           <div class="p-2.5 bg-primary/10 border border-primary/20">
             <.icon name="hero-squares-2x2" class="size-6 text-primary" />
@@ -66,198 +152,905 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
           <div>
             <h1 class="text-2xl font-bold tracking-tight">Portfolio Overview</h1>
             <p class="text-sm text-base-content/50 mt-0.5">
-              Schedule 7-1 compliance and performance across all academies
+              Browse schools by chartering agency
             </p>
           </div>
         </div>
 
-        <%!-- Stats row --%>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="bg-base-100 border border-base-200 p-5">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
-                Schools
-              </span>
-              <div class="p-1.5 bg-primary/10">
-                <.icon name="hero-building-office" class="size-4 text-primary" />
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <%!-- Left panel: Chartering Agencies --%>
+          <div class="lg:col-span-1 bg-base-100 border border-base-200 overflow-hidden flex flex-col">
+            <div class="px-4 py-3 border-b border-base-200">
+              <div class="flex items-center justify-between mb-2">
+                <h2 class="font-semibold text-sm">Chartering Agencies</h2>
+                <span class="badge badge-ghost badge-sm">{length(@filtered_agencies)}</span>
+              </div>
+              <%!-- Search --%>
+              <div class="relative">
+                <input
+                  type="text"
+                  placeholder="Search agencies…"
+                  value={@agency_search}
+                  phx-keyup="search_agencies"
+                  phx-debounce="150"
+                  name="search"
+                  class="w-full pl-8 pr-8 py-1.5 text-xs border border-base-300 bg-base-50 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary transition-all"
+                />
+                <.icon
+                  name="hero-magnifying-glass"
+                  class="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-base-content/30"
+                />
+                <button
+                  :if={@agency_search != ""}
+                  phx-click="clear_search"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content transition-colors"
+                >
+                  <.icon name="hero-x-mark" class="size-3.5" />
+                </button>
               </div>
             </div>
-            <div class="text-3xl font-bold tracking-tight">{length(@schools)}</div>
+
+            <%!-- Empty state --%>
+            <div
+              :if={@chartering_agencies == []}
+              class="flex flex-col items-center justify-center py-16 text-center px-4"
+            >
+              <div class="p-3 bg-base-200 mb-3">
+                <.icon name="hero-building-office" class="size-6 text-base-content/25" />
+              </div>
+              <p class="text-sm font-medium text-base-content/40">No agencies found</p>
+              <p class="text-xs text-base-content/30 mt-1">
+                Import MDE EntityMaster data to populate this list.
+              </p>
+            </div>
+
+            <%!-- No search results --%>
+            <div
+              :if={@chartering_agencies != [] && @filtered_agencies == []}
+              class="flex flex-col items-center justify-center py-12 text-center px-4"
+            >
+              <p class="text-sm text-base-content/40">No agencies match "{@agency_search}"</p>
+            </div>
+
+            <%!-- Agency list --%>
+            <div
+              :if={@filtered_agencies != []}
+              class="divide-y divide-base-200 overflow-y-auto max-h-[calc(100vh-280px)]"
+            >
+              <button
+                :for={agency <- @filtered_agencies}
+                phx-click={JS.patch(~p"/dashboard?agency=#{agency.code}")}
+                class={[
+                  "w-full text-left px-4 py-3 hover:bg-base-50 transition-colors flex items-start justify-between gap-2",
+                  @selected_agency && @selected_agency.code == agency.code &&
+                    "bg-primary/5 border-l-2 border-primary"
+                ]}
+              >
+                <div class="min-w-0 flex-1">
+                  <p class={[
+                    "text-sm font-medium leading-snug truncate",
+                    @selected_agency && @selected_agency.code == agency.code && "text-primary"
+                  ]}>
+                    {agency.name || agency.code}
+                  </p>
+                  <p class="text-xs text-base-content/40 mt-0.5">Code: {agency.code}</p>
+                </div>
+                <span class="badge badge-ghost badge-xs shrink-0 mt-0.5">
+                  {agency.school_count}
+                </span>
+              </button>
+            </div>
           </div>
 
-          <div class="bg-base-100 border border-base-200 p-5">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
-                On Track
-              </span>
-              <div class="p-1.5 bg-success/10">
-                <.icon name="hero-check-badge" class="size-4 text-success" />
+          <%!-- Right panel: Schools for selected agency --%>
+          <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
+            <%!-- No agency selected --%>
+            <div
+              :if={is_nil(@selected_agency)}
+              class="flex flex-col items-center justify-center py-24 text-center px-6"
+            >
+              <div class="p-4 bg-base-200 mb-4">
+                <.icon name="hero-cursor-arrow-ripple" class="size-8 text-base-content/20" />
+              </div>
+              <p class="text-base font-medium text-base-content/40">Select a chartering agency</p>
+              <p class="text-sm text-base-content/30 mt-1">
+                Choose an agency on the left to view its portfolio of schools.
+              </p>
+            </div>
+
+            <%!-- Agency selected --%>
+            <div :if={@selected_agency}>
+              <%!-- Agency header --%>
+              <div class="px-6 py-4 border-b border-base-200">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <h2 class="font-semibold">{@selected_agency.name || @selected_agency.code}</h2>
+                      <span class="badge badge-success badge-sm">Open-Active</span>
+                    </div>
+                    <p class="text-xs text-base-content/40 mt-0.5">
+                      Code: {@selected_agency.code} · {@selected_agency.school_count} school{if @selected_agency.school_count != 1, do: "s", else: ""}
+                    </p>
+                  </div>
+                  <%!-- Download PDF button --%>
+                  <.link
+                    href={~p"/dashboard/portfolio.pdf?#{%{agency: @selected_agency.code, year: @stats_year}}"}
+                    target="_blank"
+                    class="btn btn-sm btn-outline btn-primary gap-1.5 shrink-0"
+                  >
+                    <.icon name="hero-arrow-down-tray" class="size-3.5" />
+                    Download PDF
+                  </.link>
+                </div>
+              </div>
+
+              <%!-- Tabs --%>
+              <div class="flex border-b border-base-200 bg-base-50/50">
+                <button
+                  phx-click="switch_tab"
+                  phx-value-tab="schools"
+                  class={[
+                    "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    if(@active_tab == :schools,
+                      do: "border-primary text-primary bg-base-100",
+                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                    )
+                  ]}
+                >
+                  <div class="flex items-center gap-2">
+                    <.icon name="hero-list-bullet" class="size-3.5" /> Schools
+                    <span class="badge badge-ghost badge-xs">{length(@schools)}</span>
+                  </div>
+                </button>
+                <button
+                  phx-click="switch_tab"
+                  phx-value-tab="dashboard"
+                  class={[
+                    "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    if(@active_tab == :dashboard,
+                      do: "border-primary text-primary bg-base-100",
+                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                    )
+                  ]}
+                >
+                  <div class="flex items-center gap-2">
+                    <.icon name="hero-chart-bar" class="size-3.5" /> M-STEP Dashboard
+                  </div>
+                </button>
+                <button
+                  phx-click="switch_tab"
+                  phx-value-tab="sat_dashboard"
+                  class={[
+                    "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    if(@active_tab == :sat_dashboard,
+                      do: "border-primary text-primary bg-base-100",
+                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                    )
+                  ]}
+                >
+                  <div class="flex items-center gap-2">
+                    <.icon name="hero-chart-bar" class="size-3.5" /> SAT Dashboard
+                  </div>
+                </button>
+              </div>
+
+              <%!-- Tab: Schools --%>
+              <div :if={@active_tab == :schools}>
+                <%!-- School search + clear --%>
+                <div class="px-6 py-3 border-b border-base-200 flex items-center gap-3">
+                  <div class="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder="Filter schools…"
+                      value={@school_search}
+                      phx-keyup="search_schools"
+                      phx-debounce="150"
+                      name="school_search"
+                      class="w-full pl-8 pr-8 py-1.5 text-xs border border-base-300 bg-base-50 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary transition-all"
+                    />
+                    <.icon
+                      name="hero-magnifying-glass"
+                      class="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-base-content/30"
+                    />
+                    <button
+                      :if={@school_search != ""}
+                      phx-click="clear_school_search"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content transition-colors"
+                    >
+                      <.icon name="hero-x-mark" class="size-3.5" />
+                    </button>
+                  </div>
+                  <.link
+                    patch={~p"/dashboard"}
+                    class="text-xs text-base-content/40 hover:text-base-content transition-colors flex items-center gap-1 shrink-0"
+                  >
+                    <.icon name="hero-x-mark" class="size-3.5" /> Clear
+                  </.link>
+                </div>
+
+                <%!-- No filter results --%>
+                <div
+                  :if={@schools != [] && @filtered_schools == []}
+                  class="flex flex-col items-center justify-center py-12 text-center px-6"
+                >
+                  <p class="text-sm text-base-content/40">No schools match "{@school_search}"</p>
+                </div>
+
+                <%!-- Schools table --%>
+                <div :if={@filtered_schools != []} class="overflow-x-auto">
+                  <table class="table table-sm w-full">
+                    <thead>
+                      <tr class="text-xs text-base-content/50 border-b border-base-200">
+                        <th class="px-4 py-3 font-medium text-left">School</th>
+                        <th class="px-4 py-3 font-medium text-left">District Code</th>
+                        <th class="px-4 py-3 font-medium text-left">County</th>
+                        <th class="px-4 py-3 font-medium text-left">Grades</th>
+                        <th class="px-4 py-3 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-base-200">
+                      <tr
+                        :for={school <- @filtered_schools}
+                        class={[
+                          "transition-colors",
+                          if(school.district_code,
+                            do: "hover:bg-primary/5 cursor-pointer",
+                            else: "hover:bg-base-50"
+                          )
+                        ]}
+                        phx-click={school.district_code && JS.navigate(~p"/mde/districts/#{school.district_code}?from=portfolio&agency=#{@selected_agency.code}")}
+                      >
+                        <td class="px-4 py-3">
+                          <p class={[
+                            "text-sm font-medium leading-snug",
+                            school.district_code && "group-hover:text-primary"
+                          ]}>
+                            {school.entity_official_name}
+                          </p>
+                          <p class="text-xs text-base-content/40 mt-0.5">
+                            {school.entity_code}
+                          </p>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-base-content/70">
+                          {school.district_code || "—"}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-base-content/70">
+                          {school.entity_county_name || "—"}
+                        </td>
+                        <td class="px-4 py-3 text-xs text-base-content/60">
+                          {school.entity_actual_grades || school.entity_authorized_grades || "—"}
+                        </td>
+                        <td class="px-4 py-3 text-base-content/25">
+                          <.icon :if={school.district_code} name="hero-chevron-right" class="size-4" />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <%!-- No schools found --%>
+                <div
+                  :if={@schools == []}
+                  class="flex flex-col items-center justify-center py-16 text-center px-6"
+                >
+                  <div class="p-3 bg-base-200 mb-3">
+                    <.icon name="hero-academic-cap" class="size-6 text-base-content/25" />
+                  </div>
+                  <p class="text-sm font-medium text-base-content/40">No schools found</p>
+                  <p class="text-xs text-base-content/30 mt-1">
+                    No entities linked to this chartering agency in the current EntityMaster data.
+                  </p>
+                </div>
+              </div>
+
+              <%!-- Tab: M-STEP Dashboard --%>
+              <div :if={@active_tab == :dashboard}>
+                <.portfolio_dashboard
+                  stats={@portfolio_stats}
+                  stats_year={@stats_year}
+                  stats_years={@stats_years}
+                />
+              </div>
+
+              <%!-- Tab: SAT Dashboard --%>
+              <div :if={@active_tab == :sat_dashboard}>
+                <.sat_dashboard
+                  stats={@sat_portfolio_stats}
+                  stats_year={@stats_year}
+                  stats_years={@stats_years}
+                />
               </div>
             </div>
-            <div class="text-3xl font-bold tracking-tight text-success">
-              {@goal_counts.on_track}
-            </div>
           </div>
-
-          <div class="bg-base-100 border border-base-200 p-5">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
-                Approaching
-              </span>
-              <div class="p-1.5 bg-warning/10">
-                <.icon name="hero-exclamation-triangle" class="size-4 text-warning" />
-              </div>
-            </div>
-            <div class="text-3xl font-bold tracking-tight text-warning">
-              {@goal_counts.approaching}
-            </div>
-          </div>
-
-          <div class="bg-base-100 border border-base-200 p-5">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-xs font-medium text-base-content/40 uppercase tracking-wider">
-                Below Target
-              </span>
-              <div class="p-1.5 bg-error/10">
-                <.icon name="hero-x-circle" class="size-4 text-error" />
-              </div>
-            </div>
-            <div class="text-3xl font-bold tracking-tight text-error">{@goal_counts.below}</div>
-          </div>
-        </div>
-
-        <%!-- Empty state --%>
-        <div
-          :if={@schools == []}
-          class="bg-base-100 border border-base-200 flex flex-col items-center justify-center py-16 text-center"
-        >
-          <div class="p-3 bg-base-200 mb-3">
-            <.icon name="hero-building-office" class="size-7 text-base-content/25" />
-          </div>
-          <p class="text-sm font-medium text-base-content/40">No schools found</p>
-          <p class="text-xs text-base-content/30 mt-1">Add a school to get started.</p>
-        </div>
-
-        <%!-- Schools grid --%>
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          <.school_card
-            :for={school <- @schools}
-            school={school}
-            evaluations={Map.get(@evals_by_school, school.id, [])}
-            trigger_count={Map.get(@trigger_count_by_school, school.id, 0)}
-          />
         </div>
       </div>
     </Layouts.app>
     """
   end
 
-  def school_card(assigns) do
-    counts = Enum.frequencies_by(assigns.evaluations, & &1.status)
+  # ---------------------------------------------------------------------------
+  # Components
+  # ---------------------------------------------------------------------------
+
+  attr :stats, :list, required: true
+  attr :stats_year, :string, required: true
+  attr :stats_years, :list, required: true
+
+  defp portfolio_dashboard(assigns) do
+    exceeds = Enum.count(assigns.stats, fn s -> not s.no_lea_found and (s.delta || 0) > 0 end)
+    below = Enum.count(assigns.stats, fn s -> not s.no_lea_found and (s.delta || 0) <= 0 end)
+    no_data = Enum.count(assigns.stats, fn s -> s.no_lea_found end)
+    total_comparable = exceeds + below
+
+    max_abs_delta =
+      assigns.stats
+      |> Enum.reject(& &1.no_lea_found)
+      |> Enum.map(fn s -> abs(s.delta || 0) end)
+      |> Enum.max(fn -> 1.0 end)
+
+    max_abs_delta = if max_abs_delta == 0, do: 1.0, else: max_abs_delta
 
     assigns =
       assigns
-      |> assign(:exceeds, Map.get(counts, :exceeds, 0))
-      |> assign(:meets, Map.get(counts, :meets, 0))
-      |> assign(:approaching, Map.get(counts, :approaching, 0))
-      |> assign(:below, Map.get(counts, :below, 0))
-      |> assign(:total_goals, length(assigns.evaluations))
+      |> Map.put(:exceeds, exceeds)
+      |> Map.put(:below, below)
+      |> Map.put(:no_data, no_data)
+      |> Map.put(:total_comparable, total_comparable)
+      |> Map.put(:max_abs_delta, max_abs_delta)
 
     ~H"""
-    <div class="bg-base-100 border border-base-200 hover:transition-all hover:-translate-y-0.5 overflow-hidden">
-      <div class="p-5">
-        <div class="flex items-start justify-between gap-2 mb-4">
-          <div class="min-w-0 flex-1">
-            <h2 class="font-semibold text-base truncate">{@school.name}</h2>
-            <p class="text-sm text-base-content/50 mt-0.5">{@school.city || @school.county}</p>
-          </div>
-          <div
-            :if={@trigger_count > 0}
-            class="flex items-center gap-1 px-2 py-1 bg-error/10 text-error text-xs font-medium shrink-0"
-          >
-            <.icon name="hero-bell-alert" class="size-3" /> {@trigger_count}
-          </div>
+    <div class="bg-base-50/50">
+      <%!-- Dashboard header --%>
+      <div class="px-6 pt-4 pb-3 flex items-center justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-semibold">M-STEP / PSAT All Subjects — vs. Geographic LEA</h3>
+          <p class="text-xs text-base-content/40 mt-0.5">
+            Schools exceeding their local district average
+          </p>
         </div>
+        <%!-- Year selector --%>
+        <select
+          phx-change="select_stats_year"
+          name="year"
+          class="select select-xs select-bordered text-xs"
+        >
+          <option :for={y <- @stats_years} value={y} selected={y == @stats_year}>{y}</option>
+        </select>
+      </div>
 
-        <%!-- Traffic light mini-bar --%>
-        <div :if={@total_goals > 0} class="space-y-2">
-          <div class="flex gap-1 h-1.5 rounded-full overflow-hidden">
-            <div
-              :if={@exceeds > 0}
-              class="bg-success rounded-full transition-all"
-              style={"width: #{@exceeds / @total_goals * 100}%"}
-            >
-            </div>
-            <div
-              :if={@meets > 0}
-              class="bg-success/40 rounded-full transition-all"
-              style={"width: #{@meets / @total_goals * 100}%"}
-            >
-            </div>
-            <div
-              :if={@approaching > 0}
-              class="bg-warning rounded-full transition-all"
-              style={"width: #{@approaching / @total_goals * 100}%"}
-            >
-            </div>
-            <div
-              :if={@below > 0}
-              class="bg-error rounded-full transition-all"
-              style={"width: #{@below / @total_goals * 100}%"}
-            >
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-base-content/50">
-            <span :if={@exceeds > 0} class="flex items-center gap-1">
-              <span class="inline-block size-1.5 rounded-full bg-success"></span>
-              {@exceeds} Exceeds
-            </span>
-            <span :if={@meets > 0} class="flex items-center gap-1">
-              <span class="inline-block size-1.5 rounded-full bg-success/50"></span>
-              {@meets} Meets
-            </span>
-            <span :if={@approaching > 0} class="flex items-center gap-1">
-              <span class="inline-block size-1.5 rounded-full bg-warning"></span>
-              {@approaching} Approaching
-            </span>
-            <span :if={@below > 0} class="flex items-center gap-1">
-              <span class="inline-block size-1.5 rounded-full bg-error"></span>
-              {@below} Below
+      <%!-- Summary cards --%>
+      <div class="px-6 pb-4 grid grid-cols-3 gap-3">
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">Exceeds LEA</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-success">{@exceeds}</span>
+            <span class="text-xs text-base-content/40 mb-0.5">
+              {if @total_comparable > 0,
+                do: "#{round(@exceeds / @total_comparable * 100)}%",
+                else: "—"}
             </span>
           </div>
         </div>
-
-        <div :if={@total_goals == 0} class="text-xs text-base-content/30 italic">
-          No goals configured
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">Below LEA</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-error">{@below}</span>
+            <span class="text-xs text-base-content/40 mb-0.5">
+              {if @total_comparable > 0,
+                do: "#{round(@below / @total_comparable * 100)}%",
+                else: "—"}
+            </span>
+          </div>
+        </div>
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">No LEA Data</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-base-content/30">{@no_data}</span>
+          </div>
         </div>
       </div>
 
-      <div class="px-5 py-3 border-t border-base-200 flex items-center justify-between bg-base-50/50">
-        <span class="text-xs text-base-content/35 font-mono">{@school.mde_building_code}</span>
-        <.link
-          navigate={~p"/schools/#{@school.id}"}
-          class="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-        >
-          View details <.icon name="hero-arrow-right" class="size-3" />
-        </.link>
+      <%!-- Stacked proportion bar --%>
+      <div :if={@total_comparable > 0} class="px-6 pb-4">
+        <div class="flex h-2 overflow-hidden bg-base-200 gap-px">
+          <div
+            class="bg-success transition-all duration-500"
+            style={"width: #{round(@exceeds / @total_comparable * 100)}%"}
+          />
+          <div
+            class="bg-error transition-all duration-500"
+            style={"width: #{round(@below / @total_comparable * 100)}%"}
+          />
+        </div>
+        <div class="flex justify-between mt-1">
+          <span class="text-[10px] text-success font-medium">Exceeds</span>
+          <span class="text-[10px] text-error font-medium">Below</span>
+        </div>
+      </div>
+
+      <%!-- No stats at all --%>
+      <div
+        :if={@stats == []}
+        class="px-6 pb-4 text-xs text-base-content/30 italic"
+      >
+        No M-STEP / PSAT data found for this year.
+      </div>
+
+      <%!-- Per-school delta chart --%>
+      <div :if={@stats != []} class="px-6 pb-5 space-y-2">
+        <p class="text-[10px] text-base-content/30 uppercase tracking-wide font-medium">
+          School vs LEA delta (pp) — sorted best to worst
+        </p>
+        <div class="space-y-1.5">
+          <div
+            :for={s <- Enum.reject(@stats, & &1.no_lea_found)}
+            class="flex items-center gap-3 group"
+          >
+            <%!-- School name --%>
+            <div class="w-40 shrink-0 truncate text-xs text-base-content/60 group-hover:text-base-content transition-colors text-right leading-tight">
+              {short_name(s.school_name)}
+            </div>
+            <%!-- Bar --%>
+            <div class="flex-1 flex items-center gap-1 min-w-0">
+              <%!-- Center line --%>
+              <div class="relative flex-1 h-4 flex items-center">
+                <%!-- Zero axis --%>
+                <div class="absolute left-1/2 top-0 bottom-0 w-px bg-base-300 z-10" />
+                <%!-- Bar fill --%>
+                <div
+                  class={[
+                    "absolute h-3 transition-all duration-300",
+                    if((s.delta || 0) >= 0, do: "bg-success/70 left-1/2", else: "bg-error/70 right-1/2")
+                  ]}
+                  style={"width: #{min(abs(s.delta || 0) / @max_abs_delta * 50, 50)}%"}
+                />
+              </div>
+            </div>
+            <%!-- Delta badge --%>
+            <div class={[
+              "text-xs font-mono font-semibold w-14 shrink-0 text-right",
+              if((s.delta || 0) >= 0, do: "text-success", else: "text-error")
+            ]}>
+              {if (s.delta || 0) >= 0, do: "+", else: ""}{format_delta(s.delta)}pp
+            </div>
+          </div>
+        </div>
+        <%!-- No LEA schools table --%>
+        <div :if={@no_data > 0} class="mt-3 border border-base-200 overflow-hidden">
+          <div class="px-3 py-2 bg-base-200/50 border-b border-base-200">
+            <p class="text-[10px] text-base-content/40 uppercase tracking-wide font-medium">
+              {@no_data} school{if @no_data != 1, do: "s", else: ""} excluded — no geographic LEA match
+            </p>
+          </div>
+          <table class="w-full">
+            <tbody>
+              <tr
+                :for={s <- Enum.filter(@stats, & &1.no_lea_found)}
+                class="border-b border-base-200 last:border-0"
+              >
+                <td class="px-3 py-1.5 text-xs text-base-content/40">{s.school_name}</td>
+                <td class="px-3 py-1.5 text-xs font-mono text-base-content/30 text-right">{s.building_code}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
     """
   end
 
-  defp tally_statuses(evaluations) do
-    Enum.reduce(
-      evaluations,
-      %{on_track: 0, approaching: 0, below: 0, insufficient: 0},
-      fn eval, acc ->
-        case eval.status do
-          :exceeds -> %{acc | on_track: acc.on_track + 1}
-          :meets -> %{acc | on_track: acc.on_track + 1}
-          :approaching -> %{acc | approaching: acc.approaching + 1}
-          :below -> %{acc | below: acc.below + 1}
-          _ -> %{acc | insufficient: acc.insufficient + 1}
-        end
-      end
+  attr :stats, :list, required: true
+  attr :stats_year, :string, required: true
+  attr :stats_years, :list, required: true
+
+  defp sat_dashboard(assigns) do
+    exceeds = Enum.count(assigns.stats, fn s -> not s.no_lea_found and (s.delta || 0) > 0 end)
+    below = Enum.count(assigns.stats, fn s -> not s.no_lea_found and (s.delta || 0) <= 0 end)
+    no_data = Enum.count(assigns.stats, fn s -> s.no_lea_found end)
+    total_comparable = exceeds + below
+
+    max_abs_delta =
+      assigns.stats
+      |> Enum.reject(& &1.no_lea_found)
+      |> Enum.map(fn s -> abs(s.delta || 0) end)
+      |> Enum.max(fn -> 1.0 end)
+
+    max_abs_delta = if max_abs_delta == 0, do: 1.0, else: max_abs_delta
+
+    assigns =
+      assigns
+      |> Map.put(:exceeds, exceeds)
+      |> Map.put(:below, below)
+      |> Map.put(:no_data, no_data)
+      |> Map.put(:total_comparable, total_comparable)
+      |> Map.put(:max_abs_delta, max_abs_delta)
+
+    ~H"""
+    <div class="bg-base-50/50">
+      <%!-- Header --%>
+      <div class="px-6 pt-4 pb-3 flex items-center justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-semibold">SAT College Readiness — All Score vs. Geographic LEA</h3>
+          <p class="text-xs text-base-content/40 mt-0.5">
+            Schools exceeding their local district combined SAT score (Math + EBRW)
+          </p>
+        </div>
+        <select
+          phx-change="select_stats_year"
+          name="year"
+          class="select select-xs select-bordered text-xs"
+        >
+          <option :for={y <- @stats_years} value={y} selected={y == @stats_year}>{y}</option>
+        </select>
+      </div>
+
+      <%!-- Summary cards --%>
+      <div class="px-6 pb-4 grid grid-cols-3 gap-3">
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">Exceeds LEA</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-success">{@exceeds}</span>
+            <span class="text-xs text-base-content/40 mb-0.5">
+              {if @total_comparable > 0,
+                do: "#{round(@exceeds / @total_comparable * 100)}%",
+                else: "—"}
+            </span>
+          </div>
+        </div>
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">Below LEA</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-error">{@below}</span>
+            <span class="text-xs text-base-content/40 mb-0.5">
+              {if @total_comparable > 0,
+                do: "#{round(@below / @total_comparable * 100)}%",
+                else: "—"}
+            </span>
+          </div>
+        </div>
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">No LEA Data</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-base-content/30">{@no_data}</span>
+          </div>
+        </div>
+      </div>
+
+      <%!-- Stacked proportion bar --%>
+      <div :if={@total_comparable > 0} class="px-6 pb-4">
+        <div class="flex h-2 overflow-hidden bg-base-200 gap-px">
+          <div
+            class="bg-success transition-all duration-500"
+            style={"width: #{round(@exceeds / @total_comparable * 100)}%"}
+          />
+          <div
+            class="bg-error transition-all duration-500"
+            style={"width: #{round(@below / @total_comparable * 100)}%"}
+          />
+        </div>
+        <div class="flex justify-between mt-1">
+          <span class="text-[10px] text-success font-medium">Exceeds</span>
+          <span class="text-[10px] text-error font-medium">Below</span>
+        </div>
+      </div>
+
+      <%!-- No data state --%>
+      <div
+        :if={@stats == []}
+        class="px-6 pb-4 text-xs text-base-content/30 italic"
+      >
+        No SAT data found for this year.
+      </div>
+
+      <%!-- Per-school delta chart --%>
+      <div :if={@stats != []} class="px-6 pb-5 space-y-2">
+        <p class="text-[10px] text-base-content/30 uppercase tracking-wide font-medium">
+          School vs LEA delta (pts) — sorted best to worst
+        </p>
+        <div class="space-y-1.5">
+          <div
+            :for={s <- Enum.reject(@stats, & &1.no_lea_found)}
+            class="flex items-center gap-3 group"
+          >
+            <div class="w-40 shrink-0 truncate text-xs text-base-content/60 group-hover:text-base-content transition-colors text-right leading-tight">
+              {short_name(s.school_name)}
+            </div>
+            <div class="flex-1 flex items-center gap-1 min-w-0">
+              <div class="relative flex-1 h-4 flex items-center">
+                <div class="absolute left-1/2 top-0 bottom-0 w-px bg-base-300 z-10" />
+                <div
+                  class={[
+                    "absolute h-3 transition-all duration-300",
+                    if((s.delta || 0) >= 0, do: "bg-success/70 left-1/2", else: "bg-error/70 right-1/2")
+                  ]}
+                  style={"width: #{min(abs(s.delta || 0) / @max_abs_delta * 50, 50)}%"}
+                />
+              </div>
+            </div>
+            <div class={[
+              "text-xs font-mono font-semibold w-16 shrink-0 text-right",
+              if((s.delta || 0) >= 0, do: "text-success", else: "text-error")
+            ]}>
+              {if (s.delta || 0) >= 0, do: "+", else: ""}{format_sat_delta(s.delta)}pts
+            </div>
+          </div>
+        </div>
+        <%!-- No LEA schools table --%>
+        <div :if={@no_data > 0} class="mt-3 border border-base-200 overflow-hidden">
+          <div class="px-3 py-2 bg-base-200/50 border-b border-base-200">
+            <p class="text-[10px] text-base-content/40 uppercase tracking-wide font-medium">
+              {@no_data} school{if @no_data != 1, do: "s", else: ""} excluded — no SAT comparison available
+            </p>
+          </div>
+          <table class="w-full">
+            <tbody>
+              <tr
+                :for={s <- Enum.filter(@stats, & &1.no_lea_found)}
+                class="border-b border-base-200 last:border-0"
+              >
+                <td class="px-3 py-1.5 text-xs text-base-content/40">{s.school_name}</td>
+                <td class="px-3 py-1.5 text-xs font-mono text-base-content/30">{s.building_code}</td>
+                <td class="px-3 py-1.5 text-xs text-base-content/30 italic text-right">{s.exclusion_reason}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # ---------------------------------------------------------------------------
+  # Helpers
+  # ---------------------------------------------------------------------------
+
+  defp load_chartering_agencies do
+    MdeEntityMaster
+    |> Ash.Query.select([
+      :entity_chartering_agency_code,
+      :entity_chartering_agency_name
+    ])
+    |> Ash.Query.filter(
+      not is_nil(entity_chartering_agency_code) and entity_chartering_agency_code != "" and
+        entity_status == "Open-Active"
     )
+    |> Ash.read!(authorize?: false)
+    |> Enum.group_by(& &1.entity_chartering_agency_code)
+    |> Enum.map(fn {code, rows} ->
+      %{
+        code: code,
+        name: hd(rows).entity_chartering_agency_name,
+        school_count: length(rows)
+      }
+    end)
+    |> Enum.sort_by(& &1.name)
+  rescue
+    _ -> []
+  end
+
+  defp load_schools_for_agency(agency_code) do
+    MdeEntityMaster
+    |> Ash.Query.select([
+      :entity_code,
+      :entity_official_name,
+      :district_code,
+      :entity_county_name,
+      :entity_actual_grades,
+      :entity_authorized_grades
+    ])
+    |> Ash.Query.filter(entity_chartering_agency_code == ^agency_code and entity_status == "Open-Active")
+    |> Ash.Query.sort(entity_official_name: :asc)
+    |> Ash.read!(authorize?: false)
+  rescue
+    _ -> []
+  end
+
+  defp load_portfolio_stats([], _year), do: []
+
+  defp load_portfolio_stats(building_codes, year) do
+    from(s in "mde_school_vs_lea_snapshots",
+      where: s.building_code in ^building_codes and s.school_year == ^year,
+      select: %{
+        building_code: s.building_code,
+        school_name: s.school_name,
+        no_lea_found: s.no_lea_found,
+        school_pct: fragment("(?->>'school_pct')::float", s.all_subjects_avg),
+        lea_pct: fragment("(?->>'lea_pct')::float", s.all_subjects_avg),
+        delta: fragment("(?->>'delta')::float", s.all_subjects_avg)
+      }
+    )
+    |> Repo.all()
+    |> Enum.sort_by(fn s -> if s.no_lea_found, do: -9999, else: s.delta || -9999 end, :desc)
+  rescue
+    _ -> []
+  end
+
+  defp load_sat_portfolio_stats([], _year), do: []
+
+  defp load_sat_portfolio_stats(building_codes, year) do
+    # Step 1: get LEA district codes for each building from snapshots
+    snapshot_map =
+      from(s in "mde_school_vs_lea_snapshots",
+        where: s.building_code in ^building_codes and s.school_year == ^year,
+        select: {s.building_code, s.lea_district_code, s.no_lea_found}
+      )
+      |> Repo.all()
+      |> Map.new(fn {bc, ldc, nlf} -> {bc, %{lea_district_code: ldc, no_lea_found: nlf}} end)
+
+    # For buildings missing from snapshots or flagged no_lea_found, fall back to
+    # entity_geographic_lea_district_code from mde_entity_masters
+    fallback_codes =
+      Enum.filter(building_codes, fn bc ->
+        case Map.get(snapshot_map, bc) do
+          nil -> true
+          %{no_lea_found: true} -> true
+          _ -> false
+        end
+      end)
+
+    entity_lea_map =
+      if fallback_codes == [] do
+        %{}
+      else
+        from(e in "mde_entity_masters",
+          where:
+            e.entity_code in ^fallback_codes and
+              not is_nil(e.entity_geographic_lea_district_code) and
+              e.entity_geographic_lea_district_code != "",
+          select: {e.entity_code, e.entity_geographic_lea_district_code}
+        )
+        |> Repo.all()
+        |> Map.new()
+      end
+
+    # Merge: snapshot takes precedence; fall back to entity_geographic_lea where needed
+    lea_map =
+      Map.new(building_codes, fn bc ->
+        case Map.get(snapshot_map, bc) do
+          %{no_lea_found: false} = entry ->
+            {bc, entry}
+
+          _ ->
+            case Map.get(entity_lea_map, bc) do
+              nil -> {bc, %{lea_district_code: nil, no_lea_found: true}}
+              ldc -> {bc, %{lea_district_code: ldc, no_lea_found: false}}
+            end
+        end
+      end)
+
+    # Step 2: SAT results per school building
+    school_sat =
+      from(r in "mde_sat_results",
+        where:
+          r.building_code in ^building_codes and r.school_year == ^year and
+            r.rollup_level == "building" and r.subgroup == "All Students",
+        select: %{
+          building_code: r.building_code,
+          building_name: r.building_name,
+          score: r.all_subject_score_average
+        }
+      )
+      |> Repo.all()
+      |> Map.new(&{&1.building_code, &1})
+
+    # Step 3: SAT results for all LEA districts
+    lea_codes =
+      lea_map
+      |> Map.values()
+      |> Enum.map(& &1.lea_district_code)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    lea_sat =
+      if lea_codes == [] do
+        %{}
+      else
+        from(r in "mde_sat_results",
+          where:
+            r.district_code in ^lea_codes and r.school_year == ^year and
+              r.rollup_level == "district" and r.subgroup == "All Students",
+          select: %{district_code: r.district_code, score: r.all_subject_score_average}
+        )
+        |> Repo.all()
+        |> Map.new(&{&1.district_code, &1.score})
+      end
+
+    # Step 4: build per-school stat rows
+    building_codes
+    |> Enum.map(fn bc ->
+      lea_info = Map.get(lea_map, bc, %{lea_district_code: nil, no_lea_found: true})
+      school_info = Map.get(school_sat, bc)
+      school_score = school_info && decimal_to_float(school_info.score)
+      school_name = (school_info && school_info.building_name) || bc
+
+      lea_score =
+        if lea_info.no_lea_found or is_nil(lea_info.lea_district_code) do
+          nil
+        else
+          raw = Map.get(lea_sat, lea_info.lea_district_code)
+          raw && decimal_to_float(raw)
+        end
+
+      delta = if school_score && lea_score, do: school_score - lea_score, else: nil
+
+      {no_lea, exclusion_reason} =
+        cond do
+          is_nil(school_score) ->
+            {true, "No school SAT data"}
+
+          lea_info.no_lea_found and is_nil(Map.get(entity_lea_map, bc)) ->
+            {true, "No geographic LEA assigned"}
+
+          is_nil(lea_score) ->
+            {true, "LEA has no SAT data (#{lea_info.lea_district_code})"}
+
+          true ->
+            {false, nil}
+        end
+
+      %{
+        building_code: bc,
+        school_name: school_name,
+        school_score: school_score,
+        lea_score: lea_score,
+        delta: delta,
+        no_lea_found: no_lea,
+        exclusion_reason: exclusion_reason
+      }
+    end)
+    |> Enum.reject(fn s -> is_nil(s.school_score) end)
+    |> Enum.sort_by(fn s -> if s.no_lea_found, do: -99_999, else: s.delta || -99_999 end, :desc)
+  rescue
+    _ -> []
+  end
+
+  defp decimal_to_float(nil), do: nil
+  defp decimal_to_float(%Decimal{} = d), do: Decimal.to_float(d)
+  defp decimal_to_float(f) when is_float(f), do: f
+  defp decimal_to_float(i) when is_integer(i), do: i * 1.0
+
+  defp filter_schools(schools, ""), do: schools
+
+  defp filter_schools(schools, search) do
+    search_lower = String.downcase(search)
+
+    Enum.filter(schools, fn school ->
+      name = school.entity_official_name || ""
+      code = school.district_code || ""
+      county = school.entity_county_name || ""
+
+      String.contains?(String.downcase(name), search_lower) or
+        String.contains?(String.downcase(code), search_lower) or
+        String.contains?(String.downcase(county), search_lower)
+    end)
+  end
+
+  defp filter_agencies(agencies, ""), do: agencies
+
+  defp filter_agencies(agencies, search) do
+    search_lower = String.downcase(search)
+
+    Enum.filter(agencies, fn agency ->
+      name = agency.name || ""
+      code = agency.code || ""
+      String.contains?(String.downcase(name), search_lower) or
+        String.contains?(String.downcase(code), search_lower)
+    end)
+  end
+
+  defp format_delta(nil), do: "0.0"
+  defp format_delta(d), do: :erlang.float_to_binary(d * 1.0, decimals: 1)
+
+  defp format_sat_delta(nil), do: "0"
+  defp format_sat_delta(d), do: :erlang.float_to_binary(d * 1.0, decimals: 1)
+
+  defp short_name(nil), do: "—"
+
+  defp short_name(name) do
+    name
+    |> String.replace(~r/\b(Academy|Charter|School|Public|Michigan|PSA)\b/i, "")
+    |> String.replace(~r/\s{2,}/, " ")
+    |> String.trim()
+    |> then(fn s -> if String.length(s) > 22, do: String.slice(s, 0, 21) <> "…", else: s end)
   end
 end

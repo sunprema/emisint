@@ -848,10 +848,11 @@
   subtitle: "Average scale scores by subgroup · All Students & Economically Disadvantaged · " + elixir_data.school_year)
 
 #let fmt-score(v, fg) = {
-  if v == none {
+  let n = to-num(v)
+  if n == none {
     text(fill: c-muted, size: 8.5pt, "—")
   } else {
-    text(fill: fg, weight: "bold", size: 8.5pt, str(calc.round(to-num(v), digits: 1)))
+    text(fill: fg, weight: "bold", size: 8.5pt, str(calc.round(n, digits: 1)))
   }
 }
 

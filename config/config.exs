@@ -72,10 +72,7 @@ config :emisint,
   ash_domains: [
     Emisint.Chat,
     Emisint.Accounts,
-    Emisint.Registry,
-    Emisint.Assessments,
-    Emisint.Compliance,
-    Emisint.Analytics
+    Emisint.Assessments
   ]
 
 # Configure the endpoint

@@ -44,6 +44,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:selected_year, selected_year)
      |> assign(:all_districts, all_districts)
      |> assign(:district_code, nil)
+     |> assign(:from, nil)
+     |> assign(:from_agency, nil)
      |> assign(:compare_code, "")
      |> assign(:primary, nil)
      |> assign(:compare, nil)
@@ -66,12 +68,16 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     building_code = Map.get(params, "building", nil)
     year = socket.assigns.selected_year
     compare_code = Map.get(params, "compare", "")
+    from = Map.get(params, "from", nil)
+    from_agency = Map.get(params, "agency", nil)
 
     # Skip DB work on the disconnected (HTTP) pass — only set URL-derived assigns.
     if not socket.assigns.is_connected do
       {:noreply,
        socket
        |> assign(:district_code, dc)
+       |> assign(:from, from)
+       |> assign(:from_agency, from_agency)
        |> assign(:compare_code, compare_code)
        |> assign(:active_tab, tab)}
     else
@@ -144,6 +150,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       {:noreply,
        socket
        |> assign(:district_code, dc)
+       |> assign(:from, from)
+       |> assign(:from_agency, from_agency)
        |> assign(:compare_code, compare_code)
        |> assign(:active_tab, tab)
        |> assign(:primary, primary)
@@ -295,10 +303,15 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div class="flex items-center gap-4">
             <.link
-              navigate={~p"/mde"}
+              navigate={
+                if @from == "portfolio",
+                  do: ~p"/dashboard?#{%{agency: @from_agency}}",
+                  else: ~p"/mde"
+              }
               class="flex items-center gap-1.5 text-sm text-base-content/50 hover:text-base-content transition-colors"
             >
-              <.icon name="hero-arrow-left" class="size-4" /> MDE Overview
+              <.icon name="hero-arrow-left" class="size-4" />
+              {if @from == "portfolio", do: "Portfolio Overview", else: "MDE Overview"}
             </.link>
             <div class="h-4 w-px bg-base-300"></div>
             <div class="flex items-center gap-2">

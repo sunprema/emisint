@@ -236,7 +236,7 @@ defmodule Emisint.Accounts.User do
 
     update :assign_organization do
       require_atomic? false
-      accept [:organization_id, :role, :school_id]
+      accept [:organization_id, :role]
     end
 
     update :update_role do
@@ -294,12 +294,6 @@ defmodule Emisint.Accounts.User do
 
   relationships do
     belongs_to :organization, Emisint.Accounts.Organization do
-      allow_nil? true
-      attribute_writable? true
-      public? true
-    end
-
-    belongs_to :school, Emisint.Accounts.School do
       allow_nil? true
       attribute_writable? true
       public? true

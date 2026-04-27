@@ -8,7 +8,7 @@ defmodule Emisint.Repo.Migrations.AddApiKeyAuth do
   use Ecto.Migration
 
   def up do
-    create table(:messages, primary_key: false) do
+    create_if_not_exists table(:messages, primary_key: false) do
       add :inserted_at, :utc_datetime_usec,
         null: false,
         default: fragment("(now() AT TIME ZONE 'utc')")
@@ -27,47 +27,59 @@ defmodule Emisint.Repo.Migrations.AddApiKeyAuth do
       add :response_to_id, :uuid
     end
 
-    create table(:conversations, primary_key: false) do
+    create_if_not_exists table(:conversations, primary_key: false) do
       add :id, :uuid, null: false, default: fragment("uuid_generate_v7()"), primary_key: true
     end
 
-    alter table(:messages) do
-      modify :conversation_id,
-             references(:conversations,
-               column: :id,
-               name: "messages_conversation_id_fkey",
-               type: :uuid,
-               prefix: "public"
-             )
+    execute("""
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'messages_conversation_id_fkey'
+      ) THEN
+        ALTER TABLE messages
+          ADD CONSTRAINT messages_conversation_id_fkey
+          FOREIGN KEY (conversation_id) REFERENCES conversations(id);
+      END IF;
+    END $$;
+    """)
 
-      modify :response_to_id,
-             references(:messages,
-               column: :id,
-               name: "messages_response_to_id_fkey",
-               type: :uuid,
-               prefix: "public"
-             )
-    end
+    execute("""
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'messages_response_to_id_fkey'
+      ) THEN
+        ALTER TABLE messages
+          ADD CONSTRAINT messages_response_to_id_fkey
+          FOREIGN KEY (response_to_id) REFERENCES messages(id);
+      END IF;
+    END $$;
+    """)
 
     alter table(:conversations) do
-      add :title, :text
+      add_if_not_exists :title, :text
 
-      add :inserted_at, :utc_datetime_usec,
+      add_if_not_exists :inserted_at, :utc_datetime_usec,
         null: false,
         default: fragment("(now() AT TIME ZONE 'utc')")
 
-      add :updated_at, :utc_datetime_usec,
+      add_if_not_exists :updated_at, :utc_datetime_usec,
         null: false,
         default: fragment("(now() AT TIME ZONE 'utc')")
-
-      add :user_id,
-          references(:users,
-            column: :id,
-            name: "conversations_user_id_fkey",
-            type: :uuid,
-            prefix: "public"
-          ), null: false
     end
+
+    execute("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_id uuid")
+
+    execute("""
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'conversations_user_id_fkey'
+      ) THEN
+        ALTER TABLE conversations
+          ADD CONSTRAINT conversations_user_id_fkey
+          FOREIGN KEY (user_id) REFERENCES users(id);
+      END IF;
+    END $$;
+    """)
   end
 
   def down do

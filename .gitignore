@@ -35,5 +35,8 @@ emisint-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# temp/
+
 temp/EEM_3-11-25_All_Buildings.csv
 .env.local.sh
+#temp/Open-Active-EMO-and-Auth-Info-List.csv
