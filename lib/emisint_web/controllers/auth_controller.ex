@@ -3,7 +3,7 @@ defmodule EmisintWeb.AuthController do
   use AshAuthentication.Phoenix.Controller
 
   def success(conn, activity, user, _token) do
-    return_to = get_session(conn, :return_to) || ~p"/dashboard"
+    return_to = get_session(conn, :return_to) || default_landing(user)
 
     flash_conn =
       case activity do
@@ -18,6 +18,15 @@ defmodule EmisintWeb.AuthController do
     |> store_in_session(user)
     |> assign(:current_user, user)
     |> redirect(to: return_to)
+  end
+
+  defp default_landing(user) do
+    case user.role do
+      :emo_admin -> ~p"/esp-portfolio"
+      :authorizer_liaison -> ~p"/authorizer-portfolio"
+      :school_leader -> ~p"/mde"
+      _ -> ~p"/authorizer-portfolio"
+    end
   end
 
   def failure(conn, activity, reason) do

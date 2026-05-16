@@ -7,7 +7,7 @@ defmodule EmisintWeb.Admin.OrganizationShowLive do
     user = socket.assigns.current_user
 
     if user.role != :system_admin do
-      {:ok, push_navigate(socket, to: ~p"/dashboard")}
+      {:ok, push_navigate(socket, to: ~p"/authorizer-portfolio")}
     else
       {:ok, socket |> load_data(id) |> assign(confirm_remove_user: nil, show_assign_modal: false, form_errors: [])}
     end

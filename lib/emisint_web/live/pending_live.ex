@@ -8,7 +8,7 @@ defmodule EmisintWeb.PendingLive do
 
     # If somehow a user with an org lands here, send them to the dashboard
     if user.organization_id do
-      {:ok, push_navigate(socket, to: ~p"/dashboard")}
+      {:ok, push_navigate(socket, to: ~p"/authorizer-portfolio")}
     else
       {:ok, socket}
     end

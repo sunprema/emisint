@@ -46,6 +46,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
      |> assign(:district_code, nil)
      |> assign(:from, nil)
      |> assign(:from_agency, nil)
+     |> assign(:from_agency_name, nil)
+     |> assign(:from_emo, nil)
      |> assign(:compare_code, "")
      |> assign(:primary, nil)
      |> assign(:compare, nil)
@@ -70,6 +72,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     compare_code = Map.get(params, "compare", "")
     from = Map.get(params, "from", nil)
     from_agency = Map.get(params, "agency", nil)
+    from_agency_name = Map.get(params, "agency_name", from_agency)
+    from_emo = Map.get(params, "emo", nil)
 
     # Skip DB work on the disconnected (HTTP) pass — only set URL-derived assigns.
     if not socket.assigns.is_connected do
@@ -78,6 +82,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
        |> assign(:district_code, dc)
        |> assign(:from, from)
        |> assign(:from_agency, from_agency)
+       |> assign(:from_agency_name, from_agency_name)
+       |> assign(:from_emo, from_emo)
        |> assign(:compare_code, compare_code)
        |> assign(:active_tab, tab)}
     else
@@ -152,6 +158,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
        |> assign(:district_code, dc)
        |> assign(:from, from)
        |> assign(:from_agency, from_agency)
+       |> assign(:from_agency_name, from_agency_name)
+       |> assign(:from_emo, from_emo)
        |> assign(:compare_code, compare_code)
        |> assign(:active_tab, tab)
        |> assign(:primary, primary)
@@ -299,21 +307,10 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="max-w-6xl mx-auto space-y-8">
-        <%!-- Top bar: back link + year selector --%>
+        <%!-- Top bar: breadcrumbs + year selector --%>
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div class="flex items-center gap-4">
-            <.link
-              navigate={
-                if @from == "portfolio",
-                  do: ~p"/dashboard?#{%{agency: @from_agency}}",
-                  else: ~p"/mde"
-              }
-              class="flex items-center gap-1.5 text-sm text-base-content/50 hover:text-base-content transition-colors"
-            >
-              <.icon name="hero-arrow-left" class="size-4" />
-              {if @from == "portfolio", do: "Portfolio Overview", else: "MDE Overview"}
-            </.link>
-            <div class="h-4 w-px bg-base-300"></div>
+          <div class="flex flex-col gap-1.5">
+            <.breadcrumbs items={build_breadcrumbs(assigns)} />
             <div class="flex items-center gap-2">
               <div class="p-1.5 bg-info/10 border border-info/20">
                 <.icon name="hero-chart-bar" class="size-4 text-info" />
@@ -2175,6 +2172,33 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   end
 
   defp short_name(name), do: name
+
+  defp build_breadcrumbs(%{from: "esp", from_emo: emo} = assigns) when not is_nil(emo) do
+    district_label = if assigns.primary, do: assigns.primary.district_name, else: "District Analysis"
+
+    [
+      %{label: "ESP Portfolio", to: ~p"/esp-portfolio"},
+      %{label: emo, to: ~p"/esp-portfolio?#{%{emo: emo}}"},
+      %{label: district_label}
+    ]
+  end
+
+  defp build_breadcrumbs(%{from: "portfolio", from_agency: agency_code} = assigns)
+       when not is_nil(agency_code) do
+    agency_label = assigns.from_agency_name || agency_code
+    district_label = if assigns.primary, do: assigns.primary.district_name, else: "District Analysis"
+
+    [
+      %{label: "Authorizer Portfolio", to: ~p"/authorizer-portfolio"},
+      %{label: agency_label, to: ~p"/authorizer-portfolio?#{%{agency: agency_code}}"},
+      %{label: district_label}
+    ]
+  end
+
+  defp build_breadcrumbs(assigns) do
+    district_label = if assigns.primary, do: assigns.primary.district_name, else: "District Analysis"
+    [%{label: "MDE Overview", to: ~p"/mde"}, %{label: district_label}]
+  end
 
   defp page_title(nil, _), do: "District Analysis"
   defp page_title(primary, nil), do: "#{primary.district_name} — Analysis"

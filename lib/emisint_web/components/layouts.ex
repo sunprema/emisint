@@ -57,7 +57,7 @@ defmodule EmisintWeb.Layouts do
         <aside class="w-64 min-h-full bg-base-200 flex flex-col border-r border-base-300">
           <%!-- Logo --%>
           <div class="p-4 border-b border-base-300">
-            <.link navigate={~p"/dashboard"} class="flex items-center gap-2">
+            <.link navigate={~p"/authorizer-portfolio"} class="flex items-center gap-2">
               <.icon name="hero-academic-cap" class="size-7 text-primary" />
               <div>
                 <div class="font-bold text-base leading-tight">Emisint APM</div>
@@ -75,8 +75,8 @@ defmodule EmisintWeb.Layouts do
                 </.link>
               </li>
               <li>
-                <.link navigate={~p"/dashboard"} class="flex items-center gap-2">
-                  <.icon name="hero-squares-2x2" class="size-4" /> Portfolio
+                <.link navigate={~p"/authorizer-portfolio"} class="flex items-center gap-2">
+                  <.icon name="hero-squares-2x2" class="size-4" /> Authorizer Portfolio
                 </.link>
               </li>
               <li>

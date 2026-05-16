@@ -4,6 +4,6 @@ defmodule EmisintWeb.Admin.OrgContextController do
   def set(conn, %{"org_id" => org_id}) do
     conn
     |> put_session(:admin_org_id, org_id)
-    |> redirect(to: ~p"/dashboard")
+    |> redirect(to: ~p"/authorizer-portfolio")
   end
 end

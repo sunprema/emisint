@@ -20,7 +20,7 @@ defmodule EmisintWeb.PortfolioReportController do
 
         conn
         |> put_flash(:error, "Failed to generate PDF report.")
-        |> redirect(to: ~p"/dashboard")
+        |> redirect(to: ~p"/authorizer-portfolio")
     end
   rescue
     e ->
@@ -28,6 +28,6 @@ defmodule EmisintWeb.PortfolioReportController do
 
       conn
       |> put_flash(:error, "Report error: #{Exception.message(e)}")
-      |> redirect(to: ~p"/dashboard")
+      |> redirect(to: ~p"/authorizer-portfolio")
   end
 end

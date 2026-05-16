@@ -219,7 +219,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             >
               <button
                 :for={agency <- @filtered_agencies}
-                phx-click={JS.patch(~p"/dashboard?agency=#{agency.code}")}
+                phx-click={JS.patch(~p"/authorizer-portfolio?agency=#{agency.code}")}
                 class={[
                   "w-full text-left px-4 py-3 hover:bg-base-50 transition-colors flex items-start justify-between gap-2",
                   @selected_agency && @selected_agency.code == agency.code &&
@@ -274,7 +274,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                   </div>
                   <%!-- Download PDF button --%>
                   <.link
-                    href={~p"/dashboard/portfolio.pdf?#{%{agency: @selected_agency.code, year: @stats_year}}"}
+                    href={~p"/authorizer-portfolio/portfolio.pdf?#{%{agency: @selected_agency.code, year: @stats_year}}"}
                     target="_blank"
                     class="btn btn-sm btn-outline btn-primary gap-1.5 shrink-0"
                   >
@@ -361,7 +361,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                     </button>
                   </div>
                   <.link
-                    patch={~p"/dashboard"}
+                    patch={~p"/authorizer-portfolio"}
                     class="text-xs text-base-content/40 hover:text-base-content transition-colors flex items-center gap-1 shrink-0"
                   >
                     <.icon name="hero-x-mark" class="size-3.5" /> Clear
@@ -398,7 +398,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                             else: "hover:bg-base-50"
                           )
                         ]}
-                        phx-click={school.district_code && JS.navigate(~p"/mde/districts/#{school.district_code}?from=portfolio&agency=#{@selected_agency.code}")}
+                        phx-click={school.district_code && JS.navigate(~p"/mde/districts/#{school.district_code}?from=portfolio&agency=#{@selected_agency.code}&agency_name=#{@selected_agency.name || @selected_agency.code}")}
                       >
                         <td class="px-4 py-3">
                           <p class={[

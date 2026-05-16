@@ -14,7 +14,7 @@ defmodule EmisintWeb.Admin.UsersLive do
     user = socket.assigns.current_user
 
     if user.role not in [:system_admin] do
-      {:ok, push_navigate(socket, to: ~p"/dashboard")}
+      {:ok, push_navigate(socket, to: ~p"/authorizer-portfolio")}
     else
       users = Emisint.Accounts.list_users!(actor: user, authorize?: false)
       {:ok, assign(socket, users: users, editing_user: nil, roles: @roles)}

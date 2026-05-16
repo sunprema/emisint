@@ -80,6 +80,43 @@ defmodule EmisintWeb.CoreComponents do
   end
 
   @doc """
+  Renders a breadcrumb navigation trail.
+
+  Each item is a map with `:label` and an optional `:to` key. The last item
+  (current page) should omit `:to`.
+
+  ## Examples
+
+      <.breadcrumbs items={[
+        %{label: "ESP Portfolio", to: ~p"/esp-portfolio"},
+        %{label: "ACCEL SCHOOLS"},
+      ]} />
+  """
+  attr :items, :list, required: true
+
+  def breadcrumbs(assigns) do
+    assigns = assign(assigns, :indexed_items, Enum.with_index(assigns.items))
+
+    ~H"""
+    <nav aria-label="Breadcrumb" class="flex items-center gap-1 text-xs text-base-content/50">
+      <span :for={{item, i} <- @indexed_items} class="flex items-center gap-1">
+        <.icon :if={i > 0} name="hero-chevron-right" class="size-3 shrink-0" />
+        <.link
+          :if={Map.get(item, :to)}
+          navigate={item.to}
+          class="hover:text-base-content transition-colors"
+        >
+          {item.label}
+        </.link>
+        <span :if={!Map.get(item, :to)} class="text-base-content font-semibold">
+          {item.label}
+        </span>
+      </span>
+    </nav>
+    """
+  end
+
+  @doc """
   Renders a button with navigation support.
 
   ## Examples

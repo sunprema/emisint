@@ -63,7 +63,7 @@ defmodule EmisintWeb.Router do
         {EmisintWeb.LiveUserAuth, :live_user_required},
         EmisintWeb.LiveScope
       ] do
-      live "/dashboard", Dashboard.PortfolioLive, :index
+      live "/authorizer-portfolio", Dashboard.PortfolioLive, :index
       live "/esp-portfolio", Dashboard.EspPortfolioLive, :index
       live "/admin/import", Admin.DataImportLive, :index
       live "/admin/import/history", Admin.ImportHistoryLive, :index
@@ -74,7 +74,8 @@ defmodule EmisintWeb.Router do
     end
 
     get "/mde/lea-comparison.pdf", MdeLeaReportController, :show
-    get "/dashboard/portfolio.pdf", PortfolioReportController, :show
+    get "/authorizer-portfolio/portfolio.pdf", PortfolioReportController, :show
+    get "/esp-portfolio/portfolio.pdf", EspPortfolioReportController, :show
     get "/admin/import/errors/download", ErrorFileDownloadController, :download
   end
 
