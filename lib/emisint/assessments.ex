@@ -98,5 +98,11 @@ defmodule Emisint.Assessments do
       define :list_mde_index_thresholds, action: :read
       define :upsert_mde_index_threshold, action: :upsert
     end
+
+    resource Emisint.Assessments.MdeEmoContact do
+      define :upsert_mde_emo_contact, action: :upsert
+      define :list_mde_emo_contacts, action: :read
+      define :get_mde_emo_contact_by_district_code, action: :read, get_by: [:district_code]
+    end
   end
 end

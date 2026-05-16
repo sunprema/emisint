@@ -27,6 +27,10 @@ defmodule EmisintWeb.Endpoint do
     only: EmisintWeb.static_paths(),
     raise_on_missing_only: code_reloading?
 
+  if Mix.env() == :dev do
+    plug Tidewave
+  end
+
   if Code.ensure_loaded?(LiveAgent) do
     plug LiveAgent
   end

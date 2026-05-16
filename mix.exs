@@ -125,7 +125,8 @@ defmodule Emisint.MixProject do
        if(Mix.env() == :dev and File.dir?("/Volumes/x/projects/elixir_libs/live_agent"),
          do: [path: "/Volumes/x/projects/elixir_libs/live_agent", override: true, only: :dev],
          else: [github: "sunprema/live_agent", branch: "main", only: :dev]
-       )}
+       )},
+      {:tidewave, "~> 0.5", only: [:dev]}
     ]
   end
 

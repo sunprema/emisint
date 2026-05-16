@@ -15,6 +15,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
         Phoenix.PubSub.subscribe(Emisint.PubSub, "enrollment_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "sat_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "school_index_import")
+        Phoenix.PubSub.subscribe(Emisint.PubSub, "emo_contact_import")
       end
     end
 
@@ -43,6 +44,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> assign(:sat_upload_progress, nil)
       |> assign(:school_index_upload, nil)
       |> assign(:school_index_upload_progress, nil)
+      |> assign(:emo_contact_importing, false)
+      |> assign(:emo_contact_import_result, nil)
+      |> assign(:emo_contact_upload, nil)
+      |> assign(:emo_contact_upload_progress, nil)
       |> assign(:import_history, if(user.role == :system_admin, do: load_import_history(), else: []))
 
     {:ok, socket}
@@ -171,6 +176,31 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:school_index_import_result, {:error, reason})
      |> assign(:import_history, load_import_history())
      |> put_flash(:error, "School Index import failed: #{reason}")}
+  end
+
+  # ---------------------------------------------------------------------------
+  # PubSub — EMO Contact import status updates
+  # ---------------------------------------------------------------------------
+
+  def handle_info({:emo_contact_import_completed, stats}, socket) do
+    {:noreply,
+     socket
+     |> assign(:emo_contact_importing, false)
+     |> assign(:emo_contact_import_result, {:ok, stats})
+     |> assign(:import_history, load_import_history())
+     |> put_flash(
+       :info,
+       "EMO Contact import complete — #{format_number(stats.records)} records loaded."
+     )}
+  end
+
+  def handle_info({:emo_contact_import_failed, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:emo_contact_importing, false)
+     |> assign(:emo_contact_import_result, {:error, reason})
+     |> assign(:import_history, load_import_history())
+     |> put_flash(:error, "EMO Contact import failed: #{reason}")}
   end
 
   # ---------------------------------------------------------------------------
@@ -310,6 +340,24 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:school_index_upload_progress, nil)
      |> assign(:import_history, load_import_history())
      |> put_flash(:info, "School Index import queued: #{filename}. Processing in background…")}
+  end
+
+  def handle_event("upload_complete", %{"upload_type" => "emo_contact", "key" => key, "filename" => filename}, socket) do
+    user = socket.assigns.current_user
+    log_id = create_import_log(:emo_contact, filename, socket.assigns.emo_contact_upload, key, user)
+
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
+    |> Emisint.Workers.MdeEmoContactImportWorker.new()
+    |> Oban.insert!()
+
+    {:noreply,
+     socket
+     |> assign(:emo_contact_importing, true)
+     |> assign(:emo_contact_import_result, nil)
+     |> assign(:emo_contact_upload, nil)
+     |> assign(:emo_contact_upload_progress, nil)
+     |> assign(:import_history, load_import_history())
+     |> put_flash(:info, "EMO Contact import queued: #{filename}. Processing in background…")}
   end
 
   def handle_event("upload_failed", %{"upload_type" => type, "reason" => reason}, socket) do
@@ -1501,7 +1549,235 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
-        <%!-- ── Section 7: MDE Import History (system_admin only) ──────────────── --%>
+        <%!-- ── Section 7: EMO & Auth Contact List (system_admin only) ──────────── --%>
+        <div class="divider"></div>
+        <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
+          <div class="flex items-center gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold">EMO & Authorizer Contact List</h2>
+                <span class="badge badge-accent badge-sm">System Admin</span>
+              </div>
+              <p class="text-xs text-base-content/50 mt-0.5">
+                Import the MDE Open/Active EMO and Authorizer contact list — one row per
+                PSA district code, mapping each school to its Education Service Provider /
+                Management Organization and primary contact person.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+            <%!-- EMO Contact upload form — 3 cols --%>
+            <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200">
+                <h3 class="font-semibold">Upload EMO Contact CSV</h3>
+                <p class="text-xs text-base-content/40 mt-0.5">
+                  MDE Open/Active EMO and Auth Info list. No school or year selection needed.
+                </p>
+              </div>
+
+              <div id="tigris-emo-contact" phx-hook="TigrisUpload" data-upload-type="emo_contact" class="p-6 space-y-6">
+                <%!-- File upload drop zone --%>
+                <div class="space-y-2">
+                  <label class="text-sm font-medium">
+                    EMO Contact CSV File <span class="text-error text-xs">*</span>
+                  </label>
+
+                  <div
+                    class="relative border-2 border-dashed border-base-300 hover:border-accent/40 bg-base-50/50 transition-colors group cursor-pointer"
+                    data-drop-zone
+                  >
+                    <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
+                      <div class="p-3 bg-base-200 group-hover:bg-accent/10 transition-colors mb-3">
+                        <.icon
+                          name="hero-building-storefront"
+                          class="size-7 text-base-content/30 group-hover:text-accent transition-colors"
+                        />
+                      </div>
+                      <p class="text-sm text-base-content/50">
+                        Drag & drop the EMO Contact CSV here, or{" "}
+                        <span class="text-accent font-medium hover:underline">browse</span>
+                      </p>
+                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 10 MB</p>
+                      <input type="file" accept=".csv" class="hidden" data-file-input />
+                    </label>
+                  </div>
+
+                  <%!-- File entry preview --%>
+                  <div
+                    :if={@emo_contact_upload}
+                    class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
+                  >
+                    <div class="p-2 bg-accent/10 shrink-0">
+                      <.icon name="hero-document-text" class="size-4 text-accent" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium truncate">{@emo_contact_upload.name}</div>
+                      <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
+                        <div
+                          class="bg-accent h-1 rounded-full transition-all duration-300"
+                          style={"width: #{@emo_contact_upload_progress || 0}%"}
+                        >
+                        </div>
+                      </div>
+                    </div>
+                    <span class="text-xs text-base-content/40 shrink-0">
+                      {format_bytes(@emo_contact_upload.size)}
+                    </span>
+                    <button
+                      type="button"
+                      data-cancel-btn
+                      class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <%!-- Expected format hint --%>
+                <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
+                  <.icon
+                    name="hero-information-circle"
+                    class="size-4 shrink-0 mt-0.5 text-base-content/35"
+                  />
+                  <div>
+                    <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+                    <p class="font-mono leading-relaxed">
+                      District Code, PSA Official Name, Chartering Agency,
+                      Education Service Provider/Management Organization,
+                      Name, Phone, E-Mail
+                    </p>
+                  </div>
+                </div>
+
+                <%!-- Submit button --%>
+                <button
+                  type="button"
+                  data-import-btn
+                  class={[
+                    "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
+                    !@emo_contact_importing && !is_nil(@emo_contact_upload) &&
+                      "bg-accent text-accent-content hover:opacity-90 active:scale-[0.99]",
+                    (@emo_contact_importing || is_nil(@emo_contact_upload)) &&
+                      "bg-accent/50 text-accent-content/70 cursor-not-allowed"
+                  ]}
+                  disabled={@emo_contact_importing || is_nil(@emo_contact_upload)}
+                >
+                  <span
+                    :if={@emo_contact_importing}
+                    class="loading loading-spinner loading-sm"
+                  >
+                  </span>
+                  <.icon
+                    :if={!@emo_contact_importing}
+                    name="hero-arrow-up-tray"
+                    class="size-4"
+                  />
+                  {if @emo_contact_importing, do: "Processing…", else: "Import EMO Contacts"}
+                </button>
+              </div>
+            </div>
+
+            <%!-- EMO Contact import result / status — 2 cols --%>
+            <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
+                <div>
+                  <h3 class="font-semibold">Import Status</h3>
+                  <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
+                </div>
+                <div
+                  :if={@emo_contact_importing}
+                  class="flex items-center gap-1.5 text-xs text-base-content/40"
+                >
+                  <span class="loading loading-spinner loading-xs"></span> Running…
+                </div>
+              </div>
+
+              <%!-- Idle / no result yet --%>
+              <div
+                :if={!@emo_contact_importing && is_nil(@emo_contact_import_result)}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-base-200 mb-3">
+                  <.icon name="hero-building-storefront" class="size-6 text-base-content/25" />
+                </div>
+                <p class="text-sm font-medium text-base-content/40">No import yet</p>
+                <p class="text-xs text-base-content/30 mt-1">
+                  Upload an EMO Contact CSV to populate the reference table.
+                </p>
+              </div>
+
+              <%!-- In-progress pulse --%>
+              <div
+                :if={@emo_contact_importing}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-accent/10 mb-3">
+                  <span class="loading loading-spinner loading-md text-accent"></span>
+                </div>
+                <p class="text-sm font-medium">Processing EMO Contact data…</p>
+                <p class="text-xs text-base-content/40 mt-1">
+                  Upserting EMO contact records in the background.
+                </p>
+              </div>
+
+              <%!-- Success result --%>
+              <div
+                :if={match?({:ok, _}, @emo_contact_import_result)}
+                class="p-6 space-y-4"
+              >
+                <div class="flex items-center gap-2 text-success">
+                  <.icon name="hero-check-circle" class="size-5" />
+                  <span class="font-semibold text-sm">Import completed</span>
+                </div>
+                <dl class="grid grid-cols-2 gap-3">
+                  <.mde_stat
+                    label="Records"
+                    value={format_number(elem(@emo_contact_import_result, 1).records)}
+                    icon="hero-building-storefront"
+                  />
+                  <.mde_stat
+                    label="Errors"
+                    value={elem(@emo_contact_import_result, 1).errors}
+                    icon="hero-exclamation-circle"
+                  />
+                </dl>
+                <div
+                  :if={elem(@emo_contact_import_result, 1).errors > 0}
+                  class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
+                >
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
+                  {elem(@emo_contact_import_result, 1).errors} rows had errors and were skipped.
+                </div>
+                <a
+                  :if={elem(@emo_contact_import_result, 1).error_file}
+                  href={~p"/admin/import/errors/download?#{%{path: elem(@emo_contact_import_result, 1).error_file}}"}
+                  class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
+                >
+                  <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
+                  Download error rows — {Path.basename(elem(@emo_contact_import_result, 1).error_file)}
+                </a>
+              </div>
+
+              <%!-- Error result --%>
+              <div
+                :if={match?({:error, _}, @emo_contact_import_result)}
+                class="p-6"
+              >
+                <div class="flex items-start gap-3 p-4 bg-error/5 border border-error/15">
+                  <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
+                  <div>
+                    <p class="text-sm font-semibold text-error">Import failed</p>
+                    <p class="text-xs text-base-content/50 mt-1 break-all">
+                      {elem(@emo_contact_import_result, 1)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <%!-- ── Section 8: MDE Import History (system_admin only) ──────────────── --%>
         <div :if={@current_user.role == :system_admin} class="space-y-4">
           <div class="divider"></div>
           <div class="flex items-center gap-2">
@@ -1553,7 +1829,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         log.import_type == :entity_master && "badge-info",
                         log.import_type == :enrollment && "badge-success",
                         log.import_type == :sat && "badge-secondary",
-                        log.import_type == :school_index && "badge-primary"
+                        log.import_type == :school_index && "badge-primary",
+                        log.import_type == :emo_contact && "badge-accent"
                       ]}>
                         {log.import_type |> to_string() |> String.replace("_", " ") |> String.upcase()}
                       </span>
