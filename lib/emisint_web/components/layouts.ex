@@ -80,6 +80,11 @@ defmodule EmisintWeb.Layouts do
                 </.link>
               </li>
               <li>
+                <.link navigate={~p"/esp-portfolio"} class="flex items-center gap-2">
+                  <.icon name="hero-briefcase" class="size-4" /> ESP Portfolio
+                </.link>
+              </li>
+              <li>
                 <.link navigate={~p"/mde"} class="flex items-center gap-2">
                   <.icon name="hero-chart-bar-square" class="size-4" /> MDE Data
                 </.link>

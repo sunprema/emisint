@@ -64,6 +64,7 @@ defmodule EmisintWeb.Router do
         EmisintWeb.LiveScope
       ] do
       live "/dashboard", Dashboard.PortfolioLive, :index
+      live "/esp-portfolio", Dashboard.EspPortfolioLive, :index
       live "/admin/import", Admin.DataImportLive, :index
       live "/admin/import/history", Admin.ImportHistoryLive, :index
       live "/settings", SettingsLive, :index
