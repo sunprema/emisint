@@ -11,6 +11,8 @@ defmodule Emisint.Assessments do
       List the MDE isd available.
       Dont pass any inputs.
       """
+
+      action_parameters []
     end
   end
 
