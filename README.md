@@ -15,6 +15,27 @@ state-level accountability.
 - **School Principals** — drill into grade-level and subgroup data to adjust
   instructional strategies.
 
+## Screenshots
+
+**ESP Portfolio** — browse a management company's schools by Education Service
+Provider, with contacts and grade ranges per academy.
+
+![ESP Portfolio](docs/screenshots/esp-portfolio.png)
+
+**Authorizer Portfolio** — browse the portfolio of schools under each
+chartering agency (university, ISD, or community college).
+
+![Authorizer Portfolio](docs/screenshots/authorizer-portfolio.png)
+
+**District Analysis** — M-STEP proficiency by subject and grade-level
+breakdown, with side-by-side district comparison against the local LEA.
+
+![District Analysis](docs/screenshots/district-analysis.png)
+
+**PDF Reports** - Download PDF Reports with Academic performance data.
+
+![Performance Report](docs/screenshots/pdf_reports.png)
+
 ## Tech stack
 
 - **Phoenix 1.8** + **LiveView 1.1** on **Bandit**
@@ -32,11 +53,11 @@ state-level accountability.
 
 Ash domains registered in `config/config.exs`:
 
-| Domain                | Purpose                                                                                                                                              |
-| :-------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Emisint.Accounts`    | Tenancy and identity — `Organization`, `User`, `Token`, `ApiKey`. Multitenancy is attribute-based on `organization_id`.                              |
-| `Emisint.Assessments` | MDE data ingestion and storage — entity master, ISDs, districts, buildings, public assessment results, SAT, school index, enrollment, comparisons.   |
-| `Emisint.Chat`        | Conversational/AI chat surface backed by `ash_ai`.                                                                                                   |
+| Domain                | Purpose                                                                                                                                            |
+| :-------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Emisint.Accounts`    | Tenancy and identity — `Organization`, `User`, `Token`, `ApiKey`. Multitenancy is attribute-based on `organization_id`.                            |
+| `Emisint.Assessments` | MDE data ingestion and storage — entity master, ISDs, districts, buildings, public assessment results, SAT, school index, enrollment, comparisons. |
+| `Emisint.Chat`        | Conversational/AI chat surface backed by `ash_ai`.                                                                                                 |
 
 See `CLAUDE.md` for the broader architectural intent (additional `Registry`,
 `Compliance`, and `Analytics` domains are described there as planned/in-flight
