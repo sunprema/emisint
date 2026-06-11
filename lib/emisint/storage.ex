@@ -1,13 +1,13 @@
 defmodule Emisint.Storage do
   @moduledoc """
-  Tigris (S3-compatible) object storage wrapper for large CSV imports.
+  Object storage wrapper for large CSV imports.
 
-  Presigned URLs let the browser upload files directly to Tigris,
-  bypassing the Phoenix WebSocket. Workers then stream objects back
-  to a temp file for processing.
+  In production (and when AWS_ACCESS_KEY_ID is set), uploads go directly to
+  Tigris (S3-compatible) via presigned URLs. In dev without credentials, files
+  are written to local disk and served through the LocalUploadPlug.
   """
 
-  @doc "Returns the configured bucket name."
+  @doc "Returns the configured bucket name (Tigris only)."
   def bucket do
     System.get_env("BUCKET_NAME") ||
       Application.get_env(:emisint, __MODULE__, [])
@@ -21,47 +21,67 @@ defmodule Emisint.Storage do
   end
 
   @doc """
-  Generates a presigned PUT URL the browser uses to upload directly.
+  Generates an upload URL the browser uses to PUT a file.
   Returns `{:ok, url}` or `{:error, reason}`.
   """
   def presigned_upload_url(key, expires_in \\ 900) do
-    ExAws.S3.presigned_url(ex_aws_config(), :put, bucket(), key, expires_in: expires_in)
+    if local?() do
+      base = Application.get_env(:emisint, __MODULE__, []) |> Keyword.get(:local_upload_url, "http://localhost:4000")
+      {:ok, "#{base}/dev/uploads/#{key}"}
+    else
+      ExAws.S3.presigned_url(ex_aws_config(), :put, bucket(), key, expires_in: expires_in)
+    end
   end
 
   @doc """
-  Downloads the S3 object at `key` to `dest_path` on disk.
-  Uses Req to stream response without loading full file into memory.
+  Downloads the object at `key` to `dest_path` on disk.
   Returns `dest_path`.
   """
   def download_to_file!(key, dest_path) do
-    {:ok, url} = ExAws.S3.presigned_url(ex_aws_config(), :get, bucket(), key, expires_in: 300)
+    if local?() do
+      src = EmisintWeb.LocalUploadPlug.local_path(key)
+      File.copy!(src, dest_path)
+      dest_path
+    else
+      {:ok, url} = ExAws.S3.presigned_url(ex_aws_config(), :get, bucket(), key, expires_in: 300)
 
-    # Use raw Erlang file I/O — bypasses the IO server for significantly
-    # faster sequential writes on large files.
-    {:ok, fd} = :file.open(dest_path, [:write, :raw, :binary])
+      {:ok, fd} = :file.open(dest_path, [:write, :raw, :binary])
 
-    try do
-      Req.get!(url,
-        into: fn {:data, chunk}, {req, resp} ->
-          :file.write(fd, chunk)
-          {:cont, {req, resp}}
-        end
-      )
-    after
-      :file.close(fd)
+      try do
+        Req.get!(url,
+          into: fn {:data, chunk}, {req, resp} ->
+            :file.write(fd, chunk)
+            {:cont, {req, resp}}
+          end
+        )
+      after
+        :file.close(fd)
+      end
+
+      dest_path
     end
-
-    dest_path
   end
 
-  @doc "Deletes an object from the bucket. Best-effort, never raises."
+  @doc "Deletes an object. Best-effort, never raises."
   def delete(key) do
-    ExAws.S3.delete_object(bucket(), key)
-    |> ExAws.request()
+    if local?() do
+      key |> EmisintWeb.LocalUploadPlug.local_path() |> File.rm()
+    else
+      ExAws.S3.delete_object(bucket(), key)
+      |> ExAws.request()
+    end
 
     :ok
   rescue
     _ -> :ok
+  end
+
+  # Use local disk when explicitly configured OR when no AWS credentials are present.
+  defp local? do
+    cfg = Application.get_env(:emisint, __MODULE__, [])
+
+    Keyword.get(cfg, :backend) == :local or
+      (is_nil(System.get_env("AWS_ACCESS_KEY_ID")) and Keyword.get(cfg, :backend) != :tigris)
   end
 
   defp ex_aws_config, do: ExAws.Config.new(:s3)

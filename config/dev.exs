@@ -92,3 +92,9 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Local disk storage — replaces Tigris for CSV uploads in dev.
+# Files are written to System.tmp_dir!/emisint_uploads by the LocalUploadPlug.
+config :emisint, Emisint.Storage,
+  backend: :local,
+  local_upload_url: "http://localhost:4000"

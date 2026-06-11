@@ -79,6 +79,10 @@ defmodule EmisintWeb.Router do
     get "/admin/import/errors/download", ErrorFileDownloadController, :download
   end
 
+  if Mix.env() == :dev do
+    forward "/dev/uploads", EmisintWeb.LocalUploadPlug
+  end
+
   scope "/mcp" do
     pipe_through :mcp
 
