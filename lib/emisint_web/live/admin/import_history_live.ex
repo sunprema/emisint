@@ -130,7 +130,8 @@ defmodule EmisintWeb.Admin.ImportHistoryLive do
                   {"MDE", "mde"},
                   {"Entity Master", "entity_master"},
                   {"Enrollment", "enrollment"},
-                  {"SAT", "sat"}
+                  {"SAT", "sat"},
+                  {"CRD", "crd"}
                 ]
               }
               phx-click="filter_type"
@@ -223,7 +224,8 @@ defmodule EmisintWeb.Admin.ImportHistoryLive do
                       log.import_type == :mde && "badge-warning",
                       log.import_type == :entity_master && "badge-info",
                       log.import_type == :enrollment && "badge-success",
-                      log.import_type == :sat && "badge-secondary"
+                      log.import_type == :sat && "badge-secondary",
+                      log.import_type == :crd && "badge-neutral"
                     ]}>
                       {import_type_label(log.import_type)}
                     </span>
@@ -271,7 +273,11 @@ defmodule EmisintWeb.Admin.ImportHistoryLive do
 
                   <%!-- Details (metadata + error message) --%>
                   <td class="px-4 py-3 max-w-[200px]">
-                    <div :if={log.error_message} class="text-xs text-error truncate" title={log.error_message}>
+                    <div
+                      :if={log.error_message}
+                      class="text-xs text-error truncate"
+                      title={log.error_message}
+                    >
                       {log.error_message}
                     </div>
                     <div
@@ -387,6 +393,7 @@ defmodule EmisintWeb.Admin.ImportHistoryLive do
   defp import_type_label(:entity_master), do: "Entity Master"
   defp import_type_label(:enrollment), do: "Enrollment"
   defp import_type_label(:sat), do: "SAT"
+  defp import_type_label(:crd), do: "CRD"
   defp import_type_label(other), do: other |> to_string() |> String.replace("_", " ")
 
   defp format_bytes(nil), do: "—"

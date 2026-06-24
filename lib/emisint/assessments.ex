@@ -106,5 +106,11 @@ defmodule Emisint.Assessments do
       define :list_mde_emo_contacts, action: :read
       define :get_mde_emo_contact_by_district_code, action: :read, get_by: [:district_code]
     end
+
+    resource Emisint.Assessments.MdeCompositeResidentDistrict do
+      define :upsert_mde_composite_resident_district, action: :upsert
+      define :list_mde_composite_resident_districts, action: :read
+      define :get_mde_composite_resident_district, action: :read, get_by: [:id]
+    end
   end
 end

@@ -40,3 +40,4 @@ npm-debug.log
 temp/EEM_3-11-25_All_Buildings.csv
 .env.local.sh
 #temp/Open-Active-EMO-and-Auth-Info-List.csv
+FLY_DB_LEGACY_DOWNGRADE.md

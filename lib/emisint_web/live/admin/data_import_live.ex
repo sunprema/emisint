@@ -3,7 +3,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
   require Ash.Query
 
-
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
 
@@ -16,6 +15,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
         Phoenix.PubSub.subscribe(Emisint.PubSub, "sat_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "school_index_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "emo_contact_import")
+        Phoenix.PubSub.subscribe(Emisint.PubSub, "crd_import")
       end
     end
 
@@ -48,7 +48,14 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> assign(:emo_contact_import_result, nil)
       |> assign(:emo_contact_upload, nil)
       |> assign(:emo_contact_upload_progress, nil)
-      |> assign(:import_history, if(user.role == :system_admin, do: load_import_history(), else: []))
+      |> assign(:crd_importing, false)
+      |> assign(:crd_import_result, nil)
+      |> assign(:crd_upload, nil)
+      |> assign(:crd_upload_progress, nil)
+      |> assign(
+        :import_history,
+        if(user.role == :system_admin, do: load_import_history(), else: [])
+      )
 
     {:ok, socket}
   end
@@ -204,6 +211,32 @@ defmodule EmisintWeb.Admin.DataImportLive do
   end
 
   # ---------------------------------------------------------------------------
+  # PubSub — Composite Resident District (CRD) import status updates
+  # ---------------------------------------------------------------------------
+
+  def handle_info({:crd_import_completed, stats}, socket) do
+    {:noreply,
+     socket
+     |> assign(:crd_importing, false)
+     |> assign(:crd_import_result, {:ok, stats})
+     |> assign(:import_history, load_import_history())
+     |> put_flash(
+       :info,
+       "CRD import complete — #{format_number(stats.records)} rows loaded " <>
+         "(#{stats.matched} resident districts matched, #{stats.unmatched} unmatched)."
+     )}
+  end
+
+  def handle_info({:crd_import_failed, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:crd_importing, false)
+     |> assign(:crd_import_result, {:error, reason})
+     |> assign(:import_history, load_import_history())
+     |> put_flash(:error, "CRD import failed: #{reason}")}
+  end
+
+  # ---------------------------------------------------------------------------
   # Events — tenant CSV upload
   # ---------------------------------------------------------------------------
 
@@ -215,7 +248,11 @@ defmodule EmisintWeb.Admin.DataImportLive do
   # Tigris direct-upload events — shared across all MDE import types
   # ---------------------------------------------------------------------------
 
-  def handle_event("file_selected", %{"upload_type" => type, "name" => name, "size" => size}, socket) do
+  def handle_event(
+        "file_selected",
+        %{"upload_type" => type, "name" => name, "size" => size},
+        socket
+      ) do
     upload_key = String.to_existing_atom("#{type}_upload")
     progress_key = String.to_existing_atom("#{type}_upload_progress")
 
@@ -252,7 +289,11 @@ defmodule EmisintWeb.Admin.DataImportLive do
     {:noreply, assign(socket, progress_key, pct)}
   end
 
-  def handle_event("upload_complete", %{"upload_type" => "mde", "key" => key, "filename" => filename}, socket) do
+  def handle_event(
+        "upload_complete",
+        %{"upload_type" => "mde", "key" => key, "filename" => filename},
+        socket
+      ) do
     user = socket.assigns.current_user
     log_id = create_import_log(:mde, filename, socket.assigns.mde_upload, key, user)
 
@@ -270,9 +311,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> put_flash(:info, "MDE import queued: #{filename}. Processing in background…")}
   end
 
-  def handle_event("upload_complete", %{"upload_type" => "entity_master", "key" => key, "filename" => filename}, socket) do
+  def handle_event(
+        "upload_complete",
+        %{"upload_type" => "entity_master", "key" => key, "filename" => filename},
+        socket
+      ) do
     user = socket.assigns.current_user
-    log_id = create_import_log(:entity_master, filename, socket.assigns.entity_master_upload, key, user)
+
+    log_id =
+      create_import_log(:entity_master, filename, socket.assigns.entity_master_upload, key, user)
 
     %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
     |> Emisint.Workers.EntityMasterImportWorker.new()
@@ -288,7 +335,11 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> put_flash(:info, "EntityMaster import queued: #{filename}. Processing in background…")}
   end
 
-  def handle_event("upload_complete", %{"upload_type" => "enrollment", "key" => key, "filename" => filename}, socket) do
+  def handle_event(
+        "upload_complete",
+        %{"upload_type" => "enrollment", "key" => key, "filename" => filename},
+        socket
+      ) do
     user = socket.assigns.current_user
     log_id = create_import_log(:enrollment, filename, socket.assigns.enrollment_upload, key, user)
 
@@ -306,7 +357,11 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> put_flash(:info, "Enrollment import queued: #{filename}. Processing in background…")}
   end
 
-  def handle_event("upload_complete", %{"upload_type" => "sat", "key" => key, "filename" => filename}, socket) do
+  def handle_event(
+        "upload_complete",
+        %{"upload_type" => "sat", "key" => key, "filename" => filename},
+        socket
+      ) do
     user = socket.assigns.current_user
     log_id = create_import_log(:sat, filename, socket.assigns.sat_upload, key, user)
 
@@ -324,9 +379,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> put_flash(:info, "SAT import queued: #{filename}. Processing in background…")}
   end
 
-  def handle_event("upload_complete", %{"upload_type" => "school_index", "key" => key, "filename" => filename}, socket) do
+  def handle_event(
+        "upload_complete",
+        %{"upload_type" => "school_index", "key" => key, "filename" => filename},
+        socket
+      ) do
     user = socket.assigns.current_user
-    log_id = create_import_log(:school_index, filename, socket.assigns.school_index_upload, key, user)
+
+    log_id =
+      create_import_log(:school_index, filename, socket.assigns.school_index_upload, key, user)
 
     %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
     |> Emisint.Workers.MdeSchoolIndexImportWorker.new()
@@ -342,9 +403,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> put_flash(:info, "School Index import queued: #{filename}. Processing in background…")}
   end
 
-  def handle_event("upload_complete", %{"upload_type" => "emo_contact", "key" => key, "filename" => filename}, socket) do
+  def handle_event(
+        "upload_complete",
+        %{"upload_type" => "emo_contact", "key" => key, "filename" => filename},
+        socket
+      ) do
     user = socket.assigns.current_user
-    log_id = create_import_log(:emo_contact, filename, socket.assigns.emo_contact_upload, key, user)
+
+    log_id =
+      create_import_log(:emo_contact, filename, socket.assigns.emo_contact_upload, key, user)
 
     %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
     |> Emisint.Workers.MdeEmoContactImportWorker.new()
@@ -358,6 +425,28 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:emo_contact_upload_progress, nil)
      |> assign(:import_history, load_import_history())
      |> put_flash(:info, "EMO Contact import queued: #{filename}. Processing in background…")}
+  end
+
+  def handle_event(
+        "upload_complete",
+        %{"upload_type" => "crd", "key" => key, "filename" => filename},
+        socket
+      ) do
+    user = socket.assigns.current_user
+    log_id = create_import_log(:crd, filename, socket.assigns.crd_upload, key, user)
+
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
+    |> Emisint.Workers.MdeCrdImportWorker.new()
+    |> Oban.insert!()
+
+    {:noreply,
+     socket
+     |> assign(:crd_importing, true)
+     |> assign(:crd_import_result, nil)
+     |> assign(:crd_upload, nil)
+     |> assign(:crd_upload_progress, nil)
+     |> assign(:import_history, load_import_history())
+     |> put_flash(:info, "CRD import queued: #{filename}. Processing in background…")}
   end
 
   def handle_event("upload_failed", %{"upload_type" => type, "reason" => reason}, socket) do
@@ -418,7 +507,12 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <div id="tigris-mde" phx-hook="TigrisUpload" data-upload-type="mde" class="p-6 space-y-6">
+              <div
+                id="tigris-mde"
+                phx-hook="TigrisUpload"
+                data-upload-type="mde"
+                class="p-6 space-y-6"
+              >
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -595,7 +689,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </div>
                 <a
                   :if={elem(@mde_import_result, 1).error_file}
-                  href={~p"/admin/import/errors/download?#{%{path: elem(@mde_import_result, 1).error_file}}"}
+                  href={
+                    ~p"/admin/import/errors/download?#{%{path: elem(@mde_import_result, 1).error_file}}"
+                  }
                   class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
                 >
                   <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
@@ -647,7 +743,12 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <div id="tigris-entity-master" phx-hook="TigrisUpload" data-upload-type="entity_master" class="p-6 space-y-6">
+              <div
+                id="tigris-entity-master"
+                phx-hook="TigrisUpload"
+                data-upload-type="entity_master"
+                class="p-6 space-y-6"
+              >
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -822,11 +923,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </div>
                 <a
                   :if={elem(@entity_master_import_result, 1).error_file}
-                  href={~p"/admin/import/errors/download?#{%{path: elem(@entity_master_import_result, 1).error_file}}"}
+                  href={
+                    ~p"/admin/import/errors/download?#{%{path: elem(@entity_master_import_result, 1).error_file}}"
+                  }
                   class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
                 >
                   <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
-                  Download error rows — {Path.basename(elem(@entity_master_import_result, 1).error_file)}
+                  Download error rows — {Path.basename(
+                    elem(@entity_master_import_result, 1).error_file
+                  )}
                 </a>
               </div>
 
@@ -875,7 +980,12 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <div id="tigris-enrollment" phx-hook="TigrisUpload" data-upload-type="enrollment" class="p-6 space-y-6">
+              <div
+                id="tigris-enrollment"
+                phx-hook="TigrisUpload"
+                data-upload-type="enrollment"
+                class="p-6 space-y-6"
+              >
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -1059,7 +1169,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </div>
                 <a
                   :if={elem(@enrollment_import_result, 1).error_file}
-                  href={~p"/admin/import/errors/download?#{%{path: elem(@enrollment_import_result, 1).error_file}}"}
+                  href={
+                    ~p"/admin/import/errors/download?#{%{path: elem(@enrollment_import_result, 1).error_file}}"
+                  }
                   class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
                 >
                   <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
@@ -1112,7 +1224,12 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <div id="tigris-sat" phx-hook="TigrisUpload" data-upload-type="sat" class="p-6 space-y-6">
+              <div
+                id="tigris-sat"
+                phx-hook="TigrisUpload"
+                data-upload-type="sat"
+                class="p-6 space-y-6"
+              >
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -1289,7 +1406,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </div>
                 <a
                   :if={elem(@sat_import_result, 1).error_file}
-                  href={~p"/admin/import/errors/download?#{%{path: elem(@sat_import_result, 1).error_file}}"}
+                  href={
+                    ~p"/admin/import/errors/download?#{%{path: elem(@sat_import_result, 1).error_file}}"
+                  }
                   class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
                 >
                   <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
@@ -1342,7 +1461,12 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <div id="tigris-school-index" phx-hook="TigrisUpload" data-upload-type="school_index" class="p-6 space-y-6">
+              <div
+                id="tigris-school-index"
+                phx-hook="TigrisUpload"
+                data-upload-type="school_index"
+                class="p-6 space-y-6"
+              >
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -1512,7 +1636,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                 </dl>
                 <div class="text-xs text-base-content/50 bg-base-50 border border-base-200 px-3 py-2">
-                  School Year: <span class="font-medium">{elem(@school_index_import_result, 1).school_year}</span>
+                  School Year:
+                  <span class="font-medium">{elem(@school_index_import_result, 1).school_year}</span>
                 </div>
                 <div
                   :if={elem(@school_index_import_result, 1).errors > 0}
@@ -1523,11 +1648,15 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </div>
                 <a
                   :if={elem(@school_index_import_result, 1).error_file}
-                  href={~p"/admin/import/errors/download?#{%{path: elem(@school_index_import_result, 1).error_file}}"}
+                  href={
+                    ~p"/admin/import/errors/download?#{%{path: elem(@school_index_import_result, 1).error_file}}"
+                  }
                   class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
                 >
                   <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
-                  Download error rows — {Path.basename(elem(@school_index_import_result, 1).error_file)}
+                  Download error rows — {Path.basename(
+                    elem(@school_index_import_result, 1).error_file
+                  )}
                 </a>
               </div>
 
@@ -1576,7 +1705,12 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </p>
               </div>
 
-              <div id="tigris-emo-contact" phx-hook="TigrisUpload" data-upload-type="emo_contact" class="p-6 space-y-6">
+              <div
+                id="tigris-emo-contact"
+                phx-hook="TigrisUpload"
+                data-upload-type="emo_contact"
+                class="p-6 space-y-6"
+              >
                 <%!-- File upload drop zone --%>
                 <div class="space-y-2">
                   <label class="text-sm font-medium">
@@ -1751,7 +1885,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 </div>
                 <a
                   :if={elem(@emo_contact_import_result, 1).error_file}
-                  href={~p"/admin/import/errors/download?#{%{path: elem(@emo_contact_import_result, 1).error_file}}"}
+                  href={
+                    ~p"/admin/import/errors/download?#{%{path: elem(@emo_contact_import_result, 1).error_file}}"
+                  }
                   class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
                 >
                   <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
@@ -1777,6 +1913,250 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
+        <%!-- ── Section 7.5: Composite Resident District (CRD) (system_admin only) ── --%>
+        <div class="divider"></div>
+        <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
+          <div class="flex items-center gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold">Composite Resident District (CRD)</h2>
+                <span class="badge badge-neutral badge-sm">System Admin</span>
+              </div>
+              <p class="text-xs text-base-content/50 mt-0.5">
+                Import the MDE Composite Resident District report — one row per charter +
+                resident district, recording how many nonresident students a charter enrolls
+                from each district those students would otherwise attend. Resident districts
+                are matched to MDE districts by name; the CRD code is stored as-is.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+            <%!-- CRD upload form — 3 cols --%>
+            <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200">
+                <h3 class="font-semibold">Upload CRD CSV</h3>
+                <p class="text-xs text-base-content/40 mt-0.5">
+                  MDE Composite Resident District export. No school or year selection needed.
+                </p>
+              </div>
+
+              <div
+                id="tigris-crd"
+                phx-hook="TigrisUpload"
+                data-upload-type="crd"
+                class="p-6 space-y-6"
+              >
+                <%!-- File upload drop zone --%>
+                <div class="space-y-2">
+                  <label class="text-sm font-medium">
+                    CRD CSV File <span class="text-error text-xs">*</span>
+                  </label>
+
+                  <div
+                    class="relative border-2 border-dashed border-base-300 hover:border-neutral/40 bg-base-50/50 transition-colors group cursor-pointer"
+                    data-drop-zone
+                  >
+                    <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
+                      <div class="p-3 bg-base-200 group-hover:bg-neutral/10 transition-colors mb-3">
+                        <.icon
+                          name="hero-arrows-right-left"
+                          class="size-7 text-base-content/30 group-hover:text-neutral transition-colors"
+                        />
+                      </div>
+                      <p class="text-sm text-base-content/50">
+                        Drag & drop the CRD CSV here, or{" "}
+                        <span class="text-neutral font-medium hover:underline">browse</span>
+                      </p>
+                      <p class="text-xs text-base-content/30 mt-1">CSV files up to 10 MB</p>
+                      <input type="file" accept=".csv" class="hidden" data-file-input />
+                    </label>
+                  </div>
+
+                  <%!-- File entry preview --%>
+                  <div
+                    :if={@crd_upload}
+                    class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
+                  >
+                    <div class="p-2 bg-neutral/10 shrink-0">
+                      <.icon name="hero-document-text" class="size-4 text-neutral" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium truncate">{@crd_upload.name}</div>
+                      <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
+                        <div
+                          class="bg-neutral h-1 rounded-full transition-all duration-300"
+                          style={"width: #{@crd_upload_progress || 0}%"}
+                        >
+                        </div>
+                      </div>
+                    </div>
+                    <span class="text-xs text-base-content/40 shrink-0">
+                      {format_bytes(@crd_upload.size)}
+                    </span>
+                    <button
+                      type="button"
+                      data-cancel-btn
+                      class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <%!-- Expected format hint --%>
+                <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
+                  <.icon
+                    name="hero-information-circle"
+                    class="size-4 shrink-0 mt-0.5 text-base-content/35"
+                  />
+                  <div>
+                    <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+                    <p class="font-mono leading-relaxed">
+                      School Year, Entity Name, District Code, Other Entity Name,
+                      CRD District Code, Grade, Number of Nonresident Students Enrolled
+                    </p>
+                  </div>
+                </div>
+
+                <%!-- Submit button --%>
+                <button
+                  type="button"
+                  data-import-btn
+                  class={[
+                    "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
+                    !@crd_importing && !is_nil(@crd_upload) &&
+                      "bg-neutral text-neutral-content hover:opacity-90 active:scale-[0.99]",
+                    (@crd_importing || is_nil(@crd_upload)) &&
+                      "bg-neutral/50 text-neutral-content/70 cursor-not-allowed"
+                  ]}
+                  disabled={@crd_importing || is_nil(@crd_upload)}
+                >
+                  <span :if={@crd_importing} class="loading loading-spinner loading-sm"></span>
+                  <.icon :if={!@crd_importing} name="hero-arrow-up-tray" class="size-4" />
+                  {if @crd_importing, do: "Processing…", else: "Import CRD Data"}
+                </button>
+              </div>
+            </div>
+
+            <%!-- CRD import result / status — 2 cols --%>
+            <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
+                <div>
+                  <h3 class="font-semibold">Import Status</h3>
+                  <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
+                </div>
+                <div
+                  :if={@crd_importing}
+                  class="flex items-center gap-1.5 text-xs text-base-content/40"
+                >
+                  <span class="loading loading-spinner loading-xs"></span> Running…
+                </div>
+              </div>
+
+              <%!-- Idle / no result yet --%>
+              <div
+                :if={!@crd_importing && is_nil(@crd_import_result)}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-base-200 mb-3">
+                  <.icon name="hero-arrows-right-left" class="size-6 text-base-content/25" />
+                </div>
+                <p class="text-sm font-medium text-base-content/40">No import yet</p>
+                <p class="text-xs text-base-content/30 mt-1">
+                  Upload a CRD CSV to populate the resident-district table.
+                </p>
+              </div>
+
+              <%!-- In-progress pulse --%>
+              <div
+                :if={@crd_importing}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-neutral/10 mb-3">
+                  <span class="loading loading-spinner loading-md text-neutral"></span>
+                </div>
+                <p class="text-sm font-medium">Processing CRD data…</p>
+                <p class="text-xs text-base-content/40 mt-1">
+                  Upserting resident-district rows in the background.
+                </p>
+              </div>
+
+              <%!-- Success result --%>
+              <div
+                :if={match?({:ok, _}, @crd_import_result)}
+                class="p-6 space-y-4"
+              >
+                <div class="flex items-center gap-2 text-success">
+                  <.icon name="hero-check-circle" class="size-5" />
+                  <span class="font-semibold text-sm">Import completed</span>
+                </div>
+                <dl class="grid grid-cols-2 gap-3">
+                  <.mde_stat
+                    label="Records"
+                    value={format_number(elem(@crd_import_result, 1).records)}
+                    icon="hero-arrows-right-left"
+                  />
+                  <.mde_stat
+                    label="Matched"
+                    value={format_number(elem(@crd_import_result, 1).matched)}
+                    icon="hero-check-circle"
+                  />
+                  <.mde_stat
+                    label="Unmatched"
+                    value={format_number(elem(@crd_import_result, 1).unmatched)}
+                    icon="hero-question-mark-circle"
+                  />
+                  <.mde_stat
+                    label="Errors"
+                    value={elem(@crd_import_result, 1).errors}
+                    icon="hero-exclamation-circle"
+                  />
+                </dl>
+                <div
+                  :if={elem(@crd_import_result, 1).unmatched > 0}
+                  class="flex items-center gap-2 text-xs text-base-content/50 bg-base-50 border border-base-200 px-3 py-2"
+                >
+                  <.icon name="hero-information-circle" class="size-4 shrink-0" />
+                  {elem(@crd_import_result, 1).unmatched} resident districts had no MDE name match (imported without a district link).
+                </div>
+                <div
+                  :if={elem(@crd_import_result, 1).errors > 0}
+                  class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
+                >
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
+                  {elem(@crd_import_result, 1).errors} rows had errors and were skipped.
+                </div>
+                <a
+                  :if={elem(@crd_import_result, 1).error_file}
+                  href={
+                    ~p"/admin/import/errors/download?#{%{path: elem(@crd_import_result, 1).error_file}}"
+                  }
+                  class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
+                >
+                  <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
+                  Download error rows — {Path.basename(elem(@crd_import_result, 1).error_file)}
+                </a>
+              </div>
+
+              <%!-- Error result --%>
+              <div
+                :if={match?({:error, _}, @crd_import_result)}
+                class="p-6"
+              >
+                <div class="flex items-start gap-3 p-4 bg-error/5 border border-error/15">
+                  <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
+                  <div>
+                    <p class="text-sm font-semibold text-error">Import failed</p>
+                    <p class="text-xs text-base-content/50 mt-1 break-all">
+                      {elem(@crd_import_result, 1)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <%!-- ── Section 8: MDE Import History (system_admin only) ──────────────── --%>
         <div :if={@current_user.role == :system_admin} class="space-y-4">
           <div class="divider"></div>
@@ -1788,7 +2168,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
           <div class="bg-base-100 border border-base-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-base-200">
               <h3 class="font-semibold">Recent MDE Uploads</h3>
-              <p class="text-xs text-base-content/40 mt-0.5">Last 50 imports across all MDE data types</p>
+              <p class="text-xs text-base-content/40 mt-0.5">
+                Last 50 imports across all MDE data types
+              </p>
             </div>
 
             <div
@@ -1799,7 +2181,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <.icon name="hero-inbox" class="size-6 text-base-content/25" />
               </div>
               <p class="text-sm font-medium text-base-content/40">No import history yet</p>
-              <p class="text-xs text-base-content/30 mt-1">MDE uploads will appear here once submitted.</p>
+              <p class="text-xs text-base-content/30 mt-1">
+                MDE uploads will appear here once submitted.
+              </p>
             </div>
 
             <div :if={@import_history != []} class="overflow-x-auto">
@@ -1830,7 +2214,8 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         log.import_type == :enrollment && "badge-success",
                         log.import_type == :sat && "badge-secondary",
                         log.import_type == :school_index && "badge-primary",
-                        log.import_type == :emo_contact && "badge-accent"
+                        log.import_type == :emo_contact && "badge-accent",
+                        log.import_type == :crd && "badge-neutral"
                       ]}>
                         {log.import_type |> to_string() |> String.replace("_", " ") |> String.upcase()}
                       </span>
@@ -1847,7 +2232,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <td class="px-4 py-3 tabular-nums">
                       {if log.records_processed, do: format_number(log.records_processed), else: "—"}
                     </td>
-                    <td class={["px-4 py-3 tabular-nums", log.error_count && log.error_count > 0 && "text-error"]}>
+                    <td class={[
+                      "px-4 py-3 tabular-nums",
+                      log.error_count && log.error_count > 0 && "text-error"
+                    ]}>
                       {if log.error_count, do: log.error_count, else: "—"}
                     </td>
                     <td class="px-4 py-3 text-base-content/60">
@@ -1961,7 +2349,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
   defp format_datetime(dt) do
     Calendar.strftime(dt, "%b %d, %Y %H:%M")
   end
-
 
   defp load_import_history do
     Emisint.Assessments.MdeImportLog
