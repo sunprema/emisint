@@ -16,6 +16,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
         Phoenix.PubSub.subscribe(Emisint.PubSub, "school_index_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "emo_contact_import")
         Phoenix.PubSub.subscribe(Emisint.PubSub, "crd_import")
+        Phoenix.PubSub.subscribe(Emisint.PubSub, "sss_import")
       end
     end
 
@@ -52,6 +53,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
       |> assign(:crd_import_result, nil)
       |> assign(:crd_upload, nil)
       |> assign(:crd_upload_progress, nil)
+      |> assign(:sss_importing, false)
+      |> assign(:sss_import_result, nil)
+      |> assign(:sss_upload, nil)
+      |> assign(:sss_upload_progress, nil)
       |> assign(
         :import_history,
         if(user.role == :system_admin, do: load_import_history(), else: [])
@@ -234,6 +239,32 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> assign(:crd_import_result, {:error, reason})
      |> assign(:import_history, load_import_history())
      |> put_flash(:error, "CRD import failed: #{reason}")}
+  end
+
+  # ---------------------------------------------------------------------------
+  # PubSub — SSS import status updates
+  # ---------------------------------------------------------------------------
+
+  def handle_info({:sss_import_completed, stats}, socket) do
+    {:noreply,
+     socket
+     |> assign(:sss_importing, false)
+     |> assign(:sss_import_result, {:ok, stats})
+     |> assign(:import_history, load_import_history())
+     |> put_flash(
+       :info,
+       "SSS import complete — #{format_number(stats.records)} memberships loaded " <>
+         "(#{stats.groups} groups, #{stats.schools} schools, #{stats.warnings} warnings)."
+     )}
+  end
+
+  def handle_info({:sss_import_failed, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:sss_importing, false)
+     |> assign(:sss_import_result, {:error, reason})
+     |> assign(:import_history, load_import_history())
+     |> put_flash(:error, "SSS import failed: #{reason}")}
   end
 
   # ---------------------------------------------------------------------------
@@ -449,6 +480,28 @@ defmodule EmisintWeb.Admin.DataImportLive do
      |> put_flash(:info, "CRD import queued: #{filename}. Processing in background…")}
   end
 
+  def handle_event(
+        "upload_complete",
+        %{"upload_type" => "sss", "key" => key, "filename" => filename},
+        socket
+      ) do
+    user = socket.assigns.current_user
+    log_id = create_import_log(:sss, filename, socket.assigns.sss_upload, key, user)
+
+    %{"bucket" => Emisint.Storage.bucket(), "key" => key, "log_id" => log_id}
+    |> Emisint.Workers.MdeSssImportWorker.new()
+    |> Oban.insert!()
+
+    {:noreply,
+     socket
+     |> assign(:sss_importing, true)
+     |> assign(:sss_import_result, nil)
+     |> assign(:sss_upload, nil)
+     |> assign(:sss_upload_progress, nil)
+     |> assign(:import_history, load_import_history())
+     |> put_flash(:info, "SSS import queued: #{filename}. Processing in background…")}
+  end
+
   def handle_event("upload_failed", %{"upload_type" => type, "reason" => reason}, socket) do
     upload_key = String.to_existing_atom("#{type}_upload")
     progress_key = String.to_existing_atom("#{type}_upload_progress")
@@ -473,8 +526,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
           <div class="p-2.5 bg-primary/10 border border-primary/20">
             <.icon name="hero-arrow-up-tray" class="size-6 text-primary" />
           </div>
+
           <div>
             <h1 class="text-2xl font-bold tracking-tight">Data Import</h1>
+
             <p class="text-sm text-base-content/50 mt-0.5">
               Upload CSV exports to populate assessment data.
             </p>
@@ -483,6 +538,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
 
         <%!-- ── Section 2: MDE State Assessment Data (system_admin only) ─────────── --%>
         <div class="divider"></div>
+
         <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
           <div class="flex items-center gap-3">
             <div>
@@ -490,6 +546,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <h2 class="text-base font-semibold">MDE State Assessment Data</h2>
                 <span class="badge badge-warning badge-sm">System Admin</span>
               </div>
+
               <p class="text-xs text-base-content/50 mt-0.5">
                 Import statewide M-STEP, PSAT, and SAT results from the MDE public CSV export.
                 Loads into shared reference tables — all tenants benefit from a single import.
@@ -502,6 +559,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
             <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200">
                 <h3 class="font-semibold">Upload MDE Export CSV</h3>
+
                 <p class="text-xs text-base-content/40 mt-0.5">
                   Large files are processed as a background job. No school or year selection needed.
                 </p>
@@ -518,7 +576,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <label class="text-sm font-medium">
                     MDE CSV File <span class="text-error text-xs">*</span>
                   </label>
-
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-warning/40 bg-base-50/50 transition-colors group cursor-pointer"
                     data-drop-zone
@@ -530,15 +587,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
                           class="size-7 text-base-content/30 group-hover:text-warning transition-colors"
                         />
                       </div>
+
                       <p class="text-sm text-base-content/50">
                         Drag & drop the MDE export here, or{" "}
                         <span class="text-warning font-medium hover:underline">browse</span>
                       </p>
+
                       <p class="text-xs text-base-content/30 mt-1">CSV files up to 300 MB</p>
                       <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
-
                   <%!-- File entry preview --%>
                   <div
                     :if={@mde_upload}
@@ -547,8 +605,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <div class="p-2 bg-warning/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-warning" />
                     </div>
+
                     <div class="flex-1 min-w-0">
                       <div class="text-sm font-medium truncate">{@mde_upload.name}</div>
+
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-warning h-1 rounded-full transition-all duration-300"
@@ -557,6 +617,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         </div>
                       </div>
                     </div>
+
                     <span class="text-xs text-base-content/40 shrink-0">
                       {format_bytes(@mde_upload.size)}
                     </span>
@@ -569,7 +630,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </button>
                   </div>
                 </div>
-
                 <%!-- Expected format hint --%>
                 <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
                   <.icon
@@ -578,6 +638,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   <div>
                     <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+
                     <p class="font-mono leading-relaxed">
                       SchoolYear, TestType, TestPopulation, ISDCode, DistrictCode,
                       BuildingCode, GradeContentTested, Subject, ReportCategory,
@@ -585,7 +646,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </p>
                   </div>
                 </div>
-
                 <%!-- Submit button --%>
                 <button
                   type="button"
@@ -600,19 +660,21 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   disabled={@mde_importing || is_nil(@mde_upload)}
                 >
                   <span :if={@mde_importing} class="loading loading-spinner loading-sm"></span>
-                  <.icon :if={!@mde_importing} name="hero-arrow-up-tray" class="size-4" />
-                  {if @mde_importing, do: "Processing…", else: "Import MDE Data"}
+                  <.icon :if={!@mde_importing} name="hero-arrow-up-tray" class="size-4" /> {if @mde_importing,
+                    do: "Processing…",
+                    else: "Import MDE Data"}
                 </button>
               </div>
             </div>
-
             <%!-- MDE import result / status — 2 cols --%>
             <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
                 <div>
                   <h3 class="font-semibold">Import Status</h3>
+
                   <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
                 </div>
+
                 <div
                   :if={@mde_importing}
                   class="flex items-center gap-1.5 text-xs text-base-content/40"
@@ -620,7 +682,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <span class="loading loading-spinner loading-xs"></span> Running…
                 </div>
               </div>
-
               <%!-- Idle / no result yet --%>
               <div
                 :if={!@mde_importing && is_nil(@mde_import_result)}
@@ -629,12 +690,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-base-200 mb-3">
                   <.icon name="hero-chart-bar" class="size-6 text-base-content/25" />
                 </div>
+
                 <p class="text-sm font-medium text-base-content/40">No import yet</p>
+
                 <p class="text-xs text-base-content/30 mt-1">
                   Upload an MDE export CSV to populate the reference tables.
                 </p>
               </div>
-
               <%!-- In-progress pulse --%>
               <div
                 :if={@mde_importing}
@@ -643,12 +705,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-warning/10 mb-3">
                   <span class="loading loading-spinner loading-md text-warning"></span>
                 </div>
+
                 <p class="text-sm font-medium">Processing MDE data…</p>
+
                 <p class="text-xs text-base-content/40 mt-1">
                   Upserting ISDs, districts, buildings, and results in the background.
                 </p>
               </div>
-
               <%!-- Success result --%>
               <div
                 :if={match?({:ok, _}, @mde_import_result)}
@@ -658,6 +721,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-check-circle" class="size-5" />
                   <span class="font-semibold text-sm">Import completed</span>
                 </div>
+
                 <dl class="grid grid-cols-2 gap-3">
                   <.mde_stat
                     label="ISDs"
@@ -680,13 +744,17 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     icon="hero-chart-bar"
                   />
                 </dl>
+
                 <div
                   :if={elem(@mde_import_result, 1).errors > 0}
                   class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
                 >
-                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
-                  {elem(@mde_import_result, 1).errors} rows had errors and were skipped.
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" /> {elem(
+                    @mde_import_result,
+                    1
+                  ).errors} rows had errors and were skipped.
                 </div>
+
                 <a
                   :if={elem(@mde_import_result, 1).error_file}
                   href={
@@ -698,7 +766,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   Download error rows — {Path.basename(elem(@mde_import_result, 1).error_file)}
                 </a>
               </div>
-
               <%!-- Error result --%>
               <div
                 :if={match?({:error, _}, @mde_import_result)}
@@ -708,6 +775,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
                   <div>
                     <p class="text-sm font-semibold text-error">Import failed</p>
+
                     <p class="text-xs text-base-content/50 mt-1 break-all">
                       {elem(@mde_import_result, 1)}
                     </p>
@@ -717,8 +785,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
+
         <%!-- ── Section 3: MDE EntityMaster (system_admin only) ─────────────────── --%>
         <div class="divider"></div>
+
         <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
           <div class="flex items-center gap-3">
             <div>
@@ -726,6 +796,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <h2 class="text-base font-semibold">MDE EntityMaster</h2>
                 <span class="badge badge-warning badge-sm">System Admin</span>
               </div>
+
               <p class="text-xs text-base-content/50 mt-0.5">
                 Import the MDE daily EntityMaster CSV — the complete registry of Michigan
                 school entities. Upserts into a shared reference table on entity code.
@@ -738,6 +809,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
             <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200">
                 <h3 class="font-semibold">Upload EntityMaster CSV</h3>
+
                 <p class="text-xs text-base-content/40 mt-0.5">
                   Daily MDE feed. No school or year selection needed.
                 </p>
@@ -754,7 +826,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <label class="text-sm font-medium">
                     EntityMaster CSV File <span class="text-error text-xs">*</span>
                   </label>
-
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-info/40 bg-base-50/50 transition-colors group cursor-pointer"
                     data-drop-zone
@@ -766,15 +837,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
                           class="size-7 text-base-content/30 group-hover:text-info transition-colors"
                         />
                       </div>
+
                       <p class="text-sm text-base-content/50">
                         Drag & drop the EntityMaster CSV here, or{" "}
                         <span class="text-info font-medium hover:underline">browse</span>
                       </p>
+
                       <p class="text-xs text-base-content/30 mt-1">CSV files up to 250 MB</p>
                       <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
-
                   <%!-- File entry preview --%>
                   <div
                     :if={@entity_master_upload}
@@ -783,8 +855,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <div class="p-2 bg-info/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-info" />
                     </div>
+
                     <div class="flex-1 min-w-0">
                       <div class="text-sm font-medium truncate">{@entity_master_upload.name}</div>
+
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-info h-1 rounded-full transition-all duration-300"
@@ -793,6 +867,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         </div>
                       </div>
                     </div>
+
                     <span class="text-xs text-base-content/40 shrink-0">
                       {format_bytes(@entity_master_upload.size)}
                     </span>
@@ -805,7 +880,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </button>
                   </div>
                 </div>
-
                 <%!-- Expected format hint --%>
                 <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
                   <.icon
@@ -814,6 +888,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   <div>
                     <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+
                     <p class="font-mono leading-relaxed">
                       ISD Code, District Code, Entity Code, Entity Official Name,
                       Entity Type, Entity Status, Entity Open Date,
@@ -821,7 +896,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </p>
                   </div>
                 </div>
-
                 <%!-- Submit button --%>
                 <button
                   type="button"
@@ -844,19 +918,19 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     :if={!@entity_master_importing}
                     name="hero-arrow-up-tray"
                     class="size-4"
-                  />
-                  {if @entity_master_importing, do: "Processing…", else: "Import EntityMaster"}
+                  /> {if @entity_master_importing, do: "Processing…", else: "Import EntityMaster"}
                 </button>
               </div>
             </div>
-
             <%!-- EntityMaster import result / status — 2 cols --%>
             <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
                 <div>
                   <h3 class="font-semibold">Import Status</h3>
+
                   <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
                 </div>
+
                 <div
                   :if={@entity_master_importing}
                   class="flex items-center gap-1.5 text-xs text-base-content/40"
@@ -864,7 +938,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <span class="loading loading-spinner loading-xs"></span> Running…
                 </div>
               </div>
-
               <%!-- Idle / no result yet --%>
               <div
                 :if={!@entity_master_importing && is_nil(@entity_master_import_result)}
@@ -873,12 +946,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-base-200 mb-3">
                   <.icon name="hero-building-office-2" class="size-6 text-base-content/25" />
                 </div>
+
                 <p class="text-sm font-medium text-base-content/40">No import yet</p>
+
                 <p class="text-xs text-base-content/30 mt-1">
                   Upload an EntityMaster CSV to populate the reference table.
                 </p>
               </div>
-
               <%!-- In-progress pulse --%>
               <div
                 :if={@entity_master_importing}
@@ -887,12 +961,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-info/10 mb-3">
                   <span class="loading loading-spinner loading-md text-info"></span>
                 </div>
+
                 <p class="text-sm font-medium">Processing EntityMaster data…</p>
+
                 <p class="text-xs text-base-content/40 mt-1">
                   Upserting entity records in the background.
                 </p>
               </div>
-
               <%!-- Success result --%>
               <div
                 :if={match?({:ok, _}, @entity_master_import_result)}
@@ -902,6 +977,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-check-circle" class="size-5" />
                   <span class="font-semibold text-sm">Import completed</span>
                 </div>
+
                 <dl class="grid grid-cols-2 gap-3">
                   <.mde_stat
                     label="Entities"
@@ -914,13 +990,17 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     icon="hero-exclamation-circle"
                   />
                 </dl>
+
                 <div
                   :if={elem(@entity_master_import_result, 1).errors > 0}
                   class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
                 >
-                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
-                  {elem(@entity_master_import_result, 1).errors} rows had errors and were skipped.
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" /> {elem(
+                    @entity_master_import_result,
+                    1
+                  ).errors} rows had errors and were skipped.
                 </div>
+
                 <a
                   :if={elem(@entity_master_import_result, 1).error_file}
                   href={
@@ -934,7 +1014,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   )}
                 </a>
               </div>
-
               <%!-- Error result --%>
               <div
                 :if={match?({:error, _}, @entity_master_import_result)}
@@ -944,6 +1023,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
                   <div>
                     <p class="text-sm font-semibold text-error">Import failed</p>
+
                     <p class="text-xs text-base-content/50 mt-1 break-all">
                       {elem(@entity_master_import_result, 1)}
                     </p>
@@ -953,8 +1033,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
+
         <%!-- ── Section 4: MDE Enrollment (system_admin only) ──────────────────────── --%>
         <div class="divider"></div>
+
         <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
           <div class="flex items-center gap-3">
             <div>
@@ -962,6 +1044,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <h2 class="text-base font-semibold">MDE Student Enrollment</h2>
                 <span class="badge badge-success badge-sm">System Admin</span>
               </div>
+
               <p class="text-xs text-base-content/50 mt-0.5">
                 Import the MDE annual enrollment CSV — building, district, and ISD-level
                 counts by grade, race/ethnicity, and subgroup. Upserts one row per entity
@@ -975,6 +1058,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
             <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200">
                 <h3 class="font-semibold">Upload Enrollment CSV</h3>
+
                 <p class="text-xs text-base-content/40 mt-0.5">
                   Annual MDE enrollment export. No school or year selection needed.
                 </p>
@@ -991,7 +1075,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <label class="text-sm font-medium">
                     Enrollment CSV File <span class="text-error text-xs">*</span>
                   </label>
-
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-success/40 bg-base-50/50 transition-colors group cursor-pointer"
                     data-drop-zone
@@ -1003,15 +1086,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
                           class="size-7 text-base-content/30 group-hover:text-success transition-colors"
                         />
                       </div>
+
                       <p class="text-sm text-base-content/50">
                         Drag & drop the Enrollment CSV here, or{" "}
                         <span class="text-success font-medium hover:underline">browse</span>
                       </p>
+
                       <p class="text-xs text-base-content/30 mt-1">CSV files up to 250 MB</p>
                       <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
-
                   <%!-- File entry preview --%>
                   <div
                     :if={@enrollment_upload}
@@ -1020,8 +1104,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <div class="p-2 bg-success/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-success" />
                     </div>
+
                     <div class="flex-1 min-w-0">
                       <div class="text-sm font-medium truncate">{@enrollment_upload.name}</div>
+
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-success h-1 rounded-full transition-all duration-300"
@@ -1030,6 +1116,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         </div>
                       </div>
                     </div>
+
                     <span class="text-xs text-base-content/40 shrink-0">
                       {format_bytes(@enrollment_upload.size)}
                     </span>
@@ -1042,7 +1129,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </button>
                   </div>
                 </div>
-
                 <%!-- Expected format hint --%>
                 <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
                   <.icon
@@ -1051,6 +1137,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   <div>
                     <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+
                     <p class="font-mono leading-relaxed">
                       SchoolYear, ISDCode, ISDName, DistrictCode, DistrictName,
                       BuildingCode, BuildingName, CountyCode, CountyName, EntityType,
@@ -1067,7 +1154,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </p>
                   </div>
                 </div>
-
                 <%!-- Submit button --%>
                 <button
                   type="button"
@@ -1090,19 +1176,19 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     :if={!@enrollment_importing}
                     name="hero-arrow-up-tray"
                     class="size-4"
-                  />
-                  {if @enrollment_importing, do: "Processing…", else: "Import Enrollment"}
+                  /> {if @enrollment_importing, do: "Processing…", else: "Import Enrollment"}
                 </button>
               </div>
             </div>
-
             <%!-- Enrollment import result / status — 2 cols --%>
             <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
                 <div>
                   <h3 class="font-semibold">Import Status</h3>
+
                   <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
                 </div>
+
                 <div
                   :if={@enrollment_importing}
                   class="flex items-center gap-1.5 text-xs text-base-content/40"
@@ -1110,7 +1196,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <span class="loading loading-spinner loading-xs"></span> Running…
                 </div>
               </div>
-
               <%!-- Idle / no result yet --%>
               <div
                 :if={!@enrollment_importing && is_nil(@enrollment_import_result)}
@@ -1119,12 +1204,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-base-200 mb-3">
                   <.icon name="hero-users" class="size-6 text-base-content/25" />
                 </div>
+
                 <p class="text-sm font-medium text-base-content/40">No import yet</p>
+
                 <p class="text-xs text-base-content/30 mt-1">
                   Upload an enrollment CSV to populate the enrollment table.
                 </p>
               </div>
-
               <%!-- In-progress pulse --%>
               <div
                 :if={@enrollment_importing}
@@ -1133,12 +1219,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-success/10 mb-3">
                   <span class="loading loading-spinner loading-md text-success"></span>
                 </div>
+
                 <p class="text-sm font-medium">Processing enrollment data…</p>
+
                 <p class="text-xs text-base-content/40 mt-1">
                   Upserting enrollment records in the background.
                 </p>
               </div>
-
               <%!-- Success result --%>
               <div
                 :if={match?({:ok, _}, @enrollment_import_result)}
@@ -1148,6 +1235,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-check-circle" class="size-5" />
                   <span class="font-semibold text-sm">Import completed</span>
                 </div>
+
                 <dl class="grid grid-cols-2 gap-3">
                   <.mde_stat
                     label="Records"
@@ -1160,13 +1248,17 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     icon="hero-exclamation-circle"
                   />
                 </dl>
+
                 <div
                   :if={elem(@enrollment_import_result, 1).errors > 0}
                   class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
                 >
-                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
-                  {elem(@enrollment_import_result, 1).errors} rows had errors and were skipped.
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" /> {elem(
+                    @enrollment_import_result,
+                    1
+                  ).errors} rows had errors and were skipped.
                 </div>
+
                 <a
                   :if={elem(@enrollment_import_result, 1).error_file}
                   href={
@@ -1178,7 +1270,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   Download error rows — {Path.basename(elem(@enrollment_import_result, 1).error_file)}
                 </a>
               </div>
-
               <%!-- Error result --%>
               <div
                 :if={match?({:error, _}, @enrollment_import_result)}
@@ -1188,6 +1279,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
                   <div>
                     <p class="text-sm font-semibold text-error">Import failed</p>
+
                     <p class="text-xs text-base-content/50 mt-1 break-all">
                       {elem(@enrollment_import_result, 1)}
                     </p>
@@ -1197,8 +1289,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
+
         <%!-- ── Section 5: SAT Assessment Data (system_admin only) ──────────────── --%>
         <div class="divider"></div>
+
         <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
           <div class="flex items-center gap-3">
             <div>
@@ -1206,6 +1300,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <h2 class="text-base font-semibold">SAT Assessment Data</h2>
                 <span class="badge badge-secondary badge-sm">System Admin</span>
               </div>
+
               <p class="text-xs text-base-content/50 mt-0.5">
                 Import the MDE SAT college-readiness aggregate CSV — building, district, and
                 ISD-level results by subgroup. Upserts one row per entity per school year per
@@ -1219,6 +1314,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
             <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200">
                 <h3 class="font-semibold">Upload SAT CSV</h3>
+
                 <p class="text-xs text-base-content/40 mt-0.5">
                   MDE SAT aggregate export. No school or year selection needed.
                 </p>
@@ -1235,7 +1331,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <label class="text-sm font-medium">
                     SAT CSV File <span class="text-error text-xs">*</span>
                   </label>
-
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-secondary/40 bg-base-50/50 transition-colors group cursor-pointer"
                     data-drop-zone
@@ -1247,15 +1342,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
                           class="size-7 text-base-content/30 group-hover:text-secondary transition-colors"
                         />
                       </div>
+
                       <p class="text-sm text-base-content/50">
                         Drag & drop the SAT CSV here, or{" "}
                         <span class="text-secondary font-medium hover:underline">browse</span>
                       </p>
+
                       <p class="text-xs text-base-content/30 mt-1">CSV files up to 250 MB</p>
                       <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
-
                   <%!-- File entry preview --%>
                   <div
                     :if={@sat_upload}
@@ -1264,8 +1360,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <div class="p-2 bg-secondary/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-secondary" />
                     </div>
+
                     <div class="flex-1 min-w-0">
                       <div class="text-sm font-medium truncate">{@sat_upload.name}</div>
+
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-secondary h-1 rounded-full transition-all duration-300"
@@ -1274,6 +1372,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         </div>
                       </div>
                     </div>
+
                     <span class="text-xs text-base-content/40 shrink-0">
                       {format_bytes(@sat_upload.size)}
                     </span>
@@ -1286,7 +1385,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </button>
                   </div>
                 </div>
-
                 <%!-- Expected format hint --%>
                 <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
                   <.icon
@@ -1295,6 +1393,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   <div>
                     <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+
                     <p class="font-mono leading-relaxed">
                       SchoolYear, ISDCode, ISDName, DistrictCode, DistrictName,
                       BuildingCode, BuildingName, CountyCode, CountyName, EntityType,
@@ -1304,7 +1403,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </p>
                   </div>
                 </div>
-
                 <%!-- Submit button --%>
                 <button
                   type="button"
@@ -1327,19 +1425,19 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     :if={!@sat_importing}
                     name="hero-arrow-up-tray"
                     class="size-4"
-                  />
-                  {if @sat_importing, do: "Processing…", else: "Import SAT Data"}
+                  /> {if @sat_importing, do: "Processing…", else: "Import SAT Data"}
                 </button>
               </div>
             </div>
-
             <%!-- SAT import result / status — 2 cols --%>
             <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
                 <div>
                   <h3 class="font-semibold">Import Status</h3>
+
                   <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
                 </div>
+
                 <div
                   :if={@sat_importing}
                   class="flex items-center gap-1.5 text-xs text-base-content/40"
@@ -1347,7 +1445,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <span class="loading loading-spinner loading-xs"></span> Running…
                 </div>
               </div>
-
               <%!-- Idle / no result yet --%>
               <div
                 :if={!@sat_importing && is_nil(@sat_import_result)}
@@ -1356,12 +1453,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-base-200 mb-3">
                   <.icon name="hero-academic-cap" class="size-6 text-base-content/25" />
                 </div>
+
                 <p class="text-sm font-medium text-base-content/40">No import yet</p>
+
                 <p class="text-xs text-base-content/30 mt-1">
                   Upload a SAT CSV to populate the results table.
                 </p>
               </div>
-
               <%!-- In-progress pulse --%>
               <div
                 :if={@sat_importing}
@@ -1370,12 +1468,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-secondary/10 mb-3">
                   <span class="loading loading-spinner loading-md text-secondary"></span>
                 </div>
+
                 <p class="text-sm font-medium">Processing SAT data…</p>
+
                 <p class="text-xs text-base-content/40 mt-1">
                   Upserting SAT results in the background.
                 </p>
               </div>
-
               <%!-- Success result --%>
               <div
                 :if={match?({:ok, _}, @sat_import_result)}
@@ -1385,6 +1484,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-check-circle" class="size-5" />
                   <span class="font-semibold text-sm">Import completed</span>
                 </div>
+
                 <dl class="grid grid-cols-2 gap-3">
                   <.mde_stat
                     label="Records"
@@ -1397,13 +1497,17 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     icon="hero-exclamation-circle"
                   />
                 </dl>
+
                 <div
                   :if={elem(@sat_import_result, 1).errors > 0}
                   class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
                 >
-                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
-                  {elem(@sat_import_result, 1).errors} rows had errors and were skipped.
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" /> {elem(
+                    @sat_import_result,
+                    1
+                  ).errors} rows had errors and were skipped.
                 </div>
+
                 <a
                   :if={elem(@sat_import_result, 1).error_file}
                   href={
@@ -1415,7 +1519,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   Download error rows — {Path.basename(elem(@sat_import_result, 1).error_file)}
                 </a>
               </div>
-
               <%!-- Error result --%>
               <div
                 :if={match?({:error, _}, @sat_import_result)}
@@ -1425,6 +1528,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
                   <div>
                     <p class="text-sm font-semibold text-error">Import failed</p>
+
                     <p class="text-xs text-base-content/50 mt-1 break-all">
                       {elem(@sat_import_result, 1)}
                     </p>
@@ -1434,8 +1538,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
+
         <%!-- ── Section 6: MDE School Index Results (system_admin only) ──────────── --%>
         <div class="divider"></div>
+
         <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
           <div class="flex items-center gap-3">
             <div>
@@ -1443,6 +1549,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <h2 class="text-base font-semibold">MDE School Index Results</h2>
                 <span class="badge badge-primary badge-sm">System Admin</span>
               </div>
+
               <p class="text-xs text-base-content/50 mt-0.5">
                 Import the MDE annual School Index Results CSV — building-level accountability
                 index scores (overall, growth, proficiency, graduation, EL progress, and support
@@ -1456,6 +1563,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
             <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200">
                 <h3 class="font-semibold">Upload School Index CSV</h3>
+
                 <p class="text-xs text-base-content/40 mt-0.5">
                   Annual MDE School Index export. No school or year selection needed.
                 </p>
@@ -1472,7 +1580,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <label class="text-sm font-medium">
                     School Index CSV File <span class="text-error text-xs">*</span>
                   </label>
-
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-primary/40 bg-base-50/50 transition-colors group cursor-pointer"
                     data-drop-zone
@@ -1484,15 +1591,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
                           class="size-7 text-base-content/30 group-hover:text-primary transition-colors"
                         />
                       </div>
+
                       <p class="text-sm text-base-content/50">
                         Drag & drop the School Index CSV here, or{" "}
                         <span class="text-primary font-medium hover:underline">browse</span>
                       </p>
+
                       <p class="text-xs text-base-content/30 mt-1">CSV files up to 50 MB</p>
                       <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
-
                   <%!-- File entry preview --%>
                   <div
                     :if={@school_index_upload}
@@ -1501,8 +1609,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <div class="p-2 bg-primary/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-primary" />
                     </div>
+
                     <div class="flex-1 min-w-0">
                       <div class="text-sm font-medium truncate">{@school_index_upload.name}</div>
+
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-primary h-1 rounded-full transition-all duration-300"
@@ -1511,6 +1621,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         </div>
                       </div>
                     </div>
+
                     <span class="text-xs text-base-content/40 shrink-0">
                       {format_bytes(@school_index_upload.size)}
                     </span>
@@ -1523,7 +1634,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </button>
                   </div>
                 </div>
-
                 <%!-- Expected format hint --%>
                 <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
                   <.icon
@@ -1532,6 +1642,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   <div>
                     <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+
                     <p class="font-mono leading-relaxed">
                       SchoolYear, ISDCode, ISDName, DistrictCode, DistrictName,
                       BuildingCode, BuildingName, CountyCode, CountyName, EntityType,
@@ -1542,7 +1653,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </p>
                   </div>
                 </div>
-
                 <%!-- Submit button --%>
                 <button
                   type="button"
@@ -1565,19 +1675,19 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     :if={!@school_index_importing}
                     name="hero-arrow-up-tray"
                     class="size-4"
-                  />
-                  {if @school_index_importing, do: "Processing…", else: "Import School Index"}
+                  /> {if @school_index_importing, do: "Processing…", else: "Import School Index"}
                 </button>
               </div>
             </div>
-
             <%!-- School Index import result / status — 2 cols --%>
             <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
                 <div>
                   <h3 class="font-semibold">Import Status</h3>
+
                   <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
                 </div>
+
                 <div
                   :if={@school_index_importing}
                   class="flex items-center gap-1.5 text-xs text-base-content/40"
@@ -1585,7 +1695,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <span class="loading loading-spinner loading-xs"></span> Running…
                 </div>
               </div>
-
               <%!-- Idle / no result yet --%>
               <div
                 :if={!@school_index_importing && is_nil(@school_index_import_result)}
@@ -1594,12 +1703,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-base-200 mb-3">
                   <.icon name="hero-trophy" class="size-6 text-base-content/25" />
                 </div>
+
                 <p class="text-sm font-medium text-base-content/40">No import yet</p>
+
                 <p class="text-xs text-base-content/30 mt-1">
                   Upload a School Index CSV to populate the results table.
                 </p>
               </div>
-
               <%!-- In-progress pulse --%>
               <div
                 :if={@school_index_importing}
@@ -1608,12 +1718,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-primary/10 mb-3">
                   <span class="loading loading-spinner loading-md text-primary"></span>
                 </div>
+
                 <p class="text-sm font-medium">Processing School Index data…</p>
+
                 <p class="text-xs text-base-content/40 mt-1">
                   Upserting index scores per building in the background.
                 </p>
               </div>
-
               <%!-- Success result --%>
               <div
                 :if={match?({:ok, _}, @school_index_import_result)}
@@ -1623,6 +1734,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-check-circle" class="size-5" />
                   <span class="font-semibold text-sm">Import completed</span>
                 </div>
+
                 <dl class="grid grid-cols-2 gap-3">
                   <.mde_stat
                     label="Records"
@@ -1635,17 +1747,22 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     icon="hero-exclamation-circle"
                   />
                 </dl>
+
                 <div class="text-xs text-base-content/50 bg-base-50 border border-base-200 px-3 py-2">
                   School Year:
                   <span class="font-medium">{elem(@school_index_import_result, 1).school_year}</span>
                 </div>
+
                 <div
                   :if={elem(@school_index_import_result, 1).errors > 0}
                   class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
                 >
-                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
-                  {elem(@school_index_import_result, 1).errors} rows had errors and were skipped.
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" /> {elem(
+                    @school_index_import_result,
+                    1
+                  ).errors} rows had errors and were skipped.
                 </div>
+
                 <a
                   :if={elem(@school_index_import_result, 1).error_file}
                   href={
@@ -1659,7 +1776,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   )}
                 </a>
               </div>
-
               <%!-- Error result --%>
               <div
                 :if={match?({:error, _}, @school_index_import_result)}
@@ -1669,6 +1785,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
                   <div>
                     <p class="text-sm font-semibold text-error">Import failed</p>
+
                     <p class="text-xs text-base-content/50 mt-1 break-all">
                       {elem(@school_index_import_result, 1)}
                     </p>
@@ -1678,8 +1795,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
+
         <%!-- ── Section 7: EMO & Auth Contact List (system_admin only) ──────────── --%>
         <div class="divider"></div>
+
         <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
           <div class="flex items-center gap-3">
             <div>
@@ -1687,6 +1806,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <h2 class="text-base font-semibold">EMO & Authorizer Contact List</h2>
                 <span class="badge badge-accent badge-sm">System Admin</span>
               </div>
+
               <p class="text-xs text-base-content/50 mt-0.5">
                 Import the MDE Open/Active EMO and Authorizer contact list — one row per
                 PSA district code, mapping each school to its Education Service Provider /
@@ -1700,6 +1820,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
             <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200">
                 <h3 class="font-semibold">Upload EMO Contact CSV</h3>
+
                 <p class="text-xs text-base-content/40 mt-0.5">
                   MDE Open/Active EMO and Auth Info list. No school or year selection needed.
                 </p>
@@ -1716,7 +1837,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <label class="text-sm font-medium">
                     EMO Contact CSV File <span class="text-error text-xs">*</span>
                   </label>
-
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-accent/40 bg-base-50/50 transition-colors group cursor-pointer"
                     data-drop-zone
@@ -1728,15 +1848,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
                           class="size-7 text-base-content/30 group-hover:text-accent transition-colors"
                         />
                       </div>
+
                       <p class="text-sm text-base-content/50">
                         Drag & drop the EMO Contact CSV here, or{" "}
                         <span class="text-accent font-medium hover:underline">browse</span>
                       </p>
+
                       <p class="text-xs text-base-content/30 mt-1">CSV files up to 10 MB</p>
                       <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
-
                   <%!-- File entry preview --%>
                   <div
                     :if={@emo_contact_upload}
@@ -1745,8 +1866,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <div class="p-2 bg-accent/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-accent" />
                     </div>
+
                     <div class="flex-1 min-w-0">
                       <div class="text-sm font-medium truncate">{@emo_contact_upload.name}</div>
+
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-accent h-1 rounded-full transition-all duration-300"
@@ -1755,6 +1878,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         </div>
                       </div>
                     </div>
+
                     <span class="text-xs text-base-content/40 shrink-0">
                       {format_bytes(@emo_contact_upload.size)}
                     </span>
@@ -1767,7 +1891,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </button>
                   </div>
                 </div>
-
                 <%!-- Expected format hint --%>
                 <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
                   <.icon
@@ -1776,6 +1899,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   <div>
                     <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+
                     <p class="font-mono leading-relaxed">
                       District Code, PSA Official Name, Chartering Agency,
                       Education Service Provider/Management Organization,
@@ -1783,7 +1907,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </p>
                   </div>
                 </div>
-
                 <%!-- Submit button --%>
                 <button
                   type="button"
@@ -1806,19 +1929,19 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     :if={!@emo_contact_importing}
                     name="hero-arrow-up-tray"
                     class="size-4"
-                  />
-                  {if @emo_contact_importing, do: "Processing…", else: "Import EMO Contacts"}
+                  /> {if @emo_contact_importing, do: "Processing…", else: "Import EMO Contacts"}
                 </button>
               </div>
             </div>
-
             <%!-- EMO Contact import result / status — 2 cols --%>
             <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
                 <div>
                   <h3 class="font-semibold">Import Status</h3>
+
                   <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
                 </div>
+
                 <div
                   :if={@emo_contact_importing}
                   class="flex items-center gap-1.5 text-xs text-base-content/40"
@@ -1826,7 +1949,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <span class="loading loading-spinner loading-xs"></span> Running…
                 </div>
               </div>
-
               <%!-- Idle / no result yet --%>
               <div
                 :if={!@emo_contact_importing && is_nil(@emo_contact_import_result)}
@@ -1835,12 +1957,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-base-200 mb-3">
                   <.icon name="hero-building-storefront" class="size-6 text-base-content/25" />
                 </div>
+
                 <p class="text-sm font-medium text-base-content/40">No import yet</p>
+
                 <p class="text-xs text-base-content/30 mt-1">
                   Upload an EMO Contact CSV to populate the reference table.
                 </p>
               </div>
-
               <%!-- In-progress pulse --%>
               <div
                 :if={@emo_contact_importing}
@@ -1849,12 +1972,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-accent/10 mb-3">
                   <span class="loading loading-spinner loading-md text-accent"></span>
                 </div>
+
                 <p class="text-sm font-medium">Processing EMO Contact data…</p>
+
                 <p class="text-xs text-base-content/40 mt-1">
                   Upserting EMO contact records in the background.
                 </p>
               </div>
-
               <%!-- Success result --%>
               <div
                 :if={match?({:ok, _}, @emo_contact_import_result)}
@@ -1864,6 +1988,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-check-circle" class="size-5" />
                   <span class="font-semibold text-sm">Import completed</span>
                 </div>
+
                 <dl class="grid grid-cols-2 gap-3">
                   <.mde_stat
                     label="Records"
@@ -1876,13 +2001,17 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     icon="hero-exclamation-circle"
                   />
                 </dl>
+
                 <div
                   :if={elem(@emo_contact_import_result, 1).errors > 0}
                   class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
                 >
-                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
-                  {elem(@emo_contact_import_result, 1).errors} rows had errors and were skipped.
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" /> {elem(
+                    @emo_contact_import_result,
+                    1
+                  ).errors} rows had errors and were skipped.
                 </div>
+
                 <a
                   :if={elem(@emo_contact_import_result, 1).error_file}
                   href={
@@ -1894,7 +2023,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   Download error rows — {Path.basename(elem(@emo_contact_import_result, 1).error_file)}
                 </a>
               </div>
-
               <%!-- Error result --%>
               <div
                 :if={match?({:error, _}, @emo_contact_import_result)}
@@ -1904,6 +2032,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
                   <div>
                     <p class="text-sm font-semibold text-error">Import failed</p>
+
                     <p class="text-xs text-base-content/50 mt-1 break-all">
                       {elem(@emo_contact_import_result, 1)}
                     </p>
@@ -1915,6 +2044,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
         </div>
         <%!-- ── Section 7.5: Composite Resident District (CRD) (system_admin only) ── --%>
         <div class="divider"></div>
+
         <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
           <div class="flex items-center gap-3">
             <div>
@@ -1922,6 +2052,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <h2 class="text-base font-semibold">Composite Resident District (CRD)</h2>
                 <span class="badge badge-neutral badge-sm">System Admin</span>
               </div>
+
               <p class="text-xs text-base-content/50 mt-0.5">
                 Import the MDE Composite Resident District report — one row per charter +
                 resident district, recording how many nonresident students a charter enrolls
@@ -1936,6 +2067,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
             <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200">
                 <h3 class="font-semibold">Upload CRD CSV</h3>
+
                 <p class="text-xs text-base-content/40 mt-0.5">
                   MDE Composite Resident District export. No school or year selection needed.
                 </p>
@@ -1952,7 +2084,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <label class="text-sm font-medium">
                     CRD CSV File <span class="text-error text-xs">*</span>
                   </label>
-
                   <div
                     class="relative border-2 border-dashed border-base-300 hover:border-neutral/40 bg-base-50/50 transition-colors group cursor-pointer"
                     data-drop-zone
@@ -1964,15 +2095,16 @@ defmodule EmisintWeb.Admin.DataImportLive do
                           class="size-7 text-base-content/30 group-hover:text-neutral transition-colors"
                         />
                       </div>
+
                       <p class="text-sm text-base-content/50">
                         Drag & drop the CRD CSV here, or{" "}
                         <span class="text-neutral font-medium hover:underline">browse</span>
                       </p>
+
                       <p class="text-xs text-base-content/30 mt-1">CSV files up to 10 MB</p>
                       <input type="file" accept=".csv" class="hidden" data-file-input />
                     </label>
                   </div>
-
                   <%!-- File entry preview --%>
                   <div
                     :if={@crd_upload}
@@ -1981,8 +2113,10 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     <div class="p-2 bg-neutral/10 shrink-0">
                       <.icon name="hero-document-text" class="size-4 text-neutral" />
                     </div>
+
                     <div class="flex-1 min-w-0">
                       <div class="text-sm font-medium truncate">{@crd_upload.name}</div>
+
                       <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
                         <div
                           class="bg-neutral h-1 rounded-full transition-all duration-300"
@@ -1991,6 +2125,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         </div>
                       </div>
                     </div>
+
                     <span class="text-xs text-base-content/40 shrink-0">
                       {format_bytes(@crd_upload.size)}
                     </span>
@@ -2003,7 +2138,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     </button>
                   </div>
                 </div>
-
                 <%!-- Expected format hint --%>
                 <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
                   <.icon
@@ -2012,13 +2146,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   />
                   <div>
                     <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+
                     <p class="font-mono leading-relaxed">
                       School Year, Entity Name, District Code, Other Entity Name,
                       CRD District Code, Grade, Number of Nonresident Students Enrolled
                     </p>
                   </div>
                 </div>
-
                 <%!-- Submit button --%>
                 <button
                   type="button"
@@ -2033,19 +2167,21 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   disabled={@crd_importing || is_nil(@crd_upload)}
                 >
                   <span :if={@crd_importing} class="loading loading-spinner loading-sm"></span>
-                  <.icon :if={!@crd_importing} name="hero-arrow-up-tray" class="size-4" />
-                  {if @crd_importing, do: "Processing…", else: "Import CRD Data"}
+                  <.icon :if={!@crd_importing} name="hero-arrow-up-tray" class="size-4" /> {if @crd_importing,
+                    do: "Processing…",
+                    else: "Import CRD Data"}
                 </button>
               </div>
             </div>
-
             <%!-- CRD import result / status — 2 cols --%>
             <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
               <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
                 <div>
                   <h3 class="font-semibold">Import Status</h3>
+
                   <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
                 </div>
+
                 <div
                   :if={@crd_importing}
                   class="flex items-center gap-1.5 text-xs text-base-content/40"
@@ -2053,7 +2189,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <span class="loading loading-spinner loading-xs"></span> Running…
                 </div>
               </div>
-
               <%!-- Idle / no result yet --%>
               <div
                 :if={!@crd_importing && is_nil(@crd_import_result)}
@@ -2062,12 +2197,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-base-200 mb-3">
                   <.icon name="hero-arrows-right-left" class="size-6 text-base-content/25" />
                 </div>
+
                 <p class="text-sm font-medium text-base-content/40">No import yet</p>
+
                 <p class="text-xs text-base-content/30 mt-1">
                   Upload a CRD CSV to populate the resident-district table.
                 </p>
               </div>
-
               <%!-- In-progress pulse --%>
               <div
                 :if={@crd_importing}
@@ -2076,12 +2212,13 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <div class="p-3 bg-neutral/10 mb-3">
                   <span class="loading loading-spinner loading-md text-neutral"></span>
                 </div>
+
                 <p class="text-sm font-medium">Processing CRD data…</p>
+
                 <p class="text-xs text-base-content/40 mt-1">
                   Upserting resident-district rows in the background.
                 </p>
               </div>
-
               <%!-- Success result --%>
               <div
                 :if={match?({:ok, _}, @crd_import_result)}
@@ -2091,6 +2228,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-check-circle" class="size-5" />
                   <span class="font-semibold text-sm">Import completed</span>
                 </div>
+
                 <dl class="grid grid-cols-2 gap-3">
                   <.mde_stat
                     label="Records"
@@ -2113,20 +2251,27 @@ defmodule EmisintWeb.Admin.DataImportLive do
                     icon="hero-exclamation-circle"
                   />
                 </dl>
+
                 <div
                   :if={elem(@crd_import_result, 1).unmatched > 0}
                   class="flex items-center gap-2 text-xs text-base-content/50 bg-base-50 border border-base-200 px-3 py-2"
                 >
-                  <.icon name="hero-information-circle" class="size-4 shrink-0" />
-                  {elem(@crd_import_result, 1).unmatched} resident districts had no MDE name match (imported without a district link).
+                  <.icon name="hero-information-circle" class="size-4 shrink-0" /> {elem(
+                    @crd_import_result,
+                    1
+                  ).unmatched} resident districts had no MDE name match (imported without a district link).
                 </div>
+
                 <div
                   :if={elem(@crd_import_result, 1).errors > 0}
                   class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
                 >
-                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
-                  {elem(@crd_import_result, 1).errors} rows had errors and were skipped.
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" /> {elem(
+                    @crd_import_result,
+                    1
+                  ).errors} rows had errors and were skipped.
                 </div>
+
                 <a
                   :if={elem(@crd_import_result, 1).error_file}
                   href={
@@ -2138,7 +2283,6 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   Download error rows — {Path.basename(elem(@crd_import_result, 1).error_file)}
                 </a>
               </div>
-
               <%!-- Error result --%>
               <div
                 :if={match?({:error, _}, @crd_import_result)}
@@ -2148,6 +2292,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
                   <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
                   <div>
                     <p class="text-sm font-semibold text-error">Import failed</p>
+
                     <p class="text-xs text-base-content/50 mt-1 break-all">
                       {elem(@crd_import_result, 1)}
                     </p>
@@ -2157,9 +2302,256 @@ defmodule EmisintWeb.Admin.DataImportLive do
             </div>
           </div>
         </div>
+
+        <%!-- ── Section 7.75: Statistically Similar Schools (SSS) (system_admin only) ── --%>
+        <div class="divider"></div>
+
+        <div :if={@current_user.role == :system_admin} class="space-y-4 p-8 shadow-xl">
+          <div class="flex items-center gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold">Statistically Similar Schools (SSS)</h2>
+                <span class="badge badge-info badge-sm">System Admin</span>
+              </div>
+
+              <p class="text-xs text-base-content/50 mt-0.5">
+                Import Grand Valley SSS peer groups. Anchor row is where SchoolCode equals
+                ComparisonCode. Rows with missing SchoolCode are retained and flagged for review.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+            <%!-- SSS upload form — 3 cols --%>
+            <div class="lg:col-span-3 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200">
+                <h3 class="font-semibold">Upload SSS File (CSV or TSV)</h3>
+
+                <p class="text-xs text-base-content/40 mt-0.5">
+                  Columns: School Name, ComparisonCode, SchoolCode
+                </p>
+              </div>
+
+              <div
+                id="tigris-sss"
+                phx-hook="TigrisUpload"
+                data-upload-type="sss"
+                class="p-6 space-y-6"
+              >
+                <div class="space-y-2">
+                  <label class="text-sm font-medium">
+                    SSS File <span class="text-error text-xs">*</span>
+                  </label>
+                  <div
+                    class="relative border-2 border-dashed border-base-300 hover:border-info/40 bg-base-50/50 transition-colors group cursor-pointer"
+                    data-drop-zone
+                  >
+                    <label class="flex flex-col items-center justify-center py-10 px-6 text-center cursor-pointer">
+                      <div class="p-3 bg-base-200 group-hover:bg-info/10 transition-colors mb-3">
+                        <.icon
+                          name="hero-user-group"
+                          class="size-7 text-base-content/30 group-hover:text-info transition-colors"
+                        />
+                      </div>
+
+                      <p class="text-sm text-base-content/50">
+                        Drag & drop the SSS file here, or{" "}
+                        <span class="text-info font-medium hover:underline">browse</span>
+                      </p>
+
+                      <p class="text-xs text-base-content/30 mt-1">CSV/TSV files up to 10 MB</p>
+                      <input type="file" accept=".csv,.tsv,.txt" class="hidden" data-file-input />
+                    </label>
+                  </div>
+
+                  <div
+                    :if={@sss_upload}
+                    class="flex items-center gap-3 p-3 border border-base-200 bg-base-50"
+                  >
+                    <div class="p-2 bg-info/10 shrink-0">
+                      <.icon name="hero-document-text" class="size-4 text-info" />
+                    </div>
+
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium truncate">{@sss_upload.name}</div>
+
+                      <div class="w-full bg-base-200 rounded-full h-1 mt-1.5">
+                        <div
+                          class="bg-info h-1 rounded-full transition-all duration-300"
+                          style={"width: #{@sss_upload_progress || 0}%"}
+                        >
+                        </div>
+                      </div>
+                    </div>
+
+                    <span class="text-xs text-base-content/40 shrink-0">
+                      {format_bytes(@sss_upload.size)}
+                    </span>
+                    <button
+                      type="button"
+                      data-cancel-btn
+                      class="p-1.5 hover:bg-error/10 text-base-content/30 hover:text-error transition-colors"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div class="flex gap-3 p-4 bg-base-200/60 border border-base-300/50 text-xs text-base-content/50">
+                  <.icon
+                    name="hero-information-circle"
+                    class="size-4 shrink-0 mt-0.5 text-base-content/35"
+                  />
+                  <div>
+                    <p class="font-medium text-base-content/60 mb-1">Expected column headers</p>
+
+                    <p class="font-mono leading-relaxed">School Name, ComparisonCode, SchoolCode</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  data-import-btn
+                  class={[
+                    "w-full flex items-center justify-center gap-2 py-3 font-medium text-sm transition-all",
+                    !@sss_importing && !is_nil(@sss_upload) &&
+                      "bg-info text-info-content hover:opacity-90 active:scale-[0.99]",
+                    (@sss_importing || is_nil(@sss_upload)) &&
+                      "bg-info/50 text-info-content/70 cursor-not-allowed"
+                  ]}
+                  disabled={@sss_importing || is_nil(@sss_upload)}
+                >
+                  <span :if={@sss_importing} class="loading loading-spinner loading-sm"></span>
+                  <.icon :if={!@sss_importing} name="hero-arrow-up-tray" class="size-4" /> {if @sss_importing,
+                    do: "Processing…",
+                    else: "Import SSS Data"}
+                </button>
+              </div>
+            </div>
+            <%!-- SSS import result / status — 2 cols --%>
+            <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-base-200 flex items-center justify-between">
+                <div>
+                  <h3 class="font-semibold">Import Status</h3>
+
+                  <p class="text-xs text-base-content/40 mt-0.5">Last job result</p>
+                </div>
+
+                <div
+                  :if={@sss_importing}
+                  class="flex items-center gap-1.5 text-xs text-base-content/40"
+                >
+                  <span class="loading loading-spinner loading-xs"></span> Running…
+                </div>
+              </div>
+
+              <div
+                :if={!@sss_importing && is_nil(@sss_import_result)}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-base-200 mb-3">
+                  <.icon name="hero-user-group" class="size-6 text-base-content/25" />
+                </div>
+
+                <p class="text-sm font-medium text-base-content/40">No import yet</p>
+
+                <p class="text-xs text-base-content/30 mt-1">
+                  Upload an SSS file to populate peer-group data.
+                </p>
+              </div>
+
+              <div
+                :if={@sss_importing}
+                class="flex flex-col items-center justify-center py-16 px-6 text-center"
+              >
+                <div class="p-3 bg-info/10 mb-3">
+                  <span class="loading loading-spinner loading-md text-info"></span>
+                </div>
+
+                <p class="text-sm font-medium">Processing SSS data…</p>
+
+                <p class="text-xs text-base-content/40 mt-1">
+                  Upserting schools, comparison groups, and memberships in the background.
+                </p>
+              </div>
+
+              <div
+                :if={match?({:ok, _}, @sss_import_result)}
+                class="p-6 space-y-4"
+              >
+                <div class="flex items-center gap-2 text-success">
+                  <.icon name="hero-check-circle" class="size-5" />
+                  <span class="font-semibold text-sm">Import completed</span>
+                </div>
+
+                <dl class="grid grid-cols-2 gap-3">
+                  <.mde_stat
+                    label="Memberships"
+                    value={format_number(elem(@sss_import_result, 1).records)}
+                    icon="hero-link"
+                  />
+                  <.mde_stat
+                    label="Groups"
+                    value={format_number(elem(@sss_import_result, 1).groups)}
+                    icon="hero-squares-2x2"
+                  />
+                  <.mde_stat
+                    label="Schools"
+                    value={format_number(elem(@sss_import_result, 1).schools)}
+                    icon="hero-academic-cap"
+                  />
+                  <.mde_stat
+                    label="Warnings"
+                    value={format_number(elem(@sss_import_result, 1).warnings)}
+                    icon="hero-exclamation-triangle"
+                  />
+                </dl>
+
+                <div
+                  :if={elem(@sss_import_result, 1).errors > 0}
+                  class="flex items-center gap-2 text-xs text-warning bg-warning/5 border border-warning/15 px-3 py-2"
+                >
+                  <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" /> {elem(
+                    @sss_import_result,
+                    1
+                  ).errors} rows were skipped due to validation/grouping issues.
+                </div>
+
+                <a
+                  :if={elem(@sss_import_result, 1).error_file}
+                  href={
+                    ~p"/admin/import/errors/download?#{%{path: elem(@sss_import_result, 1).error_file}}"
+                  }
+                  class="flex items-center gap-2 text-xs text-warning hover:text-warning/80 bg-warning/5 border border-warning/15 px-3 py-2 transition-colors"
+                >
+                  <.icon name="hero-arrow-down-tray" class="size-4 shrink-0" />
+                  Download issue rows — {Path.basename(elem(@sss_import_result, 1).error_file)}
+                </a>
+              </div>
+
+              <div
+                :if={match?({:error, _}, @sss_import_result)}
+                class="p-6"
+              >
+                <div class="flex items-start gap-3 p-4 bg-error/5 border border-error/15">
+                  <.icon name="hero-x-circle" class="size-5 text-error shrink-0 mt-0.5" />
+                  <div>
+                    <p class="text-sm font-semibold text-error">Import failed</p>
+
+                    <p class="text-xs text-base-content/50 mt-1 break-all">
+                      {elem(@sss_import_result, 1)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <%!-- ── Section 8: MDE Import History (system_admin only) ──────────────── --%>
         <div :if={@current_user.role == :system_admin} class="space-y-4">
           <div class="divider"></div>
+
           <div class="flex items-center gap-2">
             <h2 class="text-base font-semibold">Import History</h2>
             <span class="badge badge-ghost badge-sm">MDE Imports</span>
@@ -2168,6 +2560,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
           <div class="bg-base-100 border border-base-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-base-200">
               <h3 class="font-semibold">Recent MDE Uploads</h3>
+
               <p class="text-xs text-base-content/40 mt-0.5">
                 Last 50 imports across all MDE data types
               </p>
@@ -2180,7 +2573,9 @@ defmodule EmisintWeb.Admin.DataImportLive do
               <div class="p-3 bg-base-200 mb-3">
                 <.icon name="hero-inbox" class="size-6 text-base-content/25" />
               </div>
+
               <p class="text-sm font-medium text-base-content/40">No import history yet</p>
+
               <p class="text-xs text-base-content/30 mt-1">
                 MDE uploads will appear here once submitted.
               </p>
@@ -2191,16 +2586,25 @@ defmodule EmisintWeb.Admin.DataImportLive do
                 <thead>
                   <tr class="text-xs text-base-content/50 border-b border-base-200">
                     <th class="px-4 py-3 font-medium">Type</th>
+
                     <th class="px-4 py-3 font-medium">File</th>
+
                     <th class="px-4 py-3 font-medium">Size</th>
+
                     <th class="px-4 py-3 font-medium">Status</th>
+
                     <th class="px-4 py-3 font-medium">Records</th>
+
                     <th class="px-4 py-3 font-medium">Errors</th>
+
                     <th class="px-4 py-3 font-medium">School Year</th>
+
                     <th class="px-4 py-3 font-medium">Uploaded By</th>
+
                     <th class="px-4 py-3 font-medium">Date</th>
                   </tr>
                 </thead>
+
                 <tbody class="divide-y divide-base-200">
                   <tr
                     :for={log <- @import_history}
@@ -2215,35 +2619,40 @@ defmodule EmisintWeb.Admin.DataImportLive do
                         log.import_type == :sat && "badge-secondary",
                         log.import_type == :school_index && "badge-primary",
                         log.import_type == :emo_contact && "badge-accent",
-                        log.import_type == :crd && "badge-neutral"
+                        log.import_type == :crd && "badge-neutral",
+                        log.import_type == :sss && "badge-info"
                       ]}>
                         {log.import_type |> to_string() |> String.replace("_", " ") |> String.upcase()}
                       </span>
                     </td>
+
                     <td class="px-4 py-3 max-w-[200px] truncate font-mono text-xs">
                       {log.original_filename}
                     </td>
+
                     <td class="px-4 py-3 text-base-content/60">
                       {format_bytes(log.file_size_bytes)}
                     </td>
-                    <td class="px-4 py-3">
-                      <.import_status_badge status={log.status} />
-                    </td>
+
+                    <td class="px-4 py-3"><.import_status_badge status={log.status} /></td>
+
                     <td class="px-4 py-3 tabular-nums">
                       {if log.records_processed, do: format_number(log.records_processed), else: "—"}
                     </td>
+
                     <td class={[
                       "px-4 py-3 tabular-nums",
                       log.error_count && log.error_count > 0 && "text-error"
                     ]}>
                       {if log.error_count, do: log.error_count, else: "—"}
                     </td>
-                    <td class="px-4 py-3 text-base-content/60">
-                      {log.school_year || "—"}
-                    </td>
+
+                    <td class="px-4 py-3 text-base-content/60">{log.school_year || "—"}</td>
+
                     <td class="px-4 py-3 text-base-content/60 text-xs">
                       {if log.uploaded_by, do: log.uploaded_by.email, else: "—"}
                     </td>
+
                     <td class="px-4 py-3 text-base-content/50 text-xs whitespace-nowrap">
                       {format_datetime(log.inserted_at)}
                     </td>
@@ -2293,7 +2702,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
     <span :if={@status == :running} class="badge badge-info badge-sm gap-1">
       <span class="loading loading-spinner loading-xs"></span> Running
     </span>
-    <span :if={@status == :completed} class="badge badge-success badge-sm">Completed</span>
+     <span :if={@status == :completed} class="badge badge-success badge-sm">Completed</span>
     <span :if={@status == :failed} class="badge badge-error badge-sm">Failed</span>
     """
   end
@@ -2304,7 +2713,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
       <span class="text-xs text-base-content/40 flex items-center gap-1">
         <.icon name={@icon} class="size-3" /> {@label}
       </span>
-      <span class="text-lg font-bold tabular-nums">{@value}</span>
+       <span class="text-lg font-bold tabular-nums">{@value}</span>
     </div>
     """
   end
@@ -2315,7 +2724,7 @@ defmodule EmisintWeb.Admin.DataImportLive do
     <span :if={@status == :processing} class="badge badge-info badge-sm gap-1">
       <span class="loading loading-spinner loading-xs"></span> Processing
     </span>
-    <span :if={@status == :completed} class="badge badge-success badge-sm">Completed</span>
+     <span :if={@status == :completed} class="badge badge-success badge-sm">Completed</span>
     <span :if={@status == :failed} class="badge badge-error badge-sm">Failed</span>
     """
   end
