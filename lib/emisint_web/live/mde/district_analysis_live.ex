@@ -994,6 +994,223 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 </div>
               </div>
             </div>
+
+            <%!-- ───────────────────── SGP comparison ───────────────────── --%>
+            <div :if={@crd_comparison.has_any_sgp} class="space-y-6 pt-2">
+              <div class="flex items-center gap-2">
+                <.icon name="hero-arrow-trending-up" class="size-4 text-secondary" />
+                <h2 class="text-sm font-bold uppercase tracking-wider text-base-content/60">
+                  Student Growth Percentile
+                </h2>
+                <span :if={@crd_scope == "top10"} class="badge badge-warning badge-xs">
+                  Top 10
+                </span>
+                <div class="flex-1 h-px bg-base-200"></div>
+                <span class="text-xs text-base-content/40">50 = typical growth</span>
+              </div>
+
+              <%!-- SGP summary table: School vs All vs Top 10 --%>
+              <div class="bg-base-100 border border-base-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-base-200 bg-base-50">
+                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Scope
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Districts
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Students
+                        </th>
+
+                        <th
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide"
+                        >
+                          {subject}
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          Avg
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody class="divide-y divide-base-200">
+                      <%!-- School (charter) baseline --%>
+                      <tr class="border-b-2 border-base-300 bg-info/5">
+                        <td class="px-4 py-2.5 font-semibold text-xs text-info">
+                          School
+                          <span class="block text-base-content/40 font-normal normal-case">
+                            {short_name(@crd_comparison.charter_name || @district_code)}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right text-xs text-base-content/30">—</td>
+
+                        <td class="px-4 py-2.5 text-right text-xs text-base-content/30">—</td>
+
+                        <td
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="px-4 py-2.5 text-right"
+                        >
+                          <span class={[
+                            "font-semibold text-xs",
+                            sgp_score_class(Map.get(@crd_comparison.charter_sgp, subject))
+                          ]}>
+                            {format_index(Map.get(@crd_comparison.charter_sgp, subject))}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right">
+                          <span class={[
+                            "font-semibold text-xs",
+                            sgp_score_class(@crd_comparison.charter_sgp_avg)
+                          ]}>
+                            {format_index(@crd_comparison.charter_sgp_avg)}
+                          </span>
+                        </td>
+                      </tr>
+
+                      <tr
+                        :for={
+                          {label, scope, v} <- [
+                            {"All", "all", @crd_comparison.all},
+                            {"Top 10", "top10", @crd_comparison.top10}
+                          ]
+                        }
+                        class={["hover:bg-base-50", @crd_scope == scope && "bg-warning/5 font-medium"]}
+                      >
+                        <td class="px-4 py-2.5 font-semibold text-xs">{label}</td>
+
+                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/70">
+                          {v.sgp_scored_count}
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/70">
+                          {format_number(v.sgp_total_students)}
+                        </td>
+
+                        <td
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="px-4 py-2.5 text-right"
+                        >
+                          <span class={[
+                            "text-xs",
+                            sgp_score_class(Map.get(v.composite_sgp_subjects, subject))
+                          ]}>
+                            {format_index(Map.get(v.composite_sgp_subjects, subject))}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right">
+                          <span class={["text-xs", sgp_score_class(v.composite_sgp_avg)]}>
+                            {format_index(v.composite_sgp_avg)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <%!-- SGP resident district breakdown --%>
+              <div class="bg-base-100 border border-base-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-base-200 bg-base-50">
+                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Resident District
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Students
+                        </th>
+
+                        <th
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide"
+                        >
+                          {subject}
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          Avg
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody class="divide-y divide-base-200">
+                      <tr
+                        :for={r <- @crd_view.residents}
+                        class={["hover:bg-base-50", !r.has_sgp && "opacity-50"]}
+                      >
+                        <td class="px-4 py-2.5 font-medium text-xs">
+                          {r.resident_name}
+                          <span :if={!r.has_sgp} class="text-base-content/35 font-normal">
+                            (no SGP data)
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/60">
+                          {format_number(r.weight)}
+                        </td>
+
+                        <td
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="px-4 py-2.5 text-right"
+                        >
+                          <span class={["text-xs", sgp_score_class(Map.get(r.sgp, subject))]}>
+                            {format_index(Map.get(r.sgp, subject))}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right">
+                          <span class={["text-xs font-semibold", sgp_score_class(r.sgp_avg)]}>
+                            {format_index(r.sgp_avg)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+
+                    <tfoot :if={@crd_view.sgp_scored_count > 0}>
+                      <tr class="border-t-2 border-base-300 bg-warning/5 font-semibold">
+                        <td class="px-4 py-3 text-xs uppercase tracking-wide text-warning">
+                          {crd_scope_label(@crd_scope)} (weighted)
+                        </td>
+
+                        <td class="px-4 py-3 text-right tabular-nums text-xs">
+                          {format_number(@crd_view.sgp_total_students)}
+                        </td>
+
+                        <td
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="px-4 py-3 text-right"
+                        >
+                          <span class={[
+                            "text-xs",
+                            sgp_score_class(Map.get(@crd_view.composite_sgp_subjects, subject))
+                          ]}>
+                            {format_index(Map.get(@crd_view.composite_sgp_subjects, subject))}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-3 text-right">
+                          <span class={["text-xs", sgp_score_class(@crd_view.composite_sgp_avg)]}>
+                            {format_index(@crd_view.composite_sgp_avg)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2705,12 +2922,15 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
 
     charter = load_district_data(charter_code, year)
     charter_sat = sat_scores(load_sat_lea_result(charter_code, year))
+    charter_sgp = sgp_subject_averages(charter_code, year)
+    charter_sgp_avg = avg_of_subjects(charter_sgp)
 
     residents =
       Enum.map(rows, fn r ->
         code = r.mde_district && r.mde_district.district_code
         data = if code, do: load_district_data(code, year)
         sat = if code, do: sat_scores(load_sat_lea_result(code, year))
+        sgp = if code, do: sgp_subject_averages(code, year), else: %{}
         subjects = (data && data.all_subjects) || %{}
 
         %{
@@ -2721,12 +2941,23 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           avg: avg_of_subjects(subjects),
           has_data: not is_nil(data),
           sat: sat,
-          has_sat: not is_nil(sat)
+          has_sat: not is_nil(sat),
+          sgp: sgp,
+          sgp_avg: avg_of_subjects(sgp),
+          has_sgp: map_size(sgp) > 0
         }
       end)
 
-    all_summary = crd_scope_summary(residents)
-    top10_summary = crd_scope_summary(Enum.take(residents, @crd_top_n))
+    # Subject is free text in the SGP source data (e.g. "English Language Arts",
+    # not the "ELA" abbreviation the rest of this module hardcodes in @subjects)
+    # — derive it from whatever's actually present rather than assuming a match.
+    sgp_subjects =
+      (Map.keys(charter_sgp) ++ Enum.flat_map(residents, &Map.keys(&1.sgp)))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    all_summary = crd_scope_summary(residents, sgp_subjects)
+    top10_summary = crd_scope_summary(Enum.take(residents, @crd_top_n), sgp_subjects)
 
     %{
       charter_name: charter && charter.district_name,
@@ -2734,6 +2965,10 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
       charter_avg: charter && avg_of_subjects(charter.all_subjects),
       charter_sat: charter_sat,
       has_any_sat: not is_nil(charter_sat) or all_summary.sat_scored_count > 0,
+      charter_sgp: charter_sgp,
+      charter_sgp_avg: charter_sgp_avg,
+      has_any_sgp: charter_sgp_avg != nil or all_summary.sgp_scored_count > 0,
+      sgp_subjects: sgp_subjects,
       total_residents: length(rows),
       # `residents` is already sorted by enrollment desc, so the top-N is a prefix.
       all: all_summary,
@@ -2741,12 +2976,16 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     }
   end
 
-  # Build one scope's view: the enrollment-weighted M-STEP and SAT composites over
-  # the scored subsets, plus the resident rows to display for that scope.
-  defp crd_scope_summary(residents) do
+  # Build one scope's view: the enrollment-weighted M-STEP, SAT, and SGP
+  # composites over the scored subsets, plus the resident rows to display.
+  defp crd_scope_summary(residents, sgp_subjects) do
     scored = Enum.filter(residents, & &1.has_data)
     sat_scored = Enum.filter(residents, & &1.has_sat)
+    sgp_scored = Enum.filter(residents, & &1.has_sgp)
     composite_subjects = Map.new(@subjects, fn s -> {s, weighted_subject(scored, s)} end)
+
+    composite_sgp_subjects =
+      Map.new(sgp_subjects, fn s -> {s, weighted_sgp_subject(sgp_scored, s)} end)
 
     %{
       residents: residents,
@@ -2761,7 +3000,11 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         all: weighted_sat(sat_scored, :all)
       },
       sat_scored_count: length(sat_scored),
-      sat_total_students: Enum.sum(Enum.map(sat_scored, & &1.weight))
+      sat_total_students: Enum.sum(Enum.map(sat_scored, & &1.weight)),
+      composite_sgp_subjects: composite_sgp_subjects,
+      composite_sgp_avg: avg_of_subjects(composite_sgp_subjects),
+      sgp_scored_count: length(sgp_scored),
+      sgp_total_students: Enum.sum(Enum.map(sgp_scored, & &1.weight))
     }
   end
 
@@ -2794,6 +3037,53 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     {weighted_sum, weight} =
       Enum.reduce(scored, {0.0, 0}, fn rd, {sum, w} ->
         case Map.get(rd.subjects, subject) do
+          nil -> {sum, w}
+          d -> {sum + Decimal.to_float(d) * rd.weight, w + rd.weight}
+        end
+      end)
+
+    if weight > 0, do: Decimal.from_float(Float.round(weighted_sum / weight, 1)), else: nil
+  end
+
+  # A district's mean SGP per subject, averaged across grades (weighted by
+  # each grade's total_included), for the "All Students" subgroup. Shape
+  # matches `all_subjects` (%{subject => decimal}) so it works with
+  # `avg_of_subjects/1` — but subject keys are whatever's in the SGP source
+  # data (free text), not the app's hardcoded @subjects list.
+  defp sgp_subject_averages(nil, _year), do: %{}
+
+  defp sgp_subject_averages(district_code, year) do
+    MdeSgpResult
+    |> Ash.Query.filter(
+      rollup_level == :district and
+        mde_district.district_code == ^district_code and
+        school_year == ^year and
+        testing_group == "All Students"
+    )
+    |> Ash.read!(authorize?: false)
+    |> Enum.group_by(& &1.subject)
+    |> Map.new(fn {subject, rows} -> {subject, weighted_mean_sgp(rows)} end)
+  rescue
+    _ -> %{}
+  end
+
+  # Enrollment-weighted (by total_included) mean SGP across a subject's grade rows.
+  defp weighted_mean_sgp(rows) do
+    {weighted_sum, weight} =
+      rows
+      |> Enum.filter(&(&1.mean_sgp && &1.total_included))
+      |> Enum.reduce({0.0, 0}, fn r, {sum, w} ->
+        {sum + Decimal.to_float(r.mean_sgp) * r.total_included, w + r.total_included}
+      end)
+
+    if weight > 0, do: Decimal.from_float(Float.round(weighted_sum / weight, 1)), else: nil
+  end
+
+  # Enrollment-weighted mean of one subject's Mean SGP across scored districts.
+  defp weighted_sgp_subject(scored, subject) do
+    {weighted_sum, weight} =
+      Enum.reduce(scored, {0.0, 0}, fn rd, {sum, w} ->
+        case Map.get(rd.sgp, subject) do
           nil -> {sum, w}
           d -> {sum + Decimal.to_float(d) * rd.weight, w + rd.weight}
         end
