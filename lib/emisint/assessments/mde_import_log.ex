@@ -92,7 +92,16 @@ defmodule Emisint.Assessments.MdeImportLog do
     uuid_primary_key :id
 
     attribute :import_type, :atom do
-      constraints one_of: [:mde, :entity_master, :enrollment, :sat, :school_index, :emo_contact, :crd]
+      constraints one_of: [
+                    :mde,
+                    :entity_master,
+                    :enrollment,
+                    :sat,
+                    :school_index,
+                    :emo_contact,
+                    :crd,
+                    :sgp
+                  ]
       allow_nil? false
       public? true
     end

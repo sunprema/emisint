@@ -112,5 +112,11 @@ defmodule Emisint.Assessments do
       define :list_mde_composite_resident_districts, action: :read
       define :get_mde_composite_resident_district, action: :read, get_by: [:id]
     end
+
+    resource Emisint.Assessments.MdeSgpResult do
+      define :upsert_mde_sgp_result, action: :upsert
+      define :list_mde_sgp_results, action: :read
+      define :get_mde_sgp_result, action: :read, get_by: [:id]
+    end
   end
 end
