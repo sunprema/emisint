@@ -3,10 +3,8 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
 
   import Ecto.Query, only: [from: 2]
 
-  require Ash.Query
-
+  alias Emisint.Assessments.EmoPortfolio
   alias Emisint.Assessments.MdeEmoContact
-  alias Emisint.Assessments.MdeEntityMaster
   alias Emisint.Repo
 
   on_mount {EmisintWeb.LiveUserAuth, :live_user_required}
@@ -34,6 +32,10 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
       |> assign(:stats_year, hd(@stats_years))
       |> assign(:portfolio_stats, [])
       |> assign(:sat_portfolio_stats, [])
+      |> assign(:editing_schools, false)
+      |> assign(:overrides, %{})
+      |> assign(:add_school_search, "")
+      |> assign(:add_school_results, [])
 
     if connected?(socket) do
       emos = load_emo_list()
@@ -65,7 +67,11 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
        |> assign(:school_search, "")
        |> assign(:filtered_schools, schools)
        |> assign(:portfolio_stats, stats)
-       |> assign(:sat_portfolio_stats, sat_stats)}
+       |> assign(:sat_portfolio_stats, sat_stats)
+       |> assign(:overrides, EmoPortfolio.overrides_map(emo_name))
+       |> assign(:editing_schools, false)
+       |> assign(:add_school_search, "")
+       |> assign(:add_school_results, [])}
     else
       {:noreply, socket}
     end
@@ -81,7 +87,11 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
      |> assign(:filtered_schools, [])
      |> assign(:active_tab, :schools)
      |> assign(:portfolio_stats, [])
-     |> assign(:sat_portfolio_stats, [])}
+     |> assign(:sat_portfolio_stats, [])
+     |> assign(:overrides, %{})
+     |> assign(:editing_schools, false)
+     |> assign(:add_school_search, "")
+     |> assign(:add_school_results, [])}
   end
 
   # ---------------------------------------------------------------------------
@@ -136,6 +146,58 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
      |> assign(:stats_year, year)
      |> assign(:portfolio_stats, stats)
      |> assign(:sat_portfolio_stats, sat_stats)}
+  end
+
+  def handle_event("toggle_edit_schools", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:editing_schools, not socket.assigns.editing_schools)
+     |> assign(:add_school_search, "")
+     |> assign(:add_school_results, [])}
+  end
+
+  def handle_event("search_add_school", %{"value" => search}, socket) do
+    exclude_codes = Enum.map(socket.assigns.schools, & &1.entity_code)
+    results = EmoPortfolio.search_entities(search, exclude_codes)
+
+    {:noreply,
+     socket
+     |> assign(:add_school_search, search)
+     |> assign(:add_school_results, results)}
+  end
+
+  def handle_event("clear_add_school_search", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:add_school_search, "")
+     |> assign(:add_school_results, [])}
+  end
+
+  def handle_event("add_school", %{"entity-code" => entity_code}, socket) do
+    emo_name = socket.assigns.selected_emo.name
+
+    case EmoPortfolio.add_school(emo_name, entity_code, socket.assigns.current_user) do
+      {:ok, _override} -> {:noreply, refresh_after_override_change(socket, emo_name)}
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Couldn't add that school.")}
+    end
+  end
+
+  def handle_event("remove_school", %{"entity-code" => entity_code}, socket) do
+    emo_name = socket.assigns.selected_emo.name
+
+    case EmoPortfolio.remove_school(emo_name, entity_code, socket.assigns.current_user) do
+      {:ok, _override} -> {:noreply, refresh_after_override_change(socket, emo_name)}
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Couldn't remove that school.")}
+    end
+  end
+
+  def handle_event("revert_override", %{"entity-code" => entity_code}, socket) do
+    emo_name = socket.assigns.selected_emo.name
+
+    case EmoPortfolio.revert_override(emo_name, entity_code, socket.assigns.current_user) do
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Couldn't revert that override.")}
+      _ok -> {:noreply, refresh_after_override_change(socket, emo_name)}
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -254,7 +316,9 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
               <div class="p-4 bg-base-200 mb-4">
                 <.icon name="hero-cursor-arrow-ripple" class="size-8 text-base-content/20" />
               </div>
-              <p class="text-base font-medium text-base-content/40">Select a management organization</p>
+              <p class="text-base font-medium text-base-content/40">
+                Select a management organization
+              </p>
               <p class="text-sm text-base-content/30 mt-1">
                 Choose an ESP on the left to view its portfolio of schools.
               </p>
@@ -271,16 +335,19 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                       <span class="badge badge-secondary badge-sm">ESP</span>
                     </div>
                     <p class="text-xs text-base-content/40 mt-0.5">
-                      {@selected_emo.school_count} school{if @selected_emo.school_count != 1, do: "s", else: ""}
+                      {@selected_emo.school_count} school{if @selected_emo.school_count != 1,
+                        do: "s",
+                        else: ""}
                     </p>
                   </div>
                   <.link
-                    href={~p"/esp-portfolio/portfolio.pdf?#{%{emo: @selected_emo.name, year: @stats_year}}"}
+                    href={
+                      ~p"/esp-portfolio/portfolio.pdf?#{%{emo: @selected_emo.name, year: @stats_year}}"
+                    }
                     target="_blank"
                     class="btn btn-sm btn-outline btn-primary gap-1.5 shrink-0"
                   >
-                    <.icon name="hero-arrow-down-tray" class="size-3.5" />
-                    Download PDF
+                    <.icon name="hero-arrow-down-tray" class="size-3.5" /> Download PDF
                   </.link>
                 </div>
               </div>
@@ -294,7 +361,8 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                     "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
                     if(@active_tab == :schools,
                       do: "border-primary text-primary bg-base-100",
-                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                      else:
+                        "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
                     )
                   ]}
                 >
@@ -310,7 +378,8 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                     "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
                     if(@active_tab == :dashboard,
                       do: "border-primary text-primary bg-base-100",
-                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                      else:
+                        "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
                     )
                   ]}
                 >
@@ -325,7 +394,8 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                     "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
                     if(@active_tab == :sat_dashboard,
                       do: "border-primary text-primary bg-base-100",
-                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                      else:
+                        "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
                     )
                   ]}
                 >
@@ -368,6 +438,74 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                   </.link>
                 </div>
 
+                <%!-- Manage schools (system_admin only) --%>
+                <div
+                  :if={@current_user.role == :system_admin}
+                  class="px-6 py-3 border-b border-base-200 bg-base-50/30"
+                >
+                  <div class="flex items-center justify-between gap-3 mb-2">
+                    <p class="text-xs font-medium text-base-content/60 flex items-center gap-1.5">
+                      <.icon name="hero-adjustments-horizontal" class="size-3.5" /> Manage Schools
+                    </p>
+                    <button
+                      phx-click="toggle_edit_schools"
+                      class="text-xs text-primary hover:underline font-medium"
+                    >
+                      {if @editing_schools, do: "Done", else: "Edit list"}
+                    </button>
+                  </div>
+
+                  <div :if={@editing_schools} class="relative">
+                    <input
+                      type="text"
+                      placeholder="Search school name or code to add…"
+                      value={@add_school_search}
+                      phx-keyup="search_add_school"
+                      phx-debounce="200"
+                      name="add_school_search"
+                      class="w-full pl-8 pr-8 py-1.5 text-xs border border-base-300 bg-base-100 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary transition-all"
+                    />
+                    <.icon
+                      name="hero-magnifying-glass"
+                      class="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-base-content/30"
+                    />
+                    <button
+                      :if={@add_school_search != ""}
+                      phx-click="clear_add_school_search"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content transition-colors"
+                    >
+                      <.icon name="hero-x-mark" class="size-3.5" />
+                    </button>
+
+                    <div
+                      :if={@add_school_results != []}
+                      class="mt-1 border border-base-200 bg-base-100 divide-y divide-base-200 max-h-56 overflow-y-auto"
+                    >
+                      <button
+                        :for={result <- @add_school_results}
+                        phx-click="add_school"
+                        phx-value-entity-code={result.entity_code}
+                        class="w-full text-left px-3 py-2 hover:bg-primary/5 flex items-center justify-between gap-2 transition-colors"
+                      >
+                        <div class="min-w-0">
+                          <p class="text-xs font-medium truncate">{result.entity_official_name}</p>
+                          <p class="text-[10px] text-base-content/40">
+                            {result.entity_code} · {result.district_code || "—"}
+                          </p>
+                        </div>
+                        <.icon name="hero-plus-circle" class="size-4 text-primary shrink-0" />
+                      </button>
+                    </div>
+
+                    <p
+                      :if={@add_school_search != "" && @add_school_results == []}
+                      class="mt-1.5 text-xs text-base-content/30 italic"
+                    >
+                      No matching Open-Active schools found.
+                    </p>
+                  </div>
+                </div>
+
                 <%!-- No filter results --%>
                 <div
                   :if={@schools != [] && @filtered_schools == []}
@@ -386,6 +524,9 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                         <th class="px-4 py-3 font-medium text-left">County</th>
                         <th class="px-4 py-3 font-medium text-left">Grades</th>
                         <th class="px-4 py-3 font-medium text-left">Contact</th>
+                        <th :if={@editing_schools} class="px-4 py-3 w-20 font-medium text-left">
+                          Manage
+                        </th>
                         <th class="px-4 py-3 w-8"></th>
                       </tr>
                     </thead>
@@ -394,12 +535,17 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                         :for={school <- @filtered_schools}
                         class={[
                           "transition-colors",
-                          if(school.district_code,
+                          if(!@editing_schools && school.district_code,
                             do: "hover:bg-primary/5 cursor-pointer",
                             else: "hover:bg-base-50"
                           )
                         ]}
-                        phx-click={school.district_code && JS.navigate(~p"/mde/districts/#{school.district_code}?from=esp&emo=#{@selected_emo.name}")}
+                        phx-click={
+                          !@editing_schools && school.district_code &&
+                            JS.navigate(
+                              ~p"/mde/districts/#{school.district_code}?from=esp&emo=#{@selected_emo.name}"
+                            )
+                        }
                       >
                         <td class="px-4 py-3">
                           <p class="text-sm font-medium leading-snug">
@@ -431,8 +577,40 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                             <span class="text-xs text-base-content/30">—</span>
                           <% end %>
                         </td>
+                        <td :if={@editing_schools} class="px-4 py-3">
+                          <div class="flex items-center gap-2">
+                            <span
+                              :if={@overrides[school.entity_code] == :add}
+                              class="badge badge-info badge-xs"
+                              title="Manually added"
+                            >
+                              added
+                            </span>
+                            <button
+                              :if={Map.has_key?(@overrides, school.entity_code)}
+                              phx-click="revert_override"
+                              phx-value-entity-code={school.entity_code}
+                              class="text-base-content/40 hover:text-base-content transition-colors"
+                              title="Revert to default"
+                            >
+                              <.icon name="hero-arrow-uturn-left" class="size-4" />
+                            </button>
+                            <button
+                              phx-click="remove_school"
+                              phx-value-entity-code={school.entity_code}
+                              class="text-error/60 hover:text-error transition-colors"
+                              title="Remove from portfolio"
+                            >
+                              <.icon name="hero-x-circle" class="size-4" />
+                            </button>
+                          </div>
+                        </td>
                         <td class="px-4 py-3 text-base-content/25">
-                          <.icon :if={school.district_code} name="hero-chevron-right" class="size-4" />
+                          <.icon
+                            :if={!@editing_schools && school.district_code}
+                            name="hero-chevron-right"
+                            class="size-4"
+                          />
                         </td>
                       </tr>
                     </tbody>
@@ -514,9 +692,15 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
       <div class="px-6 pt-4 pb-3 flex items-center justify-between gap-4">
         <div>
           <h3 class="text-sm font-semibold">M-STEP / PSAT All Subjects — vs. Geographic LEA</h3>
-          <p class="text-xs text-base-content/40 mt-0.5">Schools exceeding their local district average</p>
+          <p class="text-xs text-base-content/40 mt-0.5">
+            Schools exceeding their local district average
+          </p>
         </div>
-        <select phx-change="select_stats_year" name="year" class="select select-xs select-bordered text-xs">
+        <select
+          phx-change="select_stats_year"
+          name="year"
+          class="select select-xs select-bordered text-xs"
+        >
           <option :for={y <- @stats_years} value={y} selected={y == @stats_year}>{y}</option>
         </select>
       </div>
@@ -527,7 +711,9 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
           <div class="flex items-end gap-2">
             <span class="text-2xl font-bold text-success">{@exceeds}</span>
             <span class="text-xs text-base-content/40 mb-0.5">
-              {if @total_comparable > 0, do: "#{round(@exceeds / @total_comparable * 100)}%", else: "—"}
+              {if @total_comparable > 0,
+                do: "#{round(@exceeds / @total_comparable * 100)}%",
+                else: "—"}
             </span>
           </div>
         </div>
@@ -550,8 +736,14 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
 
       <div :if={@total_comparable > 0} class="px-6 pb-4">
         <div class="flex h-2 overflow-hidden bg-base-200 gap-px">
-          <div class="bg-success transition-all duration-500" style={"width: #{round(@exceeds / @total_comparable * 100)}%"} />
-          <div class="bg-error transition-all duration-500" style={"width: #{round(@below / @total_comparable * 100)}%"} />
+          <div
+            class="bg-success transition-all duration-500"
+            style={"width: #{round(@exceeds / @total_comparable * 100)}%"}
+          />
+          <div
+            class="bg-error transition-all duration-500"
+            style={"width: #{round(@below / @total_comparable * 100)}%"}
+          />
         </div>
         <div class="flex justify-between mt-1">
           <span class="text-[10px] text-success font-medium">Exceeds</span>
@@ -568,7 +760,10 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
           School vs LEA delta (pp) — sorted best to worst
         </p>
         <div class="space-y-1.5">
-          <div :for={s <- Enum.reject(@stats, & &1.no_lea_found)} class="flex items-center gap-3 group">
+          <div
+            :for={s <- Enum.reject(@stats, & &1.no_lea_found)}
+            class="flex items-center gap-3 group"
+          >
             <div class="w-40 shrink-0 truncate text-xs text-base-content/60 group-hover:text-base-content transition-colors text-right leading-tight">
               {short_name(s.school_name)}
             </div>
@@ -576,12 +771,21 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
               <div class="relative flex-1 h-4 flex items-center">
                 <div class="absolute left-1/2 top-0 bottom-0 w-px bg-base-300 z-10" />
                 <div
-                  class={["absolute h-3 transition-all duration-300", if((s.delta || 0) >= 0, do: "bg-success/70 left-1/2", else: "bg-error/70 right-1/2")]}
+                  class={[
+                    "absolute h-3 transition-all duration-300",
+                    if((s.delta || 0) >= 0,
+                      do: "bg-success/70 left-1/2",
+                      else: "bg-error/70 right-1/2"
+                    )
+                  ]}
                   style={"width: #{min(abs(s.delta || 0) / @max_abs_delta * 50, 50)}%"}
                 />
               </div>
             </div>
-            <div class={["text-xs font-mono font-semibold w-14 shrink-0 text-right", if((s.delta || 0) >= 0, do: "text-success", else: "text-error")]}>
+            <div class={[
+              "text-xs font-mono font-semibold w-14 shrink-0 text-right",
+              if((s.delta || 0) >= 0, do: "text-success", else: "text-error")
+            ]}>
               {if (s.delta || 0) >= 0, do: "+", else: ""}{format_delta(s.delta)}pp
             </div>
           </div>
@@ -594,9 +798,14 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
           </div>
           <table class="w-full">
             <tbody>
-              <tr :for={s <- Enum.filter(@stats, & &1.no_lea_found)} class="border-b border-base-200 last:border-0">
+              <tr
+                :for={s <- Enum.filter(@stats, & &1.no_lea_found)}
+                class="border-b border-base-200 last:border-0"
+              >
                 <td class="px-3 py-1.5 text-xs text-base-content/40">{s.school_name}</td>
-                <td class="px-3 py-1.5 text-xs font-mono text-base-content/30 text-right">{s.building_code}</td>
+                <td class="px-3 py-1.5 text-xs font-mono text-base-content/30 text-right">
+                  {s.building_code}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -637,9 +846,15 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
       <div class="px-6 pt-4 pb-3 flex items-center justify-between gap-4">
         <div>
           <h3 class="text-sm font-semibold">SAT College Readiness — All Score vs. Geographic LEA</h3>
-          <p class="text-xs text-base-content/40 mt-0.5">Schools exceeding their local district combined SAT score (Math + EBRW)</p>
+          <p class="text-xs text-base-content/40 mt-0.5">
+            Schools exceeding their local district combined SAT score (Math + EBRW)
+          </p>
         </div>
-        <select phx-change="select_stats_year" name="year" class="select select-xs select-bordered text-xs">
+        <select
+          phx-change="select_stats_year"
+          name="year"
+          class="select select-xs select-bordered text-xs"
+        >
           <option :for={y <- @stats_years} value={y} selected={y == @stats_year}>{y}</option>
         </select>
       </div>
@@ -650,7 +865,9 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
           <div class="flex items-end gap-2">
             <span class="text-2xl font-bold text-success">{@exceeds}</span>
             <span class="text-xs text-base-content/40 mb-0.5">
-              {if @total_comparable > 0, do: "#{round(@exceeds / @total_comparable * 100)}%", else: "—"}
+              {if @total_comparable > 0,
+                do: "#{round(@exceeds / @total_comparable * 100)}%",
+                else: "—"}
             </span>
           </div>
         </div>
@@ -673,8 +890,14 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
 
       <div :if={@total_comparable > 0} class="px-6 pb-4">
         <div class="flex h-2 overflow-hidden bg-base-200 gap-px">
-          <div class="bg-success transition-all duration-500" style={"width: #{round(@exceeds / @total_comparable * 100)}%"} />
-          <div class="bg-error transition-all duration-500" style={"width: #{round(@below / @total_comparable * 100)}%"} />
+          <div
+            class="bg-success transition-all duration-500"
+            style={"width: #{round(@exceeds / @total_comparable * 100)}%"}
+          />
+          <div
+            class="bg-error transition-all duration-500"
+            style={"width: #{round(@below / @total_comparable * 100)}%"}
+          />
         </div>
         <div class="flex justify-between mt-1">
           <span class="text-[10px] text-success font-medium">Exceeds</span>
@@ -691,7 +914,10 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
           School vs LEA delta (pts) — sorted best to worst
         </p>
         <div class="space-y-1.5">
-          <div :for={s <- Enum.reject(@stats, & &1.no_lea_found)} class="flex items-center gap-3 group">
+          <div
+            :for={s <- Enum.reject(@stats, & &1.no_lea_found)}
+            class="flex items-center gap-3 group"
+          >
             <div class="w-40 shrink-0 truncate text-xs text-base-content/60 group-hover:text-base-content transition-colors text-right leading-tight">
               {short_name(s.school_name)}
             </div>
@@ -699,12 +925,21 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
               <div class="relative flex-1 h-4 flex items-center">
                 <div class="absolute left-1/2 top-0 bottom-0 w-px bg-base-300 z-10" />
                 <div
-                  class={["absolute h-3 transition-all duration-300", if((s.delta || 0) >= 0, do: "bg-success/70 left-1/2", else: "bg-error/70 right-1/2")]}
+                  class={[
+                    "absolute h-3 transition-all duration-300",
+                    if((s.delta || 0) >= 0,
+                      do: "bg-success/70 left-1/2",
+                      else: "bg-error/70 right-1/2"
+                    )
+                  ]}
                   style={"width: #{min(abs(s.delta || 0) / @max_abs_delta * 50, 50)}%"}
                 />
               </div>
             </div>
-            <div class={["text-xs font-mono font-semibold w-16 shrink-0 text-right", if((s.delta || 0) >= 0, do: "text-success", else: "text-error")]}>
+            <div class={[
+              "text-xs font-mono font-semibold w-16 shrink-0 text-right",
+              if((s.delta || 0) >= 0, do: "text-success", else: "text-error")
+            ]}>
               {if (s.delta || 0) >= 0, do: "+", else: ""}{format_sat_delta(s.delta)}pts
             </div>
           </div>
@@ -717,10 +952,15 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
           </div>
           <table class="w-full">
             <tbody>
-              <tr :for={s <- Enum.filter(@stats, & &1.no_lea_found)} class="border-b border-base-200 last:border-0">
+              <tr
+                :for={s <- Enum.filter(@stats, & &1.no_lea_found)}
+                class="border-b border-base-200 last:border-0"
+              >
                 <td class="px-3 py-1.5 text-xs text-base-content/40">{s.school_name}</td>
                 <td class="px-3 py-1.5 text-xs font-mono text-base-content/30">{s.building_code}</td>
-                <td class="px-3 py-1.5 text-xs text-base-content/30 italic text-right">{s.exclusion_reason}</td>
+                <td class="px-3 py-1.5 text-xs text-base-content/30 italic text-right">
+                  {s.exclusion_reason}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -746,41 +986,25 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
     _ -> []
   end
 
-  defp load_schools_for_emo(emo_name) do
-    contacts =
-      MdeEmoContact
-      |> Ash.Query.filter(management_organization == ^emo_name)
-      |> Ash.read!(authorize?: false)
+  defp load_schools_for_emo(emo_name), do: EmoPortfolio.resolve_schools(emo_name)
 
-    district_codes = Enum.map(contacts, & &1.district_code) |> Enum.reject(&is_nil/1)
+  # Re-runs the school resolution + stats pipeline after an add/remove/revert
+  # override change, so the schools table, both dashboards, and the "no LEA
+  # match" lists all reflect the new membership immediately.
+  defp refresh_after_override_change(socket, emo_name) do
+    {schools, contact_map} = load_schools_for_emo(emo_name)
+    building_codes = Enum.map(schools, & &1.entity_code) |> Enum.reject(&is_nil/1)
+    year = socket.assigns.stats_year
 
-    contact_map =
-      Map.new(contacts, fn c ->
-        {c.district_code,
-         %{contact_name: c.contact_name, contact_email: c.contact_email, contact_phone: c.contact_phone}}
-      end)
-
-    schools =
-      if district_codes == [] do
-        []
-      else
-        MdeEntityMaster
-        |> Ash.Query.filter(district_code in ^district_codes and entity_status == "Open-Active")
-        |> Ash.Query.select([
-          :entity_code,
-          :entity_official_name,
-          :district_code,
-          :entity_county_name,
-          :entity_actual_grades,
-          :entity_authorized_grades
-        ])
-        |> Ash.Query.sort(entity_official_name: :asc)
-        |> Ash.read!(authorize?: false)
-      end
-
-    {schools, contact_map}
-  rescue
-    _ -> {[], %{}}
+    socket
+    |> assign(:schools, schools)
+    |> assign(:contact_map, contact_map)
+    |> assign(:filtered_schools, filter_schools(schools, socket.assigns.school_search))
+    |> assign(:portfolio_stats, load_portfolio_stats(building_codes, year))
+    |> assign(:sat_portfolio_stats, load_sat_portfolio_stats(building_codes, year))
+    |> assign(:overrides, EmoPortfolio.overrides_map(emo_name))
+    |> assign(:add_school_search, "")
+    |> assign(:add_school_results, [])
   end
 
   defp load_portfolio_stats([], _year), do: []
@@ -841,7 +1065,9 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
     lea_map =
       Map.new(building_codes, fn bc ->
         case Map.get(snapshot_map, bc) do
-          %{no_lea_found: false} = entry -> {bc, entry}
+          %{no_lea_found: false} = entry ->
+            {bc, entry}
+
           _ ->
             case Map.get(entity_lea_map, bc) do
               nil -> {bc, %{lea_district_code: nil, no_lea_found: true}}
@@ -865,7 +1091,11 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
       |> Map.new(&{&1.building_code, &1})
 
     lea_codes =
-      lea_map |> Map.values() |> Enum.map(& &1.lea_district_code) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+      lea_map
+      |> Map.values()
+      |> Enum.map(& &1.lea_district_code)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
 
     lea_sat =
       if lea_codes == [] do
@@ -900,10 +1130,17 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
 
       {no_lea, exclusion_reason} =
         cond do
-          is_nil(school_score) -> {true, "No school SAT data"}
-          lea_info.no_lea_found and is_nil(Map.get(entity_lea_map, bc)) -> {true, "No geographic LEA assigned"}
-          is_nil(lea_score) -> {true, "LEA has no SAT data (#{lea_info.lea_district_code})"}
-          true -> {false, nil}
+          is_nil(school_score) ->
+            {true, "No school SAT data"}
+
+          lea_info.no_lea_found and is_nil(Map.get(entity_lea_map, bc)) ->
+            {true, "No geographic LEA assigned"}
+
+          is_nil(lea_score) ->
+            {true, "LEA has no SAT data (#{lea_info.lea_district_code})"}
+
+          true ->
+            {false, nil}
         end
 
       %{
@@ -930,7 +1167,10 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
 
   defp filter_emos(emos, search) do
     search_lower = String.downcase(search)
-    Enum.filter(emos, fn emo -> String.contains?(String.downcase(emo.name || ""), search_lower) end)
+
+    Enum.filter(emos, fn emo ->
+      String.contains?(String.downcase(emo.name || ""), search_lower)
+    end)
   end
 
   defp filter_schools(schools, ""), do: schools

@@ -112,5 +112,15 @@ defmodule Emisint.Assessments do
       define :list_mde_composite_resident_districts, action: :read
       define :get_mde_composite_resident_district, action: :read, get_by: [:id]
     end
+
+    resource Emisint.Assessments.EmoSchoolOverride do
+      define :upsert_emo_school_override, action: :upsert
+
+      define :list_emo_school_overrides_for_org,
+        action: :by_management_organization,
+        args: [:management_organization]
+
+      define :destroy_emo_school_override, action: :destroy
+    end
   end
 end

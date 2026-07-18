@@ -2,19 +2,18 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
   @moduledoc """
   Generates a Portfolio Overview PDF for an ESP/Management Organization.
 
-  Loads schools via MdeEmoContact district codes, then runs the same
-  M-STEP and SAT vs LEA comparisons as the chartering-agency portfolio PDF.
-  Reuses priv/typst/portfolio/portfolio.typ.
+  Loads schools via `Emisint.Assessments.EmoPortfolio.resolve_schools/1`
+  (MdeEmoContact district codes plus any manual EmoSchoolOverride add/remove
+  decisions, kept in sync with the ESP Portfolio LiveView), then runs the
+  same M-STEP and SAT vs LEA comparisons as the chartering-agency portfolio
+  PDF. Reuses priv/typst/portfolio/portfolio.typ.
   """
 
   @template_path "priv/typst/portfolio/portfolio.typ"
 
   import Ecto.Query, only: [from: 2]
 
-  require Ash.Query
-
-  alias Emisint.Assessments.MdeEmoContact
-  alias Emisint.Assessments.MdeEntityMaster
+  alias Emisint.Assessments.EmoPortfolio
   alias Emisint.Repo
 
   def generate_report(emo_name, year, _opts \\ []) do
@@ -54,42 +53,7 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
   # Data loaders
   # ---------------------------------------------------------------------------
 
-  defp load_schools(emo_name) do
-    contacts =
-      MdeEmoContact
-      |> Ash.Query.filter(management_organization == ^emo_name)
-      |> Ash.read!(authorize?: false)
-
-    district_codes = Enum.map(contacts, & &1.district_code) |> Enum.reject(&is_nil/1)
-
-    contact_map =
-      Map.new(contacts, fn c ->
-        {c.district_code,
-         %{contact_name: c.contact_name, contact_email: c.contact_email, contact_phone: c.contact_phone}}
-      end)
-
-    schools =
-      if district_codes == [] do
-        []
-      else
-        MdeEntityMaster
-        |> Ash.Query.filter(district_code in ^district_codes and entity_status == "Open-Active")
-        |> Ash.Query.select([
-          :entity_code,
-          :entity_official_name,
-          :district_code,
-          :entity_county_name,
-          :entity_actual_grades,
-          :entity_authorized_grades
-        ])
-        |> Ash.Query.sort(entity_official_name: :asc)
-        |> Ash.read!(authorize?: false)
-      end
-
-    {schools, contact_map}
-  rescue
-    _ -> {[], %{}}
-  end
+  defp load_schools(emo_name), do: EmoPortfolio.resolve_schools(emo_name)
 
   defp load_emo_info(emo_name, schools) do
     %{
@@ -183,7 +147,11 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
       |> Map.new(&{&1.building_code, &1})
 
     lea_codes =
-      lea_map |> Map.values() |> Enum.map(& &1.lea_district_code) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+      lea_map
+      |> Map.values()
+      |> Enum.map(& &1.lea_district_code)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
 
     lea_sat =
       if lea_codes == [] do
@@ -242,7 +210,10 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
       }
     end)
     |> Enum.reject(fn s -> is_nil(s.school_score) and s.school_name == s.building_code end)
-    |> Enum.sort_by(fn s -> if s.no_lea_found, do: -99_999.0, else: s.delta || -99_999.0 end, :desc)
+    |> Enum.sort_by(
+      fn s -> if s.no_lea_found, do: -99_999.0, else: s.delta || -99_999.0 end,
+      :desc
+    )
   rescue
     _ -> []
   end
