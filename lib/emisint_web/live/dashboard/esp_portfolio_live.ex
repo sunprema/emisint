@@ -3,14 +3,22 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
 
   import Ecto.Query, only: [from: 2]
 
+  alias Emisint.Assessments.EdRegression
   alias Emisint.Assessments.EmoPortfolio
   alias Emisint.Assessments.MdeEmoContact
   alias Emisint.Repo
+  alias EmisintWeb.Components.ScatterChart
 
   on_mount {EmisintWeb.LiveUserAuth, :live_user_required}
   on_mount {EmisintWeb.LiveScope, :default}
 
   @stats_years ["24 - 25 School Year", "22 - 23 School Year"]
+  @empty_regression %{
+    points: [],
+    excluded: [],
+    thresholds: %{ed_pct: nil, value: nil},
+    regression: nil
+  }
 
   # ---------------------------------------------------------------------------
   # Lifecycle
@@ -36,6 +44,8 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
       |> assign(:overrides, %{})
       |> assign(:add_school_search, "")
       |> assign(:add_school_results, [])
+      |> assign(:mstep_regression, @empty_regression)
+      |> assign(:sat_regression, @empty_regression)
 
     if connected?(socket) do
       emos = load_emo_list()
@@ -71,7 +81,9 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
        |> assign(:overrides, EmoPortfolio.overrides_map(emo_name))
        |> assign(:editing_schools, false)
        |> assign(:add_school_search, "")
-       |> assign(:add_school_results, [])}
+       |> assign(:add_school_results, [])
+       |> assign(:mstep_regression, EdRegression.mstep_analysis(emo_name, year))
+       |> assign(:sat_regression, EdRegression.sat_analysis(emo_name, year))}
     else
       {:noreply, socket}
     end
@@ -91,7 +103,9 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
      |> assign(:overrides, %{})
      |> assign(:editing_schools, false)
      |> assign(:add_school_search, "")
-     |> assign(:add_school_results, [])}
+     |> assign(:add_school_results, [])
+     |> assign(:mstep_regression, @empty_regression)
+     |> assign(:sat_regression, @empty_regression)}
   end
 
   # ---------------------------------------------------------------------------
@@ -138,6 +152,7 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
     building_codes =
       Enum.map(socket.assigns.schools, & &1.entity_code) |> Enum.reject(&is_nil/1)
 
+    emo_name = socket.assigns.selected_emo.name
     stats = load_portfolio_stats(building_codes, year)
     sat_stats = load_sat_portfolio_stats(building_codes, year)
 
@@ -145,7 +160,9 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
      socket
      |> assign(:stats_year, year)
      |> assign(:portfolio_stats, stats)
-     |> assign(:sat_portfolio_stats, sat_stats)}
+     |> assign(:sat_portfolio_stats, sat_stats)
+     |> assign(:mstep_regression, EdRegression.mstep_analysis(emo_name, year))
+     |> assign(:sat_regression, EdRegression.sat_analysis(emo_name, year))}
   end
 
   def handle_event("toggle_edit_schools", _params, socket) do
@@ -403,6 +420,22 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                     <.icon name="hero-chart-bar" class="size-3.5" /> SAT Dashboard
                   </div>
                 </button>
+                <button
+                  phx-click="switch_tab"
+                  phx-value-tab="regression"
+                  class={[
+                    "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    if(@active_tab == :regression,
+                      do: "border-primary text-primary bg-base-100",
+                      else:
+                        "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                    )
+                  ]}
+                >
+                  <div class="flex items-center gap-2">
+                    <.icon name="hero-chart-bar-square" class="size-3.5" /> Regression
+                  </div>
+                </button>
               </div>
 
               <%!-- Tab: Schools --%>
@@ -647,6 +680,28 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                   stats={@sat_portfolio_stats}
                   stats_year={@stats_year}
                   stats_years={@stats_years}
+                />
+              </div>
+
+              <%!-- Tab: Regression --%>
+              <div :if={@active_tab == :regression} class="divide-y divide-base-200">
+                <ScatterChart.scatter_chart
+                  points={@mstep_regression.points}
+                  excluded={@mstep_regression.excluded}
+                  thresholds={@mstep_regression.thresholds}
+                  regression={@mstep_regression.regression}
+                  title="M-STEP vs. Economically Disadvantaged %"
+                  y_label="M-STEP Proficiency %"
+                  y_unit={:percent}
+                />
+                <ScatterChart.scatter_chart
+                  points={@sat_regression.points}
+                  excluded={@sat_regression.excluded}
+                  thresholds={@sat_regression.thresholds}
+                  regression={@sat_regression.regression}
+                  title="SAT vs. Economically Disadvantaged %"
+                  y_label="SAT Score"
+                  y_unit={:score}
                 />
               </div>
             </div>
@@ -1005,6 +1060,8 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
     |> assign(:overrides, EmoPortfolio.overrides_map(emo_name))
     |> assign(:add_school_search, "")
     |> assign(:add_school_results, [])
+    |> assign(:mstep_regression, EdRegression.mstep_analysis(emo_name, year))
+    |> assign(:sat_regression, EdRegression.sat_analysis(emo_name, year))
   end
 
   defp load_portfolio_stats([], _year), do: []

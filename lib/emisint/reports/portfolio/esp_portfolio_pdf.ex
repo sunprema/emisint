@@ -13,6 +13,7 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
 
   import Ecto.Query, only: [from: 2]
 
+  alias Emisint.Assessments.EdRegression
   alias Emisint.Assessments.EmoPortfolio
   alias Emisint.Repo
 
@@ -34,10 +35,14 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
     emo_task = Task.async(fn -> load_emo_info(emo_name, schools) end)
     mstep_task = Task.async(fn -> load_mstep_stats(building_codes, year) end)
     sat_task = Task.async(fn -> load_sat_stats(building_codes, year) end)
+    mstep_regression_task = Task.async(fn -> EdRegression.mstep_analysis(emo_name, year) end)
+    sat_regression_task = Task.async(fn -> EdRegression.sat_analysis(emo_name, year) end)
 
     emo_info = Task.await(emo_task)
     mstep_raw = Task.await(mstep_task)
     sat_raw = Task.await(sat_task)
+    mstep_regression = Task.await(mstep_regression_task)
+    sat_regression = Task.await(sat_regression_task)
 
     %{
       agency: emo_info,
@@ -45,7 +50,11 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
       report_date: Date.utc_today() |> Calendar.strftime("%b %d, %Y"),
       schools: format_schools(schools),
       mstep: format_section(mstep_raw, :mstep),
-      sat: format_section(sat_raw, :sat)
+      sat: format_section(sat_raw, :sat),
+      regression: %{
+        mstep: format_regression(mstep_regression, "percent"),
+        sat: format_regression(sat_regression, "score")
+      }
     }
   end
 
@@ -288,6 +297,26 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
             exclusion_reason: s.exclusion_reason || "No comparison available"
           }
         end)
+    }
+  end
+
+  defp format_regression(analysis, y_unit) do
+    %{
+      points:
+        Enum.map(analysis.points, fn p ->
+          %{
+            school_name: p.school_name,
+            ed_pct: p.ed_pct,
+            value: p.value,
+            quadrant: Atom.to_string(p.quadrant)
+          }
+        end),
+      excluded_count: length(analysis.excluded),
+      threshold_ed_pct: analysis.thresholds.ed_pct,
+      threshold_value: analysis.thresholds.value,
+      slope: analysis.regression && analysis.regression.slope,
+      intercept: analysis.regression && analysis.regression.intercept,
+      y_unit: y_unit
     }
   end
 
