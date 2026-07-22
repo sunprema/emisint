@@ -544,16 +544,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
               </div>
             </div>
             <%!-- Scope summary table — All vs Top 10 at a glance --%>
-            <div class="space-y-3">
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  Composite Summary
-                </h2>
-
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 overflow-hidden">
+            <.collapsible_section id="composite-summary-crd" title="Composite Summary">
+              <div class="border border-base-200 overflow-hidden -mx-5 -mb-5">
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
@@ -628,7 +620,8 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </table>
                 </div>
               </div>
-            </div>
+            </.collapsible_section>
+
             <%!-- No scored districts notice --%>
             <div
               :if={@crd_view.scored_count == 0}
@@ -637,64 +630,290 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
               None of these resident districts have M-STEP rollup data for {@selected_year}.
               The composite can't be computed for this scope/year.
             </div>
+
+            <%!-- SGP by Subject — school vs. composite --%>
+            <.collapsible_section
+              :if={@crd_comparison.has_any_sgp}
+              id="sgp-bars-crd"
+              title="Student Growth Percentile by Subject"
+            >
+              <:badge>
+                <span :if={@crd_scope == "top10"} class="badge badge-warning badge-xs">
+                  Top 10
+                </span>
+                <span class="text-xs text-base-content/40 normal-case font-normal">
+                  Dashed line = 50th percentile (typical growth)
+                </span>
+              </:badge>
+              <.sgp_subject_bar
+                :for={subject <- @crd_comparison.sgp_subjects}
+                subject={subject}
+                primary={Map.get(@crd_comparison.charter_sgp, subject)}
+                primary_label={short_name(@crd_comparison.charter_name || @district_code)}
+                compare={Map.get(@crd_view.composite_sgp_subjects, subject)}
+                compare_label={crd_scope_label(@crd_scope)}
+              />
+            </.collapsible_section>
+
+            <%!-- SGP numbers: summary + resident district breakdown --%>
+            <.collapsible_section
+              :if={@crd_comparison.has_any_sgp}
+              id="sgp-table-crd"
+              title="Student Growth Percentile"
+            >
+              <:badge>
+                <span :if={@crd_scope == "top10"} class="badge badge-warning badge-xs">
+                  Top 10
+                </span>
+              </:badge>
+              <%!-- SGP summary table: School vs All vs Top 10 --%>
+              <div class="border border-base-200 overflow-hidden -mx-5">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-base-200 bg-base-50">
+                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Scope
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Districts
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Students
+                        </th>
+
+                        <th
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide"
+                        >
+                          {subject}
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          Avg
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody class="divide-y divide-base-200">
+                      <%!-- School (charter) baseline --%>
+                      <tr class="border-b-2 border-base-300 bg-info/5">
+                        <td class="px-4 py-2.5 font-semibold text-xs text-info">
+                          School
+                          <span class="block text-base-content/40 font-normal normal-case">
+                            {short_name(@crd_comparison.charter_name || @district_code)}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right text-xs text-base-content/30">—</td>
+
+                        <td class="px-4 py-2.5 text-right text-xs text-base-content/30">—</td>
+
+                        <td
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="px-4 py-2.5 text-right"
+                        >
+                          <span class={[
+                            "font-semibold text-xs",
+                            sgp_score_class(Map.get(@crd_comparison.charter_sgp, subject))
+                          ]}>
+                            {format_index(Map.get(@crd_comparison.charter_sgp, subject))}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right">
+                          <span class={[
+                            "font-semibold text-xs",
+                            sgp_score_class(@crd_comparison.charter_sgp_avg)
+                          ]}>
+                            {format_index(@crd_comparison.charter_sgp_avg)}
+                          </span>
+                        </td>
+                      </tr>
+
+                      <tr
+                        :for={
+                          {label, scope, v} <- [
+                            {"All", "all", @crd_comparison.all},
+                            {"Top 10", "top10", @crd_comparison.top10}
+                          ]
+                        }
+                        class={["hover:bg-base-50", @crd_scope == scope && "bg-warning/5 font-medium"]}
+                      >
+                        <td class="px-4 py-2.5 font-semibold text-xs">{label}</td>
+
+                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/70">
+                          {v.sgp_scored_count}
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/70">
+                          {format_number(v.sgp_total_students)}
+                        </td>
+
+                        <td
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="px-4 py-2.5 text-right"
+                        >
+                          <span class={[
+                            "text-xs",
+                            sgp_score_class(Map.get(v.composite_sgp_subjects, subject))
+                          ]}>
+                            {format_index(Map.get(v.composite_sgp_subjects, subject))}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right">
+                          <span class={["text-xs", sgp_score_class(v.composite_sgp_avg)]}>
+                            {format_index(v.composite_sgp_avg)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <%!-- SGP resident district breakdown --%>
+              <div class="border border-base-200 overflow-hidden -mx-5 -mb-5">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-base-200 bg-base-50">
+                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Resident District
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
+                          Students
+                        </th>
+
+                        <th
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide"
+                        >
+                          {subject}
+                        </th>
+
+                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
+                          Avg
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody class="divide-y divide-base-200">
+                      <tr
+                        :for={r <- @crd_view.residents}
+                        class={["hover:bg-base-50", !r.has_sgp && "opacity-50"]}
+                      >
+                        <td class="px-4 py-2.5 font-medium text-xs">
+                          {r.resident_name}
+                          <span :if={!r.has_sgp} class="text-base-content/35 font-normal">
+                            (no SGP data)
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/60">
+                          {format_number(r.weight)}
+                        </td>
+
+                        <td
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="px-4 py-2.5 text-right"
+                        >
+                          <span class={["text-xs", sgp_score_class(Map.get(r.sgp, subject))]}>
+                            {format_index(Map.get(r.sgp, subject))}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-2.5 text-right">
+                          <span class={["text-xs font-semibold", sgp_score_class(r.sgp_avg)]}>
+                            {format_index(r.sgp_avg)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+
+                    <tfoot :if={@crd_view.sgp_scored_count > 0}>
+                      <tr class="border-t-2 border-base-300 bg-warning/5 font-semibold">
+                        <td class="px-4 py-3 text-xs uppercase tracking-wide text-warning">
+                          {crd_scope_label(@crd_scope)} (weighted)
+                        </td>
+
+                        <td class="px-4 py-3 text-right tabular-nums text-xs">
+                          {format_number(@crd_view.sgp_total_students)}
+                        </td>
+
+                        <td
+                          :for={subject <- @crd_comparison.sgp_subjects}
+                          class="px-4 py-3 text-right"
+                        >
+                          <span class={[
+                            "text-xs",
+                            sgp_score_class(Map.get(@crd_view.composite_sgp_subjects, subject))
+                          ]}>
+                            {format_index(Map.get(@crd_view.composite_sgp_subjects, subject))}
+                          </span>
+                        </td>
+
+                        <td class="px-4 py-3 text-right">
+                          <span class={["text-xs", sgp_score_class(@crd_view.composite_sgp_avg)]}>
+                            {format_index(@crd_view.composite_sgp_avg)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </.collapsible_section>
+
             <%!-- All Subjects composite --%>
-            <div :if={@crd_view.scored_count > 0} class="space-y-3">
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  All Subjects Average
-                </h2>
+            <.collapsible_section
+              :if={@crd_view.scored_count > 0}
+              id="all-subjects-avg-crd"
+              title="All Subjects Average"
+            >
+              <.subject_comparison
+                subject="All Subjects"
+                primary={@crd_comparison.charter_avg}
+                primary_label={short_name(@crd_comparison.charter_name || @district_code)}
+                compare={@crd_view.composite_avg}
+                compare_label={if @crd_scope == "top10", do: "Top 10 CRD", else: "CRD Composite"}
+              />
+            </.collapsible_section>
 
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 p-5">
-                <.subject_comparison
-                  subject="All Subjects"
-                  primary={@crd_comparison.charter_avg}
-                  primary_label={short_name(@crd_comparison.charter_name || @district_code)}
-                  compare={@crd_view.composite_avg}
-                  compare_label={if @crd_scope == "top10", do: "Top 10 CRD", else: "CRD Composite"}
-                />
-              </div>
-            </div>
             <%!-- M-STEP proficiency by subject --%>
-            <div :if={@crd_view.scored_count > 0} class="space-y-3">
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  M-STEP Proficiency by Subject
-                </h2>
+            <.collapsible_section
+              :if={@crd_view.scored_count > 0}
+              id="mstep-proficiency-crd"
+              title="M-STEP Proficiency by Subject"
+            >
+              <.subject_comparison
+                :for={subject <- @subjects}
+                subject={subject}
+                primary={Map.get(@crd_comparison.charter_subjects, subject)}
+                primary_label={short_name(@crd_comparison.charter_name || @district_code)}
+                compare={Map.get(@crd_view.composite_subjects, subject)}
+                compare_label={if @crd_scope == "top10", do: "Top 10 CRD", else: "CRD Composite"}
+              />
+            </.collapsible_section>
 
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 p-5 space-y-5">
-                <.subject_comparison
-                  :for={subject <- @subjects}
-                  subject={subject}
-                  primary={Map.get(@crd_comparison.charter_subjects, subject)}
-                  primary_label={short_name(@crd_comparison.charter_name || @district_code)}
-                  compare={Map.get(@crd_view.composite_subjects, subject)}
-                  compare_label={if @crd_scope == "top10", do: "Top 10 CRD", else: "CRD Composite"}
-                />
-              </div>
-            </div>
             <%!-- Resident district breakdown --%>
-            <div class="space-y-3">
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  Resident Districts — M-STEP Proficiency
-                </h2>
-
+            <.collapsible_section
+              id="resident-breakdown-crd"
+              title="Resident Districts — M-STEP Proficiency"
+            >
+              <:badge>
                 <span
                   :if={@crd_scope == "top10"}
                   class="text-xs font-medium text-warning bg-warning/10 px-2 py-0.5"
                 >
                   Top 10 by Enrollment
                 </span>
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 overflow-hidden">
+              </:badge>
+              <div class="border border-base-200 overflow-hidden -mx-5 -mb-5">
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
@@ -773,20 +992,19 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </table>
                 </div>
               </div>
-            </div>
+            </.collapsible_section>
 
             <%!-- ───────────────────── SAT comparison ───────────────────── --%>
-            <div :if={@crd_comparison.has_any_sat} class="space-y-6 pt-2">
-              <div class="flex items-center gap-2">
-                <.icon name="hero-academic-cap" class="size-4 text-secondary" />
-                <h2 class="text-sm font-bold uppercase tracking-wider text-base-content/60">
-                  SAT College Readiness
-                </h2>
+            <.collapsible_section
+              :if={@crd_comparison.has_any_sat}
+              id="sat-comparison-crd"
+              title="SAT College Readiness"
+            >
+              <:badge>
                 <span :if={@crd_scope == "top10"} class="badge badge-warning badge-xs">Top 10</span>
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
+              </:badge>
               <%!-- SAT summary table: School vs All vs Top 10 --%>
-              <div class="bg-base-100 border border-base-200 overflow-hidden">
+              <div class="border border-base-200 overflow-hidden -mx-5">
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
@@ -993,224 +1211,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </table>
                 </div>
               </div>
-            </div>
-
-            <%!-- ───────────────────── SGP comparison ───────────────────── --%>
-            <div :if={@crd_comparison.has_any_sgp} class="space-y-6 pt-2">
-              <div class="flex items-center gap-2">
-                <.icon name="hero-arrow-trending-up" class="size-4 text-secondary" />
-                <h2 class="text-sm font-bold uppercase tracking-wider text-base-content/60">
-                  Student Growth Percentile
-                </h2>
-                <span :if={@crd_scope == "top10"} class="badge badge-warning badge-xs">
-                  Top 10
-                </span>
-                <div class="flex-1 h-px bg-base-200"></div>
-                <span class="text-xs text-base-content/40">50 = typical growth</span>
-              </div>
-
-              <%!-- SGP summary table: School vs All vs Top 10 --%>
-              <div class="bg-base-100 border border-base-200 overflow-hidden">
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="border-b border-base-200 bg-base-50">
-                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
-                          Scope
-                        </th>
-
-                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
-                          Districts
-                        </th>
-
-                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
-                          Students
-                        </th>
-
-                        <th
-                          :for={subject <- @crd_comparison.sgp_subjects}
-                          class="text-right px-4 py-3 text-xs font-medium text-warning uppercase tracking-wide"
-                        >
-                          {subject}
-                        </th>
-
-                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
-                          Avg
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody class="divide-y divide-base-200">
-                      <%!-- School (charter) baseline --%>
-                      <tr class="border-b-2 border-base-300 bg-info/5">
-                        <td class="px-4 py-2.5 font-semibold text-xs text-info">
-                          School
-                          <span class="block text-base-content/40 font-normal normal-case">
-                            {short_name(@crd_comparison.charter_name || @district_code)}
-                          </span>
-                        </td>
-
-                        <td class="px-4 py-2.5 text-right text-xs text-base-content/30">—</td>
-
-                        <td class="px-4 py-2.5 text-right text-xs text-base-content/30">—</td>
-
-                        <td
-                          :for={subject <- @crd_comparison.sgp_subjects}
-                          class="px-4 py-2.5 text-right"
-                        >
-                          <span class={[
-                            "font-semibold text-xs",
-                            sgp_score_class(Map.get(@crd_comparison.charter_sgp, subject))
-                          ]}>
-                            {format_index(Map.get(@crd_comparison.charter_sgp, subject))}
-                          </span>
-                        </td>
-
-                        <td class="px-4 py-2.5 text-right">
-                          <span class={[
-                            "font-semibold text-xs",
-                            sgp_score_class(@crd_comparison.charter_sgp_avg)
-                          ]}>
-                            {format_index(@crd_comparison.charter_sgp_avg)}
-                          </span>
-                        </td>
-                      </tr>
-
-                      <tr
-                        :for={
-                          {label, scope, v} <- [
-                            {"All", "all", @crd_comparison.all},
-                            {"Top 10", "top10", @crd_comparison.top10}
-                          ]
-                        }
-                        class={["hover:bg-base-50", @crd_scope == scope && "bg-warning/5 font-medium"]}
-                      >
-                        <td class="px-4 py-2.5 font-semibold text-xs">{label}</td>
-
-                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/70">
-                          {v.sgp_scored_count}
-                        </td>
-
-                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/70">
-                          {format_number(v.sgp_total_students)}
-                        </td>
-
-                        <td
-                          :for={subject <- @crd_comparison.sgp_subjects}
-                          class="px-4 py-2.5 text-right"
-                        >
-                          <span class={[
-                            "text-xs",
-                            sgp_score_class(Map.get(v.composite_sgp_subjects, subject))
-                          ]}>
-                            {format_index(Map.get(v.composite_sgp_subjects, subject))}
-                          </span>
-                        </td>
-
-                        <td class="px-4 py-2.5 text-right">
-                          <span class={["text-xs", sgp_score_class(v.composite_sgp_avg)]}>
-                            {format_index(v.composite_sgp_avg)}
-                          </span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <%!-- SGP resident district breakdown --%>
-              <div class="bg-base-100 border border-base-200 overflow-hidden">
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="border-b border-base-200 bg-base-50">
-                        <th class="text-left px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
-                          Resident District
-                        </th>
-
-                        <th class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide">
-                          Students
-                        </th>
-
-                        <th
-                          :for={subject <- @crd_comparison.sgp_subjects}
-                          class="text-right px-4 py-3 text-xs font-medium text-base-content/50 uppercase tracking-wide"
-                        >
-                          {subject}
-                        </th>
-
-                        <th class="text-right px-4 py-3 text-xs font-medium text-info uppercase tracking-wide">
-                          Avg
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody class="divide-y divide-base-200">
-                      <tr
-                        :for={r <- @crd_view.residents}
-                        class={["hover:bg-base-50", !r.has_sgp && "opacity-50"]}
-                      >
-                        <td class="px-4 py-2.5 font-medium text-xs">
-                          {r.resident_name}
-                          <span :if={!r.has_sgp} class="text-base-content/35 font-normal">
-                            (no SGP data)
-                          </span>
-                        </td>
-
-                        <td class="px-4 py-2.5 text-right tabular-nums text-xs text-base-content/60">
-                          {format_number(r.weight)}
-                        </td>
-
-                        <td
-                          :for={subject <- @crd_comparison.sgp_subjects}
-                          class="px-4 py-2.5 text-right"
-                        >
-                          <span class={["text-xs", sgp_score_class(Map.get(r.sgp, subject))]}>
-                            {format_index(Map.get(r.sgp, subject))}
-                          </span>
-                        </td>
-
-                        <td class="px-4 py-2.5 text-right">
-                          <span class={["text-xs font-semibold", sgp_score_class(r.sgp_avg)]}>
-                            {format_index(r.sgp_avg)}
-                          </span>
-                        </td>
-                      </tr>
-                    </tbody>
-
-                    <tfoot :if={@crd_view.sgp_scored_count > 0}>
-                      <tr class="border-t-2 border-base-300 bg-warning/5 font-semibold">
-                        <td class="px-4 py-3 text-xs uppercase tracking-wide text-warning">
-                          {crd_scope_label(@crd_scope)} (weighted)
-                        </td>
-
-                        <td class="px-4 py-3 text-right tabular-nums text-xs">
-                          {format_number(@crd_view.sgp_total_students)}
-                        </td>
-
-                        <td
-                          :for={subject <- @crd_comparison.sgp_subjects}
-                          class="px-4 py-3 text-right"
-                        >
-                          <span class={[
-                            "text-xs",
-                            sgp_score_class(Map.get(@crd_view.composite_sgp_subjects, subject))
-                          ]}>
-                            {format_index(Map.get(@crd_view.composite_sgp_subjects, subject))}
-                          </span>
-                        </td>
-
-                        <td class="px-4 py-3 text-right">
-                          <span class={["text-xs", sgp_score_class(@crd_view.composite_sgp_avg)]}>
-                            {format_index(@crd_view.composite_sgp_avg)}
-                          </span>
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            </div>
+            </.collapsible_section>
           </div>
         </div>
 
@@ -1253,39 +1254,151 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
             </div>
           </div>
 
+          <%!-- ── Student Growth Percentile (SGP) ─────────────────────────────────── --%>
+          <% dc_sgp_comparison = sgp_comparison_rows(@primary_sgp, @compare_sgp) %>
+          <% dc_sgp_visible_subjects =
+            Enum.filter(
+              dc_sgp_comparison.subjects,
+              &sgp_subject_selected?(&1, @sgp_subject_filter)
+            ) %>
+          <% dc_sgp_primary_all_grades = sgp_all_grades_by_subject(@primary_sgp) %>
+          <% dc_sgp_compare_all_grades = sgp_all_grades_by_subject(@compare_sgp) %>
+
+          <%!-- SGP by Subject — all grades combined --%>
+          <.collapsible_section
+            :if={@primary && dc_sgp_visible_subjects != []}
+            id="sgp-bars-district-comparison"
+            title="Student Growth Percentile by Subject"
+          >
+            <:badge>
+              <span class="text-xs text-base-content/40 normal-case font-normal">
+                Dashed line = 50th percentile (typical growth)
+              </span>
+            </:badge>
+            <.sgp_subject_bar
+              :for={subject <- dc_sgp_visible_subjects}
+              subject={subject}
+              primary={Map.get(dc_sgp_primary_all_grades, subject)}
+              primary_label={short_name(@primary.district_name)}
+              compare={@compare && Map.get(dc_sgp_compare_all_grades, subject)}
+              compare_label={@compare && short_name(@compare.district_name)}
+            />
+          </.collapsible_section>
+
+          <%!-- SGP by Grade --%>
+          <.collapsible_section
+            :if={@primary && dc_sgp_comparison.grades != []}
+            id="sgp-table-district-comparison"
+            title="Student Growth Percentile"
+          >
+            <%!-- Subject filter --%>
+            <div class="flex items-center gap-2 flex-wrap -mx-5 -mt-1 px-5 py-3 border-b border-base-200 bg-base-50/50">
+              <span class="text-xs font-medium text-base-content/40 uppercase tracking-wide">
+                Subjects
+              </span>
+              <button
+                :for={subject <- dc_sgp_comparison.subjects}
+                type="button"
+                phx-click="toggle_sgp_subject"
+                phx-value-subject={subject}
+                class={[
+                  "badge badge-sm cursor-pointer transition-colors",
+                  if(sgp_subject_selected?(subject, @sgp_subject_filter),
+                    do: "badge-secondary",
+                    else: "badge-outline text-base-content/40"
+                  )
+                ]}
+              >
+                {subject}
+              </button>
+              <button
+                :if={@sgp_subject_filter != nil}
+                type="button"
+                phx-click="reset_sgp_subject_filter"
+                class="text-xs text-base-content/40 hover:text-base-content underline ml-1"
+              >
+                Show all
+              </button>
+            </div>
+
+            <div
+              :if={dc_sgp_visible_subjects == []}
+              class="px-5 py-8 text-center text-xs text-base-content/30 italic"
+            >
+              No subjects selected — choose at least one above.
+            </div>
+
+            <div :if={dc_sgp_visible_subjects != []} class="overflow-x-auto -mx-5 -mb-5">
+              <table class="table table-sm w-full">
+                <thead>
+                  <tr class="text-xs text-base-content/50 border-b border-base-200">
+                    <th class="px-4 py-2 font-medium text-left">Grade</th>
+                    <%= for subject <- dc_sgp_visible_subjects do %>
+                      <th class="px-4 py-2 font-medium text-right text-info">
+                        {subject} — {short_name(@primary.district_name)}
+                      </th>
+                      <th :if={@compare} class="px-4 py-2 font-medium text-right text-warning">
+                        {subject} — {short_name(@compare.district_name)}
+                      </th>
+                    <% end %>
+                  </tr>
+                </thead>
+
+                <tbody class="divide-y divide-base-200">
+                  <tr :for={g <- dc_sgp_comparison.grades} class="hover:bg-base-50">
+                    <td class="px-4 py-2 font-medium">{g.grade}</td>
+                    <%= for subject <- dc_sgp_visible_subjects do %>
+                      <% pair = Map.get(g.by_subject, subject) %>
+                      <td class="px-4 py-2 text-right tabular-nums">
+                        <span class={[
+                          "font-semibold",
+                          sgp_score_class(pair.primary && pair.primary.mean_sgp)
+                        ]}>
+                          {if pair.primary && pair.primary.mean_sgp,
+                            do: format_index(pair.primary.mean_sgp),
+                            else: "—"}
+                        </span>
+                      </td>
+                      <td :if={@compare} class="px-4 py-2 text-right tabular-nums">
+                        <span class={[
+                          "font-semibold",
+                          sgp_score_class(pair.compare && pair.compare.mean_sgp)
+                        ]}>
+                          {if pair.compare && pair.compare.mean_sgp,
+                            do: format_index(pair.compare.mean_sgp),
+                            else: "—"}
+                        </span>
+                      </td>
+                    <% end %>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </.collapsible_section>
+
           <%!-- ── Subject Proficiency Side-by-Side ──────────────────────────────── --%>
-          <div :if={@primary} class="space-y-3">
-            <div class="flex items-center gap-2">
-              <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                M-STEP Proficiency by Subject
-              </h2>
-
-              <div class="flex-1 h-px bg-base-200"></div>
-            </div>
-
-            <div class="bg-base-100 border border-base-200 p-5 space-y-5">
-              <.subject_comparison
-                :for={subject <- @subjects}
-                subject={subject}
-                primary={Map.get(@primary.all_subjects, subject)}
-                primary_label={short_name(@primary.district_name)}
-                compare={@compare && Map.get(@compare.all_subjects, subject)}
-                compare_label={@compare && short_name(@compare.district_name)}
-              />
-            </div>
-          </div>
+          <.collapsible_section
+            :if={@primary}
+            id="mstep-proficiency-district-comparison"
+            title="M-STEP Proficiency by Subject"
+          >
+            <.subject_comparison
+              :for={subject <- @subjects}
+              subject={subject}
+              primary={Map.get(@primary.all_subjects, subject)}
+              primary_label={short_name(@primary.district_name)}
+              compare={@compare && Map.get(@compare.all_subjects, subject)}
+              compare_label={@compare && short_name(@compare.district_name)}
+            />
+          </.collapsible_section>
 
           <%!-- ── Grade Breakdown ─────────────────────────────────────────────────── --%>
-          <div :if={@primary && @primary.grade_breakdown != []} class="space-y-3">
-            <div class="flex items-center gap-2">
-              <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                Grade-Level Breakdown — ELA &amp; Math
-              </h2>
-
-              <div class="flex-1 h-px bg-base-200"></div>
-            </div>
-
-            <div class="bg-base-100 border border-base-200 overflow-hidden">
+          <.collapsible_section
+            :if={@primary && @primary.grade_breakdown != []}
+            id="grade-breakdown-district-comparison"
+            title="Grade-Level Breakdown — ELA & Math"
+          >
+            <div class="border border-base-200 overflow-hidden -mx-5 -mb-5">
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                   <thead>
@@ -1348,124 +1461,14 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 </table>
               </div>
             </div>
-          </div>
-
-          <%!-- ── Student Growth Percentile (SGP) ─────────────────────────────────── --%>
-          <% dc_sgp_comparison = sgp_comparison_rows(@primary_sgp, @compare_sgp) %>
-          <% dc_sgp_visible_subjects =
-            Enum.filter(
-              dc_sgp_comparison.subjects,
-              &sgp_subject_selected?(&1, @sgp_subject_filter)
-            ) %>
-          <div :if={@primary && dc_sgp_comparison.grades != []} class="space-y-3">
-            <div class="flex items-center gap-2">
-              <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                Student Growth Percentile
-              </h2>
-              <div class="flex-1 h-px bg-base-200"></div>
-              <span class="text-xs text-base-content/40">50 = typical growth</span>
-            </div>
-
-            <div class="bg-base-100 border border-base-200 overflow-hidden">
-              <%!-- Subject filter --%>
-              <div class="flex items-center gap-2 flex-wrap px-5 py-3 border-b border-base-200 bg-base-50/50">
-                <span class="text-xs font-medium text-base-content/40 uppercase tracking-wide">
-                  Subjects
-                </span>
-                <button
-                  :for={subject <- dc_sgp_comparison.subjects}
-                  type="button"
-                  phx-click="toggle_sgp_subject"
-                  phx-value-subject={subject}
-                  class={[
-                    "badge badge-sm cursor-pointer transition-colors",
-                    if(sgp_subject_selected?(subject, @sgp_subject_filter),
-                      do: "badge-secondary",
-                      else: "badge-outline text-base-content/40"
-                    )
-                  ]}
-                >
-                  {subject}
-                </button>
-                <button
-                  :if={@sgp_subject_filter != nil}
-                  type="button"
-                  phx-click="reset_sgp_subject_filter"
-                  class="text-xs text-base-content/40 hover:text-base-content underline ml-1"
-                >
-                  Show all
-                </button>
-              </div>
-
-              <div
-                :if={dc_sgp_visible_subjects == []}
-                class="px-5 py-8 text-center text-xs text-base-content/30 italic"
-              >
-                No subjects selected — choose at least one above.
-              </div>
-
-              <div :if={dc_sgp_visible_subjects != []} class="overflow-x-auto">
-                <table class="table table-sm w-full">
-                  <thead>
-                    <tr class="text-xs text-base-content/50 border-b border-base-200">
-                      <th class="px-4 py-2 font-medium text-left">Grade</th>
-                      <%= for subject <- dc_sgp_visible_subjects do %>
-                        <th class="px-4 py-2 font-medium text-right text-info">
-                          {subject} — {short_name(@primary.district_name)}
-                        </th>
-                        <th
-                          :if={@compare}
-                          class="px-4 py-2 font-medium text-right text-warning"
-                        >
-                          {subject} — {short_name(@compare.district_name)}
-                        </th>
-                      <% end %>
-                    </tr>
-                  </thead>
-
-                  <tbody class="divide-y divide-base-200">
-                    <tr :for={g <- dc_sgp_comparison.grades} class="hover:bg-base-50">
-                      <td class="px-4 py-2 font-medium">{g.grade}</td>
-                      <%= for subject <- dc_sgp_visible_subjects do %>
-                        <% pair = Map.get(g.by_subject, subject) %>
-                        <td class="px-4 py-2 text-right tabular-nums">
-                          <span class={[
-                            "font-semibold",
-                            sgp_score_class(pair.primary && pair.primary.mean_sgp)
-                          ]}>
-                            {if pair.primary && pair.primary.mean_sgp,
-                              do: format_index(pair.primary.mean_sgp),
-                              else: "—"}
-                          </span>
-                        </td>
-                        <td :if={@compare} class="px-4 py-2 text-right tabular-nums">
-                          <span class={[
-                            "font-semibold",
-                            sgp_score_class(pair.compare && pair.compare.mean_sgp)
-                          ]}>
-                            {if pair.compare && pair.compare.mean_sgp,
-                              do: format_index(pair.compare.mean_sgp),
-                              else: "—"}
-                          </span>
-                        </td>
-                      <% end %>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          </.collapsible_section>
 
           <%!-- ── Proficiency Distribution ───────────────────────────────────────── --%>
-          <div :if={@primary && @primary.proficiency_dist} class="space-y-3">
-            <div class="flex items-center gap-2">
-              <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                Proficiency Level Distribution — All M-STEP Subjects
-              </h2>
-
-              <div class="flex-1 h-px bg-base-200"></div>
-            </div>
-
+          <.collapsible_section
+            :if={@primary && @primary.proficiency_dist}
+            id="proficiency-dist-district-comparison"
+            title="Proficiency Level Distribution — All M-STEP Subjects"
+          >
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <.dist_card
                 district={@primary}
@@ -1485,7 +1488,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 No comparison district selected
               </div>
             </div>
-          </div>
+          </.collapsible_section>
         </div>
 
         <%!-- ══ Tab 1: School vs Geographic LEA ════════════════════════════════════ --%>
@@ -1631,34 +1634,29 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
               No Michigan state-wide average found for {@selected_year}. State benchmark not available for this year.
             </div>
             <%!-- School Index Score --%>
-            <div :if={@school_index} class="bg-base-100 border border-base-200 overflow-hidden">
-              <%!-- Header: title + overall score --%>
-              <div class="flex items-center justify-between px-5 py-3 bg-primary/5 border-b border-primary/15">
-                <div class="flex flex-col gap-0.5">
-                  <div class="flex items-center gap-2">
-                    <.icon name="hero-trophy" class="size-4 text-primary" />
-                    <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                      School Index Score
-                    </span>
-                  </div>
-
-                  <span
-                    :if={Map.get(@index_thresholds, :overall)}
-                    class="text-xs text-base-content/40 pl-6"
-                  >
-                    Bottom 5% Threshold [{format_index(Map.get(@index_thresholds, :overall))}]
-                  </span>
-                </div>
-
+            <.collapsible_section
+              :if={@school_index}
+              id="school-index-score"
+              title="School Index Score"
+            >
+              <:badge>
+                <span
+                  :if={Map.get(@index_thresholds, :overall)}
+                  class="text-xs text-base-content/40 normal-case font-normal"
+                >
+                  Bottom 5% Threshold [{format_index(Map.get(@index_thresholds, :overall))}]
+                </span>
+              </:badge>
+              <:trailing>
                 <div class="flex items-baseline gap-1.5">
-                  <span class={"text-3xl font-black tabular-nums #{overall_score_class(@school_index.overall_index, Map.get(@index_thresholds, :overall))}"}>
+                  <span class={"text-xl font-black tabular-nums #{overall_score_class(@school_index.overall_index, Map.get(@index_thresholds, :overall))}"}>
                     {format_index(@school_index.overall_index)}
                   </span>
                   <span class="text-xs text-base-content/40 font-medium">/ 100</span>
                 </div>
-              </div>
+              </:trailing>
               <%!-- Sub-index rows --%>
-              <div class="divide-y divide-base-200">
+              <div class="divide-y divide-base-200 -mx-5">
                 <.index_row
                   label="Growth"
                   value={@school_index.growth_index}
@@ -1698,7 +1696,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
               <%!-- Support category footer --%>
               <div
                 :if={@school_index.support_category_name}
-                class="flex items-start gap-3 px-5 py-3 bg-warning/5 border-t border-warning/20"
+                class="flex items-start gap-3 -mx-5 -mb-5 px-5 py-3 bg-warning/5 border-t border-warning/20"
               >
                 <.icon name="hero-flag" class="size-3.5 text-warning shrink-0 mt-0.5" />
                 <div>
@@ -1713,31 +1711,53 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </p>
                 </div>
               </div>
-            </div>
+            </.collapsible_section>
 
-            <%!-- Student Growth Percentile (SGP) — school vs. LEA --%>
-            <% sgp_comparison = sgp_comparison_rows(@sgp_results, @sgp_lea_result) %>
-            <% sgp_visible_subjects =
+            <%!-- Student Growth Percentile (SGP) — school vs. LEA --%> <% sgp_comparison =
+              sgp_comparison_rows(@sgp_results, @sgp_lea_result) %> <% sgp_visible_subjects =
               Enum.filter(
                 sgp_comparison.subjects,
                 &sgp_subject_selected?(&1, @sgp_subject_filter)
-              ) %>
-            <div
-              :if={sgp_comparison.grades != []}
-              class="bg-base-100 border border-base-200 overflow-hidden"
+              ) %> <% sgp_school_all_grades = sgp_all_grades_by_subject(@sgp_results) %> <% sgp_lea_all_grades =
+              sgp_all_grades_by_subject(@sgp_lea_result) %>
+            <%!-- SGP by Subject — all grades combined --%>
+            <.collapsible_section
+              :if={sgp_visible_subjects != []}
+              id="sgp-bars-school-vs-lea"
+              title="Student Growth Percentile by Subject"
             >
-              <div class="flex items-center justify-between px-5 py-3 bg-secondary/5 border-b border-secondary/15">
-                <div class="flex items-center gap-2">
-                  <.icon name="hero-arrow-trending-up" class="size-4 text-secondary" />
-                  <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                    Student Growth Percentile — School vs. LEA
-                  </span>
-                </div>
-                <span class="text-xs text-base-content/40">50 = typical growth</span>
-              </div>
+              <:badge>
+                <span class="text-xs text-base-content/40 normal-case font-normal">
+                  Dashed line = 50th percentile (typical growth)
+                </span>
+              </:badge>
+              <.sgp_subject_bar
+                :for={subject <- sgp_visible_subjects}
+                subject={subject}
+                primary={Map.get(sgp_school_all_grades, subject)}
+                primary_label={short_name(@school_vs_lea.school_name)}
+                compare={Map.get(sgp_lea_all_grades, subject)}
+                compare_label={
+                  short_name(
+                    @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code ||
+                      "LEA"
+                  )
+                }
+              />
+            </.collapsible_section>
 
+            <.collapsible_section
+              :if={sgp_comparison.grades != []}
+              id="sgp-table-school-vs-lea"
+              title="Student Growth Percentile — School vs. LEA"
+            >
+              <:badge>
+                <span class="text-xs text-base-content/40 normal-case font-normal">
+                  Dashed line = 50th percentile (typical growth)
+                </span>
+              </:badge>
               <%!-- Subject filter --%>
-              <div class="flex items-center gap-2 flex-wrap px-5 py-3 border-b border-base-200 bg-base-50/50">
+              <div class="flex items-center gap-2 flex-wrap -mx-5 -mt-1 px-5 py-3 border-b border-base-200 bg-base-50/50">
                 <span class="text-xs font-medium text-base-content/40 uppercase tracking-wide">
                   Subjects
                 </span>
@@ -1773,7 +1793,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 No subjects selected — choose at least one above.
               </div>
 
-              <div :if={sgp_visible_subjects != []} class="overflow-x-auto">
+              <div :if={sgp_visible_subjects != []} class="overflow-x-auto -mx-5 -mb-5">
                 <table class="table table-sm w-full">
                   <thead>
                     <tr class="text-xs text-base-content/50 border-b border-base-200">
@@ -1819,7 +1839,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </tbody>
                 </table>
               </div>
-            </div>
+            </.collapsible_section>
 
             <div
               :if={sgp_comparison.grades == [] && !@school_vs_lea.no_results}
@@ -1828,82 +1848,59 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
               No Student Growth Percentile data found for this school in {@selected_year}.
             </div>
             <%!-- All Subjects Average --%>
-            <div
+            <.collapsible_section
               :if={!@school_vs_lea.no_results && !@school_vs_lea.no_lea_found}
-              class="space-y-3"
+              id="all-subjects-avg-school-vs-lea"
+              title="All Subjects Average"
             >
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  All Subjects Average
-                </h2>
+              <.subject_comparison
+                subject="All Subjects"
+                primary={@school_vs_lea.avg_subjects.school}
+                primary_label={short_name(@school_vs_lea.school_name)}
+                compare={@school_vs_lea.avg_subjects.lea}
+                compare_label={
+                  short_name(
+                    @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code ||
+                      "LEA"
+                  )
+                }
+                state={@school_vs_lea.avg_subjects.state}
+                state_label="State Avg"
+              />
+            </.collapsible_section>
 
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 p-5">
-                <.subject_comparison
-                  subject="All Subjects"
-                  primary={@school_vs_lea.avg_subjects.school}
-                  primary_label={short_name(@school_vs_lea.school_name)}
-                  compare={@school_vs_lea.avg_subjects.lea}
-                  compare_label={
-                    short_name(
-                      @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code ||
-                        "LEA"
-                    )
-                  }
-                  state={@school_vs_lea.avg_subjects.state}
-                  state_label="State Avg"
-                />
-              </div>
-            </div>
             <%!-- Subject proficiency comparison --%>
-            <div
+            <.collapsible_section
               :if={!@school_vs_lea.no_results && !@school_vs_lea.no_lea_found}
-              class="space-y-3"
+              id="mstep-proficiency-school-vs-lea"
+              title="M-STEP Proficiency by Subject"
             >
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  M-STEP Proficiency by Subject
-                </h2>
+              <.subject_comparison
+                :for={subject <- @subjects}
+                subject={subject}
+                primary={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:school])}
+                primary_label={short_name(@school_vs_lea.school_name)}
+                compare={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:lea])}
+                compare_label={
+                  short_name(
+                    @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA"
+                  )
+                }
+                state={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:state])}
+                state_label="State Avg"
+              />
+            </.collapsible_section>
 
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 p-5 space-y-5">
-                <.subject_comparison
-                  :for={subject <- @subjects}
-                  subject={subject}
-                  primary={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:school])}
-                  primary_label={short_name(@school_vs_lea.school_name)}
-                  compare={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:lea])}
-                  compare_label={
-                    short_name(
-                      @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA"
-                    )
-                  }
-                  state={Map.get(@school_vs_lea.all_subjects, subject) |> then(& &1[:state])}
-                  state_label="State Avg"
-                />
-              </div>
-            </div>
             <%!-- Grade breakdown --%>
-            <div
+            <.collapsible_section
               :if={
                 !@school_vs_lea.no_results && !@school_vs_lea.no_lea_found &&
                   @school_vs_lea.grade_breakdown != []
               }
-              class="space-y-3"
+              id="grade-breakdown-school-vs-lea"
+              title="Grade-Level Breakdown — ELA & Math"
             >
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  Grade-Level Breakdown — ELA &amp; Math
-                </h2>
-
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 overflow-hidden">
+              <div class="border border-base-200 overflow-hidden -mx-5 -mb-5">
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
@@ -1980,21 +1977,20 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </table>
                 </div>
               </div>
-            </div>
-            <%!-- Grade breakdown — Economically Disadvantaged --%>
-            <div :if={@econ_grade_breakdown != []} class="space-y-3">
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  Grade-Level Breakdown — ELA &amp; Math
-                </h2>
+            </.collapsible_section>
 
+            <%!-- Grade breakdown — Economically Disadvantaged --%>
+            <.collapsible_section
+              :if={@econ_grade_breakdown != []}
+              id="grade-breakdown-econ-school-vs-lea"
+              title="Grade-Level Breakdown — ELA & Math"
+            >
+              <:badge>
                 <span class="text-xs font-medium text-warning bg-warning/10 px-2 py-0.5">
                   Economically Disadvantaged
                 </span>
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 overflow-hidden">
+              </:badge>
+              <div class="border border-base-200 overflow-hidden -mx-5 -mb-5">
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
@@ -2071,62 +2067,54 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </table>
                 </div>
               </div>
-            </div>
+            </.collapsible_section>
+
             <%!-- SAT By Subject --%>
-            <div :if={@sat_results != []} class="space-y-3">
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  SAT College Readiness by Subject
-                </h2>
+            <.collapsible_section
+              :if={@sat_results != []}
+              id="sat-by-subject-school-vs-lea"
+              title="SAT College Readiness by Subject"
+            >
+              <% sat_all = Enum.find(@sat_results, &(&1.subgroup == "All Students")) %> <% lea_label =
+                short_name(
+                  @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA"
+                ) %>
+              <.sat_score_bar
+                subject="Math Score"
+                score={sat_all && sat_all.math_score_average}
+                compare={@sat_lea_result && @sat_lea_result.math_score_average}
+                compare_label={@sat_lea_result && lea_label}
+                state={@sat_state_result && @sat_state_result.math_score_average}
+                max={800}
+                label={short_name(@school_vs_lea.school_name)}
+              />
+              <.sat_score_bar
+                subject="EBRW Score"
+                score={sat_all && sat_all.ebrw_score_average}
+                compare={@sat_lea_result && @sat_lea_result.ebrw_score_average}
+                compare_label={@sat_lea_result && lea_label}
+                state={@sat_state_result && @sat_state_result.ebrw_score_average}
+                max={800}
+                label={short_name(@school_vs_lea.school_name)}
+              />
+              <.sat_score_bar
+                subject="All Score"
+                score={sat_all && sat_all.all_subject_score_average}
+                compare={@sat_lea_result && @sat_lea_result.all_subject_score_average}
+                compare_label={@sat_lea_result && lea_label}
+                state={@sat_state_result && @sat_state_result.all_subject_score_average}
+                max={1600}
+                label={short_name(@school_vs_lea.school_name)}
+              />
+            </.collapsible_section>
 
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 p-5 space-y-5">
-                <% sat_all = Enum.find(@sat_results, &(&1.subgroup == "All Students")) %> <% lea_label =
-                  short_name(
-                    @school_vs_lea.lea_district_name || @school_vs_lea.lea_district_code || "LEA"
-                  ) %>
-                <.sat_score_bar
-                  subject="Math Score"
-                  score={sat_all && sat_all.math_score_average}
-                  compare={@sat_lea_result && @sat_lea_result.math_score_average}
-                  compare_label={@sat_lea_result && lea_label}
-                  state={@sat_state_result && @sat_state_result.math_score_average}
-                  max={800}
-                  label={short_name(@school_vs_lea.school_name)}
-                />
-                <.sat_score_bar
-                  subject="EBRW Score"
-                  score={sat_all && sat_all.ebrw_score_average}
-                  compare={@sat_lea_result && @sat_lea_result.ebrw_score_average}
-                  compare_label={@sat_lea_result && lea_label}
-                  state={@sat_state_result && @sat_state_result.ebrw_score_average}
-                  max={800}
-                  label={short_name(@school_vs_lea.school_name)}
-                />
-                <.sat_score_bar
-                  subject="All Score"
-                  score={sat_all && sat_all.all_subject_score_average}
-                  compare={@sat_lea_result && @sat_lea_result.all_subject_score_average}
-                  compare_label={@sat_lea_result && lea_label}
-                  state={@sat_state_result && @sat_state_result.all_subject_score_average}
-                  max={1600}
-                  label={short_name(@school_vs_lea.school_name)}
-                />
-              </div>
-            </div>
             <%!-- SAT College Readiness by Subgroup --%>
-            <div :if={@sat_results != []} class="space-y-3">
-              <div class="flex items-center gap-2">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
-                  SAT College Readiness by Subgroup
-                </h2>
-
-                <div class="flex-1 h-px bg-base-200"></div>
-              </div>
-
-              <div class="bg-base-100 border border-base-200 overflow-hidden">
+            <.collapsible_section
+              :if={@sat_results != []}
+              id="sat-by-subgroup-school-vs-lea"
+              title="SAT College Readiness by Subgroup"
+            >
+              <div class="border border-base-200 overflow-hidden -mx-5 -mb-5">
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
@@ -2199,7 +2187,7 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   </table>
                 </div>
               </div>
-            </div>
+            </.collapsible_section>
           </div>
         </div>
       </div>
@@ -2210,6 +2198,63 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
   # ---------------------------------------------------------------------------
   # Components
   # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Collapsible section. Used to keep the long per-tab data pages condensed.
+  #
+  # Deliberately NOT a native <details>/<summary> — that toggles via plain
+  # browser behavior, which LiveView's DOM patching doesn't know about. Any
+  # server round-trip that touches this subtree (e.g. clicking a subject
+  # filter inside it) gets morphdom-reconciled against the freshly rendered
+  # HTML and silently re-closes it. `Phoenix.LiveView.JS` commands are
+  # specifically protected from that reconciliation, so the toggle is done
+  # entirely client-side via JS.toggle/JS.toggle_class — no server round trip,
+  # and it survives any later patch to the content inside it.
+  # ---------------------------------------------------------------------------
+
+  attr :id, :string, required: true
+  attr :title, :string, required: true
+  attr :open, :boolean, default: false
+  slot :badge
+  slot :trailing
+  slot :inner_block, required: true
+
+  def collapsible_section(assigns) do
+    ~H"""
+    <div class="bg-base-100 border border-base-200">
+      <button
+        type="button"
+        phx-click={
+          JS.toggle(to: "##{@id}-content")
+          |> JS.toggle_class("rotate-90", to: "##{@id}-chevron")
+        }
+        class="w-full flex items-center gap-2 px-5 py-3 cursor-pointer select-none text-left hover:bg-base-50 transition-colors"
+      >
+        <span
+          id={"#{@id}-chevron"}
+          class={["inline-block shrink-0 transition-transform duration-200", @open && "rotate-90"]}
+        >
+          <.icon name="hero-chevron-right" class="size-3.5 text-base-content/40" />
+        </span>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/60">
+          {@title}
+        </h2>
+        {render_slot(@badge)}
+        <div class="flex-1 h-px bg-base-200"></div>
+        {render_slot(@trailing)}
+      </button>
+      <div
+        id={"#{@id}-content"}
+        class={[
+          "px-5 pb-5 pt-1 border-t border-base-200 space-y-4",
+          !@open && "hidden"
+        ]}
+      >
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
 
   # ---------------------------------------------------------------------------
   # Enrollment donut chart component
@@ -2752,6 +2797,95 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
         >
           {if delta_state >= 0, do: "+#{delta_state}", else: "#{delta_state}"} pts vs {@state_label}
         </span>
+      </div>
+    </div>
+    """
+  end
+
+  attr :subject, :string, required: true
+  attr :primary, :any, default: nil
+  attr :primary_label, :string, default: ""
+  attr :compare, :any, default: nil
+  attr :compare_label, :string, default: nil
+
+  # Mean SGP bar (0-100 scale, though the real range is 1-99) with a fixed,
+  # labeled reference line at 50 — the "typical growth" threshold.
+  def sgp_subject_bar(assigns) do
+    primary_f = if assigns.primary, do: Decimal.to_float(assigns.primary), else: nil
+    compare_f = if assigns.compare, do: Decimal.to_float(assigns.compare), else: nil
+
+    assigns =
+      assigns
+      |> assign(:primary_f, primary_f)
+      |> assign(:compare_f, compare_f)
+      |> assign(:primary_display, format_index(assigns.primary))
+      |> assign(:compare_display, format_index(assigns.compare))
+
+    ~H"""
+    <div class="space-y-1.5">
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="font-semibold text-base-content/70">{@subject}</span>
+        <div class="flex items-center gap-4">
+          <span :if={@compare_f} class="flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-warning"></span>
+            <span class="tabular-nums text-warning font-semibold">{@compare_display}</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-info"></span>
+            <span class="tabular-nums text-info font-semibold">{@primary_display}</span>
+          </span>
+        </div>
+      </div>
+      <%!-- Primary bar --%>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-base-content/40 w-20 truncate text-right">{@primary_label}</span>
+        <div class="flex-1 bg-base-200 h-5 relative">
+          <div
+            class="h-5 bg-info/70 transition-all duration-500"
+            style={"width: #{if @primary_f, do: min(@primary_f, 100), else: 0}%"}
+          >
+          </div>
+
+          <div
+            :if={@compare_f}
+            class="absolute top-0 bottom-0 w-0.5 bg-warning"
+            style={"left: #{min(@compare_f, 100)}%"}
+            title={"#{@compare_label}: #{@compare_display}"}
+          >
+          </div>
+          <%!-- 50 = typical growth reference line --%>
+          <div
+            class="absolute top-0 bottom-0 w-0.5 border-l-2 border-dashed border-base-content/40 pointer-events-none"
+            style="left: 50%"
+            title="50 = typical growth"
+          >
+          </div>
+        </div>
+      </div>
+      <%!-- Compare bar --%>
+      <div :if={@compare_label} class="flex items-center gap-2">
+        <span class="text-xs text-base-content/40 w-20 truncate text-right">{@compare_label}</span>
+        <div class="flex-1 bg-base-200 h-5 relative">
+          <div
+            class="h-5 bg-warning/70 transition-all duration-500"
+            style={"width: #{if @compare_f, do: min(@compare_f, 100), else: 0}%"}
+          >
+          </div>
+
+          <div
+            :if={@primary_f}
+            class="absolute top-0 bottom-0 w-0.5 bg-info"
+            style={"left: #{min(@primary_f, 100)}%"}
+            title={"#{@primary_label}: #{@primary_display}"}
+          >
+          </div>
+
+          <div
+            class="absolute top-0 bottom-0 w-0.5 border-l-2 border-dashed border-base-content/40 pointer-events-none"
+            style="left: 50%"
+          >
+          </div>
+        </div>
       </div>
     </div>
     """
@@ -3409,6 +3543,21 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
     %{subjects: subjects, grades: grades}
   rescue
     _ -> %{subjects: [], grades: []}
+  end
+
+  # Collapses a %{subjects:, grades:} SGP structure (from load_sgp_results/2 or
+  # load_sgp_lea_result/2) down to one "all grades" Mean SGP per subject,
+  # weighted by each grade row's total_included — reuses the same weighting
+  # as weighted_mean_sgp/1 (built for the CRD tab's district-level averages).
+  defp sgp_all_grades_by_subject(%{subjects: subjects, grades: grades}) do
+    Map.new(subjects, fn subject ->
+      rows =
+        grades
+        |> Enum.map(&Map.get(&1.by_subject, subject))
+        |> Enum.reject(&is_nil/1)
+
+      {subject, weighted_mean_sgp(rows)}
+    end)
   end
 
   defp sgp_subject_selected?(_subject, nil), do: true
