@@ -149,11 +149,11 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
           <div class="p-2.5 bg-primary/10 border border-primary/20">
             <.icon name="hero-squares-2x2" class="size-6 text-primary" />
           </div>
+
           <div>
             <h1 class="text-2xl font-bold tracking-tight">Portfolio Overview</h1>
-            <p class="text-sm text-base-content/50 mt-0.5">
-              Browse schools by chartering agency
-            </p>
+
+            <p class="text-sm text-base-content/50 mt-0.5">Browse schools by chartering agency</p>
           </div>
         </div>
 
@@ -189,7 +189,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                 </button>
               </div>
             </div>
-
             <%!-- Empty state --%>
             <div
               :if={@chartering_agencies == []}
@@ -198,12 +197,13 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
               <div class="p-3 bg-base-200 mb-3">
                 <.icon name="hero-building-office" class="size-6 text-base-content/25" />
               </div>
+
               <p class="text-sm font-medium text-base-content/40">No agencies found</p>
+
               <p class="text-xs text-base-content/30 mt-1">
                 Import MDE EntityMaster data to populate this list.
               </p>
             </div>
-
             <%!-- No search results --%>
             <div
               :if={@chartering_agencies != [] && @filtered_agencies == []}
@@ -211,7 +211,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             >
               <p class="text-sm text-base-content/40">No agencies match "{@agency_search}"</p>
             </div>
-
             <%!-- Agency list --%>
             <div
               :if={@filtered_agencies != []}
@@ -233,15 +232,13 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                   ]}>
                     {agency.name || agency.code}
                   </p>
+
                   <p class="text-xs text-base-content/40 mt-0.5">Code: {agency.code}</p>
                 </div>
-                <span class="badge badge-ghost badge-xs shrink-0 mt-0.5">
-                  {agency.school_count}
-                </span>
+                <span class="badge badge-ghost badge-xs shrink-0 mt-0.5">{agency.school_count}</span>
               </button>
             </div>
           </div>
-
           <%!-- Right panel: Schools for selected agency --%>
           <div class="lg:col-span-2 bg-base-100 border border-base-200 overflow-hidden">
             <%!-- No agency selected --%>
@@ -252,12 +249,13 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
               <div class="p-4 bg-base-200 mb-4">
                 <.icon name="hero-cursor-arrow-ripple" class="size-8 text-base-content/20" />
               </div>
+
               <p class="text-base font-medium text-base-content/40">Select a chartering agency</p>
+
               <p class="text-sm text-base-content/30 mt-1">
                 Choose an agency on the left to view its portfolio of schools.
               </p>
             </div>
-
             <%!-- Agency selected --%>
             <div :if={@selected_agency}>
               <%!-- Agency header --%>
@@ -268,22 +266,28 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                       <h2 class="font-semibold">{@selected_agency.name || @selected_agency.code}</h2>
                       <span class="badge badge-success badge-sm">Open-Active</span>
                     </div>
+
                     <p class="text-xs text-base-content/40 mt-0.5">
-                      Code: {@selected_agency.code} · {@selected_agency.school_count} school{if @selected_agency.school_count != 1, do: "s", else: ""}
+                      Code: {@selected_agency.code} · {@selected_agency.school_count} school{if @selected_agency.school_count !=
+                                                                                                  1,
+                                                                                                do:
+                                                                                                  "s",
+                                                                                                else:
+                                                                                                  ""}
                     </p>
                   </div>
                   <%!-- Download PDF button --%>
                   <.link
-                    href={~p"/authorizer-portfolio/portfolio.pdf?#{%{agency: @selected_agency.code, year: @stats_year}}"}
+                    href={
+                      ~p"/authorizer-portfolio/portfolio.pdf?#{%{agency: @selected_agency.code, year: @stats_year}}"
+                    }
                     target="_blank"
                     class="btn btn-sm btn-outline btn-primary gap-1.5 shrink-0"
                   >
-                    <.icon name="hero-arrow-down-tray" class="size-3.5" />
-                    Download PDF
+                    <.icon name="hero-arrow-down-tray" class="size-3.5" /> Download PDF
                   </.link>
                 </div>
               </div>
-
               <%!-- Tabs --%>
               <div class="flex border-b border-base-200 bg-base-50/50">
                 <button
@@ -293,7 +297,8 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                     "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
                     if(@active_tab == :schools,
                       do: "border-primary text-primary bg-base-100",
-                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                      else:
+                        "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
                     )
                   ]}
                 >
@@ -309,7 +314,8 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                     "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
                     if(@active_tab == :dashboard,
                       do: "border-primary text-primary bg-base-100",
-                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                      else:
+                        "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
                     )
                   ]}
                 >
@@ -324,7 +330,8 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                     "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
                     if(@active_tab == :sat_dashboard,
                       do: "border-primary text-primary bg-base-100",
-                      else: "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                      else:
+                        "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
                     )
                   ]}
                 >
@@ -333,7 +340,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                   </div>
                 </button>
               </div>
-
               <%!-- Tab: Schools --%>
               <div :if={@active_tab == :schools}>
                 <%!-- School search + clear --%>
@@ -360,6 +366,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                       <.icon name="hero-x-mark" class="size-3.5" />
                     </button>
                   </div>
+
                   <.link
                     patch={~p"/authorizer-portfolio"}
                     class="text-xs text-base-content/40 hover:text-base-content transition-colors flex items-center gap-1 shrink-0"
@@ -367,7 +374,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                     <.icon name="hero-x-mark" class="size-3.5" /> Clear
                   </.link>
                 </div>
-
                 <%!-- No filter results --%>
                 <div
                   :if={@schools != [] && @filtered_schools == []}
@@ -375,19 +381,23 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                 >
                   <p class="text-sm text-base-content/40">No schools match "{@school_search}"</p>
                 </div>
-
                 <%!-- Schools table --%>
                 <div :if={@filtered_schools != []} class="overflow-x-auto">
                   <table class="table table-sm w-full">
                     <thead>
                       <tr class="text-xs text-base-content/50 border-b border-base-200">
                         <th class="px-4 py-3 font-medium text-left">School</th>
+
                         <th class="px-4 py-3 font-medium text-left">District Code</th>
+
                         <th class="px-4 py-3 font-medium text-left">County</th>
+
                         <th class="px-4 py-3 font-medium text-left">Grades</th>
+
                         <th class="px-4 py-3 w-8"></th>
                       </tr>
                     </thead>
+
                     <tbody class="divide-y divide-base-200">
                       <tr
                         :for={school <- @filtered_schools}
@@ -398,7 +408,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                             else: "hover:bg-base-50"
                           )
                         ]}
-                        phx-click={school.district_code && JS.navigate(~p"/mde/districts/#{school.district_code}?from=portfolio&agency=#{@selected_agency.code}&agency_name=#{@selected_agency.name || @selected_agency.code}")}
+                        phx-click={
+                          school.district_code &&
+                            JS.navigate(
+                              ~p"/mde/districts/#{school.district_code}?from=portfolio&agency=#{@selected_agency.code}&agency_name=#{@selected_agency.name || @selected_agency.code}&building=#{school.entity_code}"
+                            )
+                        }
                       >
                         <td class="px-4 py-3">
                           <p class={[
@@ -407,19 +422,22 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                           ]}>
                             {school.entity_official_name}
                           </p>
-                          <p class="text-xs text-base-content/40 mt-0.5">
-                            {school.entity_code}
-                          </p>
+
+                          <p class="text-xs text-base-content/40 mt-0.5">{school.entity_code}</p>
                         </td>
+
                         <td class="px-4 py-3 text-sm text-base-content/70">
                           {school.district_code || "—"}
                         </td>
+
                         <td class="px-4 py-3 text-sm text-base-content/70">
                           {school.entity_county_name || "—"}
                         </td>
+
                         <td class="px-4 py-3 text-xs text-base-content/60">
                           {school.entity_actual_grades || school.entity_authorized_grades || "—"}
                         </td>
+
                         <td class="px-4 py-3 text-base-content/25">
                           <.icon :if={school.district_code} name="hero-chevron-right" class="size-4" />
                         </td>
@@ -427,7 +445,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                     </tbody>
                   </table>
                 </div>
-
                 <%!-- No schools found --%>
                 <div
                   :if={@schools == []}
@@ -436,13 +453,14 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                   <div class="p-3 bg-base-200 mb-3">
                     <.icon name="hero-academic-cap" class="size-6 text-base-content/25" />
                   </div>
+
                   <p class="text-sm font-medium text-base-content/40">No schools found</p>
+
                   <p class="text-xs text-base-content/30 mt-1">
                     No entities linked to this chartering agency in the current EntityMaster data.
                   </p>
                 </div>
               </div>
-
               <%!-- Tab: M-STEP Dashboard --%>
               <div :if={@active_tab == :dashboard}>
                 <.portfolio_dashboard
@@ -451,7 +469,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                   stats_years={@stats_years}
                 />
               </div>
-
               <%!-- Tab: SAT Dashboard --%>
               <div :if={@active_tab == :sat_dashboard}>
                 <.sat_dashboard
@@ -504,6 +521,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       <div class="px-6 pt-4 pb-3 flex items-center justify-between gap-4">
         <div>
           <h3 class="text-sm font-semibold">M-STEP / PSAT All Subjects — vs. Geographic LEA</h3>
+
           <p class="text-xs text-base-content/40 mt-0.5">
             Schools exceeding their local district average
           </p>
@@ -517,7 +535,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
           <option :for={y <- @stats_years} value={y} selected={y == @stats_year}>{y}</option>
         </select>
       </div>
-
       <%!-- Summary cards --%>
       <div class="px-6 pb-4 grid grid-cols-3 gap-3">
         <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
@@ -531,6 +548,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             </span>
           </div>
         </div>
+
         <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
           <span class="text-xs text-base-content/40 font-medium">Below LEA</span>
           <div class="flex items-end gap-2">
@@ -542,6 +560,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             </span>
           </div>
         </div>
+
         <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
           <span class="text-xs text-base-content/40 font-medium">No LEA Data</span>
           <div class="flex items-end gap-2">
@@ -549,7 +568,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
           </div>
         </div>
       </div>
-
       <%!-- Stacked proportion bar --%>
       <div :if={@total_comparable > 0} class="px-6 pb-4">
         <div class="flex h-2 overflow-hidden bg-base-200 gap-px">
@@ -562,12 +580,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             style={"width: #{round(@below / @total_comparable * 100)}%"}
           />
         </div>
+
         <div class="flex justify-between mt-1">
           <span class="text-[10px] text-success font-medium">Exceeds</span>
           <span class="text-[10px] text-error font-medium">Below</span>
         </div>
       </div>
-
       <%!-- No stats at all --%>
       <div
         :if={@stats == []}
@@ -575,12 +593,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       >
         No M-STEP / PSAT data found for this year.
       </div>
-
       <%!-- Per-school delta chart --%>
       <div :if={@stats != []} class="px-6 pb-5 space-y-2">
         <p class="text-[10px] text-base-content/30 uppercase tracking-wide font-medium">
           School vs LEA delta (pp) — sorted best to worst
         </p>
+
         <div class="space-y-1.5">
           <div
             :for={s <- Enum.reject(@stats, & &1.no_lea_found)}
@@ -600,7 +618,10 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                 <div
                   class={[
                     "absolute h-3 transition-all duration-300",
-                    if((s.delta || 0) >= 0, do: "bg-success/70 left-1/2", else: "bg-error/70 right-1/2")
+                    if((s.delta || 0) >= 0,
+                      do: "bg-success/70 left-1/2",
+                      else: "bg-error/70 right-1/2"
+                    )
                   ]}
                   style={"width: #{min(abs(s.delta || 0) / @max_abs_delta * 50, 50)}%"}
                 />
@@ -622,6 +643,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
               {@no_data} school{if @no_data != 1, do: "s", else: ""} excluded — no geographic LEA match
             </p>
           </div>
+
           <table class="w-full">
             <tbody>
               <tr
@@ -629,7 +651,10 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                 class="border-b border-base-200 last:border-0"
               >
                 <td class="px-3 py-1.5 text-xs text-base-content/40">{s.school_name}</td>
-                <td class="px-3 py-1.5 text-xs font-mono text-base-content/30 text-right">{s.building_code}</td>
+
+                <td class="px-3 py-1.5 text-xs font-mono text-base-content/30 text-right">
+                  {s.building_code}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -671,10 +696,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       <div class="px-6 pt-4 pb-3 flex items-center justify-between gap-4">
         <div>
           <h3 class="text-sm font-semibold">SAT College Readiness — All Score vs. Geographic LEA</h3>
+
           <p class="text-xs text-base-content/40 mt-0.5">
             Schools exceeding their local district combined SAT score (Math + EBRW)
           </p>
         </div>
+
         <select
           phx-change="select_stats_year"
           name="year"
@@ -683,7 +710,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
           <option :for={y <- @stats_years} value={y} selected={y == @stats_year}>{y}</option>
         </select>
       </div>
-
       <%!-- Summary cards --%>
       <div class="px-6 pb-4 grid grid-cols-3 gap-3">
         <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
@@ -697,6 +723,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             </span>
           </div>
         </div>
+
         <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
           <span class="text-xs text-base-content/40 font-medium">Below LEA</span>
           <div class="flex items-end gap-2">
@@ -708,6 +735,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             </span>
           </div>
         </div>
+
         <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
           <span class="text-xs text-base-content/40 font-medium">No LEA Data</span>
           <div class="flex items-end gap-2">
@@ -715,7 +743,6 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
           </div>
         </div>
       </div>
-
       <%!-- Stacked proportion bar --%>
       <div :if={@total_comparable > 0} class="px-6 pb-4">
         <div class="flex h-2 overflow-hidden bg-base-200 gap-px">
@@ -728,12 +755,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             style={"width: #{round(@below / @total_comparable * 100)}%"}
           />
         </div>
+
         <div class="flex justify-between mt-1">
           <span class="text-[10px] text-success font-medium">Exceeds</span>
           <span class="text-[10px] text-error font-medium">Below</span>
         </div>
       </div>
-
       <%!-- No data state --%>
       <div
         :if={@stats == []}
@@ -741,12 +768,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       >
         No SAT data found for this year.
       </div>
-
       <%!-- Per-school delta chart --%>
       <div :if={@stats != []} class="px-6 pb-5 space-y-2">
         <p class="text-[10px] text-base-content/30 uppercase tracking-wide font-medium">
           School vs LEA delta (pts) — sorted best to worst
         </p>
+
         <div class="space-y-1.5">
           <div
             :for={s <- Enum.reject(@stats, & &1.no_lea_found)}
@@ -755,18 +782,23 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
             <div class="w-40 shrink-0 truncate text-xs text-base-content/60 group-hover:text-base-content transition-colors text-right leading-tight">
               {short_name(s.school_name)}
             </div>
+
             <div class="flex-1 flex items-center gap-1 min-w-0">
               <div class="relative flex-1 h-4 flex items-center">
                 <div class="absolute left-1/2 top-0 bottom-0 w-px bg-base-300 z-10" />
                 <div
                   class={[
                     "absolute h-3 transition-all duration-300",
-                    if((s.delta || 0) >= 0, do: "bg-success/70 left-1/2", else: "bg-error/70 right-1/2")
+                    if((s.delta || 0) >= 0,
+                      do: "bg-success/70 left-1/2",
+                      else: "bg-error/70 right-1/2"
+                    )
                   ]}
                   style={"width: #{min(abs(s.delta || 0) / @max_abs_delta * 50, 50)}%"}
                 />
               </div>
             </div>
+
             <div class={[
               "text-xs font-mono font-semibold w-16 shrink-0 text-right",
               if((s.delta || 0) >= 0, do: "text-success", else: "text-error")
@@ -782,6 +814,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
               {@no_data} school{if @no_data != 1, do: "s", else: ""} excluded — no SAT comparison available
             </p>
           </div>
+
           <table class="w-full">
             <tbody>
               <tr
@@ -789,8 +822,12 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                 class="border-b border-base-200 last:border-0"
               >
                 <td class="px-3 py-1.5 text-xs text-base-content/40">{s.school_name}</td>
+
                 <td class="px-3 py-1.5 text-xs font-mono text-base-content/30">{s.building_code}</td>
-                <td class="px-3 py-1.5 text-xs text-base-content/30 italic text-right">{s.exclusion_reason}</td>
+
+                <td class="px-3 py-1.5 text-xs text-base-content/30 italic text-right">
+                  {s.exclusion_reason}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -838,7 +875,9 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       :entity_actual_grades,
       :entity_authorized_grades
     ])
-    |> Ash.Query.filter(entity_chartering_agency_code == ^agency_code and entity_status == "Open-Active")
+    |> Ash.Query.filter(
+      entity_chartering_agency_code == ^agency_code and entity_status == "Open-Active"
+    )
     |> Ash.Query.sort(entity_official_name: :asc)
     |> Ash.read!(authorize?: false)
   rescue
@@ -1033,6 +1072,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
     Enum.filter(agencies, fn agency ->
       name = agency.name || ""
       code = agency.code || ""
+
       String.contains?(String.downcase(name), search_lower) or
         String.contains?(String.downcase(code), search_lower)
     end)

@@ -128,5 +128,23 @@ defmodule Emisint.Assessments do
       define :list_mde_sgp_results, action: :read
       define :get_mde_sgp_result, action: :read, get_by: [:id]
     end
+
+    resource Emisint.Assessments.MdeSssSchool do
+      define :upsert_mde_sss_school, action: :upsert
+      define :list_mde_sss_schools, action: :read
+      define :get_mde_sss_school, action: :read, get_by: [:id]
+    end
+
+    resource Emisint.Assessments.MdeSssComparisonGroup do
+      define :upsert_mde_sss_comparison_group, action: :upsert
+      define :list_mde_sss_comparison_groups, action: :read
+      define :get_mde_sss_comparison_group, action: :read, get_by: [:id]
+    end
+
+    resource Emisint.Assessments.MdeSssComparisonGroupMember do
+      define :upsert_mde_sss_comparison_group_member, action: :upsert
+      define :list_mde_sss_comparison_group_members, action: :read
+      define :get_mde_sss_comparison_group_member, action: :read, get_by: [:id]
+    end
   end
 end

@@ -100,8 +100,10 @@ defmodule Emisint.Assessments.MdeImportLog do
                     :school_index,
                     :emo_contact,
                     :crd,
-                    :sgp
+                    :sgp,
+                    :sss
                   ]
+
       allow_nil? false
       public? true
     end
