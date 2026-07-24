@@ -122,5 +122,11 @@ defmodule Emisint.Assessments do
 
       define :destroy_emo_school_override, action: :destroy
     end
+
+    resource Emisint.Assessments.MdeSgpResult do
+      define :upsert_mde_sgp_result, action: :upsert
+      define :list_mde_sgp_results, action: :read
+      define :get_mde_sgp_result, action: :read, get_by: [:id]
+    end
   end
 end

@@ -100,6 +100,69 @@ Build incrementally in 8 phases, each independently testable. Phases 0–5 are p
 - [ ] Create `lib/emisint_web/live/reports/report_builder_live.ex` — report parameter UI
 - [ ] Create `lib/emisint/workers/report_generation_worker.ex` — async PDF generation via Oban
 
+### Phase 9: MDE Student Growth Percentile (SGP) Import & Display
+
+**Context:** New MDE dataset — Student Growth Percentile results (2024–25), ~599k rows,
+grain = building × school year × grade × subject × testing group (subgroup). Subjects
+include Mathematics, English Language Arts, Social Studies, and Science. The raw CSV
+mixes statewide/ISD/district/building aggregation levels in the same columns (same
+`0`/Statewide-code convention already handled by `mde_importer.ex`), but **v1 only
+imports and displays building-level rows** — district/ISD/statewide rows are parsed
+but skipped, so LEA comparison is a clean follow-up phase, not a rewrite.
+
+Exact CSV headers (confirmed):
+`SchoolYear, IsdCode, IsdName, DistrictCode, DistrictName, BuildingCode, BuildingName,
+CountyCode, CountyName, EntityType, SchoolLevel, Locale, MISTEM_NAME, MISTEM_CODE,
+Grade, Subject, TestingGroup, NumberAboveAverageGrowth, NumberAverageGrowth,
+NumberBelowAverageGrowth, PercentAboveAverage, PercentAverageGrowth,
+PercentBelowAverage, TotalIncluded, MeanSGP`
+
+- [ ] Create `lib/emisint/assessments/mde_sgp_result.ex` — new Ash resource, modeled on
+      `mde_school_index_result.ex` (single non-nullable `mde_building_id`, no rollup
+      tiers yet). Attributes: `school_year`, `grade`, `subject`, `testing_group`,
+      `number_above_average_growth`, `number_average_growth`,
+      `number_below_average_growth`, `percent_above_average`, `percent_average_growth`,
+      `percent_below_average`, `total_included`, `mean_sgp`, plus suppression flags
+      (mirroring `percent_met_suppressed`) for the `<10`/`<5` privacy-suppressed cells.
+      Identity: `[:mde_building_id, :school_year, :grade, :subject, :testing_group]`.
+- [ ] Register `MdeSgpResult` in `lib/emisint/assessments.ex` (upsert/list/get code
+      interface, same shape as the other MDE resources)
+- [ ] Add `:sgp` to the `import_type` enum in `lib/emisint/assessments/mde_import_log.ex`
+- [ ] Create `lib/emisint/assessments/mde_sgp_importer.ex` — modeled on
+      `mde_school_index_importer.ex` (two-pass: collect + upsert ISD/District/Building
+      dimensions, then stream fact rows). Skip rows where `BuildingCode` is blank or
+      `"0"` (district/ISD/statewide rollups — not imported in v1). Reuse
+      `mde_importer.ex`'s suppressed-value parsing pattern
+      (`suppressed?/1`/`parse_suppressed_decimal/1`) for the `Number*`/`Percent*`
+      columns that contain `< 10` / `< 5` text.
+- [ ] `mix ash.codegen add_mde_sgp_results && mix ash.migrate`
+- [ ] Create `lib/emisint/workers/mde_sgp_import_worker.ex` — Oban worker, modeled on
+      `mde_sss_import_worker.ex`
+- [ ] Add SGP upload panel to `lib/emisint_web/live/admin/data_import_live.ex` —
+      system-admin-gated section following the SSS panel pattern exactly (`TigrisUpload`
+      hook, `handle_event("upload_complete", %{"upload_type" => "sgp", ...})`,
+      `handle_info({:sgp_import_complete/failed, ...})`)
+- [ ] Add a `load_sgp_results(building_code, year)` loader to
+      `lib/emisint_web/live/mde/district_analysis_live.ex`, parallel to
+      `load_school_index/2`
+- [ ] Add a "Student Growth Percentile" table to the "School vs. LEA" tab in
+      `district_analysis_live.ex`, positioned near the School Index card — rows = Grade,
+      columns = distinct Subjects present for that building/year (so Social
+      Studies/Science appear automatically, no hardcoding). Cell = Mean SGP,
+      color-coded around 50 (typical growth), with the Above/Average/Below-Average
+      band counts as secondary detail. `TestingGroup` filtered to `"All Students"` for
+      display (still imported/stored for every subgroup). Suppressed cells render as a
+      muted "—" rather than breaking numeric display.
+- [ ] Manual test: upload a real SGP export, verify building/dimension upserts land,
+      verify the table renders correctly for a known building + confirms suppressed
+      cells don't crash rendering
+
+**Deferred to a later phase (not part of this delivery):**
+- District-level rollup import + School-vs-LEA SGP comparison (same nullable
+  building/district/isd + `rollup_level` pattern as `MdeStateAssessmentResult`)
+- `TestingGroup` subgroup breakdown UI
+- Multi-year trend view
+
 ---
 
 ## Critical Files to Create/Modify
