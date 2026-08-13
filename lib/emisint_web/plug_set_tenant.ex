@@ -6,18 +6,19 @@ defmodule EmisintWeb.SetTenant do
   def init(opts), do: opts
 
   # Authenticated request; user has organization_id as tenant
-  def call(
-        %{assigns: %{current_user: %{organization_id: organization_id} = current_user}} = conn,
-        _opts
-      )
-      when not is_nil(organization_id) do
-    scope = %Emisint.Scope{current_user: current_user, current_tenant: organization_id}
+  def call(%{assigns: %{current_user: current_user}} = conn, _opts) do
+    tenant = Emisint.Scope.tenant_for(current_user, get_session(conn))
 
-    conn
-    |> assign(:current_tenant, organization_id)
-    |> PlugHelpers.set_tenant(organization_id)
-    |> assign(:current_tenant, organization_id)
-    |> assign(:scope, scope)
+    if tenant do
+      scope = %Emisint.Scope{current_user: current_user, current_tenant: tenant}
+
+      conn
+      |> PlugHelpers.set_tenant(tenant)
+      |> assign(:current_tenant, tenant)
+      |> assign(:scope, scope)
+    else
+      assign(conn, :current_tenant, nil)
+    end
   end
 
   # No tenant yet (e.g., org-selection pages)

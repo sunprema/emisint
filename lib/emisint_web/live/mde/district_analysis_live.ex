@@ -2015,6 +2015,16 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 >
                   <.icon name="hero-clipboard-document-check" class="size-4" /> Board Summary
                 </.link>
+                <.link
+                  navigate={~p"/mde/reports/school/#{@selected_building_code}?year=#{@selected_year}"}
+                  id="create-custom-school-report"
+                  class="inline-flex items-center gap-2 px-4 py-2.5 bg-accent text-accent-content text-sm font-semibold hover:bg-accent/90 transition-colors"
+                >
+                  <.icon name="hero-swatch" class="size-4" /> Create Custom Report
+                </.link>
+                <p class="max-w-56 text-xs leading-relaxed text-warning">
+                  The legacy Full Performance Report includes clearly isolated sample sections.
+                </p>
               </div>
             </div>
             <%!-- No results notice --%>

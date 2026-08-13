@@ -22,6 +22,10 @@ defmodule EmisintWeb.Router do
     plug EmisintWeb.SetTenant
   end
 
+  pipeline :authenticated_browser do
+    plug EmisintWeb.RequireAuthenticatedUser
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
     plug :load_from_bearer
@@ -70,14 +74,20 @@ defmodule EmisintWeb.Router do
       live "/settings", SettingsLive, :index
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
+      live "/mde/reports/school/:building_code", Reports.SchoolReportBuilderLive, :index
       live "/mde/entities", Mde.EntityMasterLive, :index
     end
+  end
+
+  scope "/", EmisintWeb do
+    pipe_through [:browser, :authenticated_browser]
 
     get "/mde/lea-comparison.pdf", MdeLeaReportController, :show
     get "/mde/crd-comparison.pdf", MdeCrdReportController, :show
     get "/mde/sss-comparison.pdf", MdeSssReportController, :show
     get "/mde/performance-report.pdf", MdePerformanceReportController, :show
     get "/mde/board-summary.pdf", MdeBoardSummaryReportController, :show
+    get "/mde/reports/school.pdf", CustomSchoolReportController, :show
     get "/authorizer-portfolio/portfolio.pdf", PortfolioReportController, :show
     get "/esp-portfolio/portfolio.pdf", EspPortfolioReportController, :show
     get "/esp-portfolio/regression.pdf", EspRegressionReportController, :show

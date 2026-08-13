@@ -8,12 +8,7 @@ defmodule EmisintWeb.LiveScope do
   def on_mount(:default, _params, session, socket) do
     user = socket.assigns[:current_user]
 
-    tenant =
-      if user.role == :system_admin do
-        session["admin_org_id"] || user.organization_id
-      else
-        user.organization_id
-      end
+    tenant = Emisint.Scope.tenant_for(user, session)
 
     if is_nil(tenant) do
       redirect_to = if user.role == :system_admin, do: ~p"/admin/context", else: ~p"/pending"
