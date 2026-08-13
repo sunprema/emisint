@@ -28,7 +28,12 @@ defmodule Emisint.Reports.School.SssComparisonPdf do
   def generate_report(school_code, year, _opts \\ []) do
     template = File.read!(Application.app_dir(:emisint, @template_path))
     data = build_data(school_code, year)
-    config = Imprintor.Config.new(template, data)
+
+    config =
+      Imprintor.Config.new(template, data,
+        root_directory: Application.app_dir(:emisint, "priv/typst")
+      )
+
     Imprintor.compile_to_pdf(config)
   end
 

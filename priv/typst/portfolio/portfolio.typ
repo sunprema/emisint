@@ -2,6 +2,22 @@
 // Portfolio Overview PDF Report
 // Emisint APM — Academic Performance Module
 // ============================================================
+//
+// Phase 0 note (PLAN_betterPDF.md): this template intentionally keeps its
+// own page size/margins/typography/gray palette as-is — it's the
+// highest-traffic, highest-risk template (chartering-agency + ESP
+// portfolio flows) and a layout change needs visual verification this
+// pass didn't have tooling for. Only coercion helpers were unified with
+// the shared design system.
+//
+// Phase 1.3 note: this template used to have an ED%-vs-performance
+// regression section, but `PortfolioPdf.build_data/2` never populated the
+// `elixir_data.regression` key it checked, so it could never actually
+// render (dead code, found while cataloging the section library) —
+// removed 2026-07-30. That regression is fully wired and ESP-Portfolio-
+// scoped by product decision in `RegressionPdf`/`regression_report.typ`.
+
+#import "/shared/design_system.typ": *
 
 #set page(
   paper: "a4",
@@ -22,53 +38,14 @@
 #set text(size: 9pt)
 #set par(leading: 1.3em)
 
-// ============================================================
-// CRITICAL: to-num must be defined before ALL other functions.
-// Elixir nil arrives as the string "nil", floats may arrive as
-// strings. Never check for `none` before calling to-num.
-// ============================================================
-#let to-num(v) = {
-  if v == none or v == "nil" or v == "none" { return none }
-  if type(v) == float { return v }
-  if type(v) == int { return float(v) }
-  if type(v) == str {
-    if v.match(regex("^-?[0-9]+(\\.[0-9]+)?$")) != none {
-      return float(v)
-    }
-  }
-  none
-}
-
-#let to-bool(v) = {
-  if type(v) == bool { return v }
-  if type(v) == str { return v == "true" }
-  false
-}
-
-#let fmt-pct(v) = {
-  let n = to-num(v)
-  if n == none { "—" } else { str(calc.round(n, digits: 1)) + "%" }
-}
-
-#let fmt-delta-pp(v) = {
-  let n = to-num(v)
-  if n == none { "—" }
-  else if n >= 0 { "+" + str(calc.round(n, digits: 1)) + " pp" }
-  else { str(calc.round(n, digits: 1)) + " pp" }
-}
-
-#let fmt-delta-pts(v) = {
-  let n = to-num(v)
-  if n == none { "—" }
-  else if n >= 0 { "+" + str(calc.round(n, digits: 1)) + " pts" }
-  else { str(calc.round(n, digits: 1)) + " pts" }
-}
+// to-num/to-bool/fmt-pct/fmt-delta-pp/fmt-delta-pts now come from the
+// shared design-system import above.
 
 #let delta-fill(v) = {
   let n = to-num(v)
   if n == none { luma(190) }
-  else if n >= 0 { rgb("#16a34a") }
-  else { rgb("#dc2626") }
+  else if n >= 0 { c-success }
+  else { c-error }
 }
 
 // ============================================================
@@ -151,97 +128,6 @@
 }
 
 // ============================================================
-// Scatter chart (ED% vs performance) — quadrant + regression line
-// ============================================================
-#let quadrant-color(q) = {
-  if q == "green" { rgb("#16a34a") }
-  else if q == "red" { rgb("#dc2626") }
-  else { rgb("#d97706") }
-}
-
-#let scatter-chart(title, y-label, points, threshold-ed, threshold-val, slope, intercept, y-unit) = {
-  let chart-h = 130pt
-
-  let y-min = 0.0
-  let y-max = 100.0
-  if y-unit == "score" {
-    let vals = points.map(p => to-num(p.value)).filter(v => v != none)
-    let t = to-num(threshold-val)
-    let all-vals = if t != none { vals + (t,) } else { vals }
-    if all-vals.len() > 0 {
-      let mn = calc.min(..all-vals)
-      let mx = calc.max(..all-vals)
-      let pad = calc.max((mx - mn) * 0.15, 20.0)
-      y-min = calc.floor(mn - pad)
-      y-max = calc.ceil(mx + pad)
-    } else {
-      y-min = 400.0
-      y-max = 1600.0
-    }
-  }
-
-  let x-frac(v) = {
-    let n = to-num(v)
-    if n == none { none } else { calc.min(calc.max(n / 100.0, 0.0), 1.0) }
-  }
-  let y-frac(v) = {
-    let n = to-num(v)
-    if n == none { none } else { calc.min(calc.max((n - y-min) / (y-max - y-min), 0.0), 1.0) }
-  }
-
-  let cx-frac = x-frac(threshold-ed)
-  let cy-frac = y-frac(threshold-val)
-  let cx = if cx-frac != none { cx-frac * 100% }
-  let cy = if cy-frac != none { (1.0 - cy-frac) * 100% }
-
-  text(size: 8pt, weight: "semibold", title)
-  v(2pt)
-  block(width: 100%, height: chart-h, clip: true, stroke: 0.5pt + luma(210), {
-    // quadrant background fills, split at the statewide-average crosshair
-    if cx != none and cy != none {
-      place(top + left, rect(width: cx, height: cy, fill: rgb("#d97706").transparentize(96%), stroke: none))
-      place(top + left, dx: cx, rect(width: 100% - cx, height: cy, fill: rgb("#16a34a").transparentize(96%), stroke: none))
-      place(top + left, dy: cy, rect(width: cx, height: 100% - cy, fill: rgb("#dc2626").transparentize(96%), stroke: none))
-      place(top + left, dx: cx, dy: cy, rect(width: 100% - cx, height: 100% - cy, fill: rgb("#d97706").transparentize(96%), stroke: none))
-      place(top + left, dx: cx - 0.3pt, rect(width: 0.6pt, height: 100%, fill: luma(190), stroke: none))
-      place(top + left, dy: cy - 0.3pt, rect(width: 100%, height: 0.6pt, fill: luma(190), stroke: none))
-    }
-
-    // regression trend line
-    let sl = to-num(slope)
-    let ic = to-num(intercept)
-    if sl != none and ic != none {
-      let yf0 = y-frac(sl * 0.0 + ic)
-      let yf100 = y-frac(sl * 100.0 + ic)
-      if yf0 != none and yf100 != none {
-        place(line(
-          start: (0%, (1.0 - yf0) * 100%),
-          end: (100%, (1.0 - yf100) * 100%),
-          stroke: 1pt + rgb("#2563eb")
-        ))
-      }
-    }
-
-    // data points
-    for p in points {
-      let xf = x-frac(p.ed_pct)
-      let yf = y-frac(p.value)
-      if xf != none and yf != none {
-        place(
-          top + left,
-          dx: xf * 100% - 2.5pt,
-          dy: (1.0 - yf) * 100% - 2.5pt,
-          circle(radius: 2.5pt, fill: quadrant-color(p.quadrant), stroke: 0.4pt + white)
-        )
-      }
-    }
-  })
-  v(3pt)
-  text(size: 6pt, fill: luma(140),
-    "X: Economically Disadvantaged % · Y: " + y-label + " · gray: statewide avg · blue: trend line")
-}
-
-// ============================================================
 // Data bindings
 // ============================================================
 #let agency      = elixir_data.agency
@@ -249,7 +135,6 @@
 #let mstep       = elixir_data.mstep
 #let sat-data    = elixir_data.sat
 #let schools-dir = elixir_data.schools
-#let regression  = elixir_data.at("regression", default: none)
 
 // ============================================================
 // Page title
@@ -289,8 +174,8 @@
 } else { "—" }
 
 #grid(columns: (1fr, 1fr, 1fr), gutter: 8pt,
-  stat-box("Exceeds LEA",  mstep.exceeds,  me-pct, rgb("#16a34a")),
-  stat-box("Below LEA",    mstep.below,    mb-pct, rgb("#dc2626")),
+  stat-box("Exceeds LEA",  mstep.exceeds,  me-pct, c-success),
+  stat-box("Below LEA",    mstep.below,    mb-pct, c-error),
   stat-box("No LEA Data",  mstep.no_data,  "",     luma(170)),
 )
 
@@ -360,8 +245,8 @@
 } else { "—" }
 
 #grid(columns: (1fr, 1fr, 1fr), gutter: 8pt,
-  stat-box("Exceeds LEA",  sat-data.exceeds,  se-pct, rgb("#16a34a")),
-  stat-box("Below LEA",    sat-data.below,    sb-pct, rgb("#dc2626")),
+  stat-box("Exceeds LEA",  sat-data.exceeds,  se-pct, c-success),
+  stat-box("Below LEA",    sat-data.below,    sb-pct, c-error),
   stat-box("No LEA Data",  sat-data.no_data,  "",     luma(170)),
 )
 
@@ -408,34 +293,6 @@
       text(size: 7pt, fill: luma(160), s.exclusion_reason)
     )).flatten()
   )
-}
-
-// ============================================================
-// ED% vs Performance Regression
-// ============================================================
-#if regression != none {
-  pagebreak()
-  section-rule(
-    "Economically Disadvantaged % vs. Performance",
-    "Green: beating the odds · Yellow: as expected · Red: underperforming despite advantage"
-  )
-  v(6pt)
-  grid(columns: (1fr, 1fr), gutter: 14pt,
-    scatter-chart(
-      "M-STEP vs. ED%", "M-STEP Proficiency %",
-      regression.mstep.points, regression.mstep.threshold_ed_pct, regression.mstep.threshold_value,
-      regression.mstep.slope, regression.mstep.intercept, regression.mstep.y_unit
-    ),
-    scatter-chart(
-      "SAT vs. ED%", "SAT Score",
-      regression.sat.points, regression.sat.threshold_ed_pct, regression.sat.threshold_value,
-      regression.sat.slope, regression.sat.intercept, regression.sat.y_unit
-    )
-  )
-  v(4pt)
-  text(size: 6.5pt, fill: luma(140),
-    str(int(to-num(regression.mstep.excluded_count))) + " schools excluded from the M-STEP chart, " +
-    str(int(to-num(regression.sat.excluded_count))) + " from the SAT chart — missing ED% or performance data.")
 }
 
 // ============================================================

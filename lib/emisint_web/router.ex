@@ -76,8 +76,11 @@ defmodule EmisintWeb.Router do
     get "/mde/lea-comparison.pdf", MdeLeaReportController, :show
     get "/mde/crd-comparison.pdf", MdeCrdReportController, :show
     get "/mde/sss-comparison.pdf", MdeSssReportController, :show
+    get "/mde/performance-report.pdf", MdePerformanceReportController, :show
+    get "/mde/board-summary.pdf", MdeBoardSummaryReportController, :show
     get "/authorizer-portfolio/portfolio.pdf", PortfolioReportController, :show
     get "/esp-portfolio/portfolio.pdf", EspPortfolioReportController, :show
+    get "/esp-portfolio/regression.pdf", EspRegressionReportController, :show
     get "/admin/import/errors/download", ErrorFileDownloadController, :download
   end
 

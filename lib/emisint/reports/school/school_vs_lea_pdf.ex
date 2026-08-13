@@ -10,6 +10,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     MdeSchoolIndexResult,
     MdeSatResult,
     MdeSchoolVsLeaSnapshot,
+    MdeSgpResult,
     MdeStateAssessmentResult
   }
 
@@ -21,7 +22,12 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
   def generate_report(building_code, year, _opts \\ []) do
     template = File.read!(Application.app_dir(:emisint, @template_path))
     data = build_data(building_code, year)
-    config = Imprintor.Config.new(template, data)
+
+    config =
+      Imprintor.Config.new(template, data,
+        root_directory: Application.app_dir(:emisint, "priv/typst")
+      )
+
     Imprintor.compile_to_pdf(config)
   end
 
@@ -44,6 +50,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     entity_task = Task.async(fn -> load_entity_details(building_code) end)
     school_index_task = Task.async(fn -> load_school_index_result(building_code, year) end)
     thresholds_task = Task.async(fn -> load_index_thresholds(year) end)
+    sgp_school_task = Task.async(fn -> load_sgp_results(building_code, year) end)
 
     snapshot = Task.await(snapshot_task)
     enrollment = Task.await(enrollment_task)
@@ -51,6 +58,7 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     entity_details = Task.await(entity_task)
     school_index = build_school_index_map(Task.await(school_index_task))
     index_thresholds = build_thresholds_map(Task.await(thresholds_task))
+    sgp_school = Task.await(sgp_school_task)
 
     sat_results = sat_raw_to_display(sat_raw)
     # Reuse the already-loaded raw rows — no second DB hit needed.
@@ -81,17 +89,26 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           econ_grade_breakdown: [],
           entity_details: entity_details,
           school_index: school_index,
-          index_thresholds: index_thresholds
+          index_thresholds: index_thresholds,
+          sgp: build_sgp_display(sgp_school, %{subjects: [], grades: []})
         }
 
       snap ->
         subjects = snapshot_to_subjects(snap.subject_comparison)
         grades = snapshot_to_grades(snap.grade_breakdown)
         all_subjects_avg = snapshot_to_all_subjects_avg(snap.all_subjects_avg)
-        lea_enrollment_task = Task.async(fn -> load_lea_enrollment_data(snap.lea_district_code, year) end)
+
+        lea_enrollment_task =
+          Task.async(fn -> load_lea_enrollment_data(snap.lea_district_code, year) end)
+
         sat_score_bars = load_sat_score_bars(school_sat_row, snap.lea_district_code, year)
-        econ_grade_breakdown = load_econ_grade_breakdown(building_code, snap.lea_district_code, year)
+
+        econ_grade_breakdown =
+          load_econ_grade_breakdown(building_code, snap.lea_district_code, year)
+
+        sgp_lea_task = Task.async(fn -> load_sgp_lea_result(snap.lea_district_code, year) end)
         lea_enrollment = Task.await(lea_enrollment_task)
+        sgp = build_sgp_display(sgp_school, Task.await(sgp_lea_task))
 
         %{
           school: %{
@@ -118,7 +135,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
           econ_grade_breakdown: econ_grade_breakdown,
           entity_details: entity_details,
           school_index: school_index,
-          index_thresholds: index_thresholds
+          index_thresholds: index_thresholds,
+          sgp: sgp
         }
     end
   end
@@ -157,9 +175,16 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   defp build_school_index_map(nil) do
     %{
-      overall: nil, growth: nil, proficiency: nil, graduation: nil,
-      el_progress: nil, school_quality: nil, subject_participation: nil,
-      el_participation: nil, support_category_name: nil, support_category_reason: nil
+      overall: nil,
+      growth: nil,
+      proficiency: nil,
+      graduation: nil,
+      el_progress: nil,
+      school_quality: nil,
+      subject_participation: nil,
+      el_participation: nil,
+      support_category_name: nil,
+      support_category_reason: nil
     }
   end
 
@@ -186,7 +211,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
       graduation: raw[:graduation] && decimal_to_float(raw[:graduation]),
       el_progress: raw[:el_progress] && decimal_to_float(raw[:el_progress]),
       school_quality: raw[:school_quality] && decimal_to_float(raw[:school_quality]),
-      subject_participation: raw[:subject_participation] && decimal_to_float(raw[:subject_participation]),
+      subject_participation:
+        raw[:subject_participation] && decimal_to_float(raw[:subject_participation]),
       el_participation: raw[:el_participation] && decimal_to_float(raw[:el_participation])
     }
   end
@@ -214,7 +240,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
     end
   end
 
-  defp load_lea_enrollment_data(nil, _year), do: %{total: nil, econ_disadvantaged: nil, econ_pct: nil}
+  defp load_lea_enrollment_data(nil, _year),
+    do: %{total: nil, econ_disadvantaged: nil, econ_pct: nil}
 
   defp load_lea_enrollment_data(lea_district_code, year) do
     record =
@@ -440,7 +467,8 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
         school_math_suppressed: econ_all_suppressed?(school_math_rows),
         school_math_approximate: econ_any_approximate?(school_math_rows),
         lea_math: l |> Enum.filter(&(&1.subject == "Mathematics")) |> econ_weighted_proficiency(),
-        state_math: st |> Enum.filter(&(&1.subject == "Mathematics")) |> econ_weighted_proficiency()
+        state_math:
+          st |> Enum.filter(&(&1.subject == "Mathematics")) |> econ_weighted_proficiency()
       }
     end)
   end
@@ -470,6 +498,129 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
 
   defp econ_any_approximate?([]), do: false
   defp econ_any_approximate?(rows), do: Enum.any?(rows, & &1.percent_met_approximate)
+
+  # --- SGP (Student Growth Percentile) ---
+  # Mirrors the "SGP — School vs LEA" section already shown live on the
+  # School vs LEA tab (district_analysis_live.ex), so the PDF matches the
+  # dashboard instead of omitting growth data entirely.
+
+  # SGP school_year is stored in the same "24 - 25 School Year" format as the
+  # rest of the app (M-STEP/SAT), unlike School Index which uses "2024-2025".
+  defp load_sgp_results(building_code, year) do
+    rows =
+      MdeSgpResult
+      |> Ash.Query.filter(
+        mde_building.building_code == ^building_code and
+          school_year == ^year and
+          testing_group == "All Students"
+      )
+      |> Ash.read!(authorize?: false)
+
+    group_sgp_rows(rows)
+  rescue
+    _ -> %{subjects: [], grades: []}
+  end
+
+  defp load_sgp_lea_result(nil, _year), do: %{subjects: [], grades: []}
+
+  defp load_sgp_lea_result(lea_district_code, year) do
+    rows =
+      MdeSgpResult
+      |> Ash.Query.filter(
+        rollup_level == :district and
+          mde_district.district_code == ^lea_district_code and
+          school_year == ^year and
+          testing_group == "All Students"
+      )
+      |> Ash.read!(authorize?: false)
+
+    group_sgp_rows(rows)
+  rescue
+    _ -> %{subjects: [], grades: []}
+  end
+
+  defp group_sgp_rows(rows) do
+    subjects = rows |> Enum.map(& &1.subject) |> Enum.uniq() |> Enum.sort()
+
+    grades =
+      rows
+      |> Enum.group_by(& &1.grade)
+      |> Enum.map(fn {grade, grade_rows} ->
+        %{grade: grade, by_subject: Map.new(grade_rows, &{&1.subject, &1})}
+      end)
+      |> Enum.sort_by(& &1.grade)
+
+    %{subjects: subjects, grades: grades}
+  end
+
+  # Builds the PDF-friendly SGP shape: a subject-level bar summary (school vs
+  # LEA, "All Grades" weighted average — same weighting as the live subject
+  # bars) plus a by-grade table with parallel school/LEA cells per subject, in
+  # the same order as `subjects` so the Typst template never needs a dynamic
+  # dictionary lookup.
+  defp build_sgp_display(school_sgp, lea_sgp) do
+    subjects = (school_sgp.subjects ++ lea_sgp.subjects) |> Enum.uniq() |> Enum.sort()
+
+    school_by_grade = Map.new(school_sgp.grades, &{&1.grade, &1.by_subject})
+    lea_by_grade = Map.new(lea_sgp.grades, &{&1.grade, &1.by_subject})
+
+    subject_bars =
+      Enum.map(subjects, fn subject ->
+        %{
+          subject: subject,
+          school: weighted_mean_sgp(sgp_rows_for_subject(school_sgp.grades, subject)),
+          lea: weighted_mean_sgp(sgp_rows_for_subject(lea_sgp.grades, subject))
+        }
+      end)
+
+    grades =
+      (Map.keys(school_by_grade) ++ Map.keys(lea_by_grade))
+      |> Enum.uniq()
+      |> Enum.sort()
+      |> Enum.map(fn grade ->
+        school_subjects = Map.get(school_by_grade, grade, %{})
+        lea_subjects = Map.get(lea_by_grade, grade, %{})
+
+        cells =
+          Enum.map(subjects, fn subject ->
+            %{
+              subject: subject,
+              school: sgp_cell_value(school_subjects, subject),
+              lea: sgp_cell_value(lea_subjects, subject)
+            }
+          end)
+
+        %{grade: grade, cells: cells}
+      end)
+
+    %{subjects: subjects, subject_bars: subject_bars, grades: grades}
+  end
+
+  defp sgp_rows_for_subject(grade_list, subject) do
+    grade_list |> Enum.map(&Map.get(&1.by_subject, subject)) |> Enum.reject(&is_nil/1)
+  end
+
+  defp sgp_cell_value(by_subject_map, subject) do
+    case Map.get(by_subject_map, subject) do
+      nil -> nil
+      row -> decimal_to_float(row.mean_sgp)
+    end
+  end
+
+  # Enrollment-weighted (by total_included) mean SGP across a subject's grade
+  # rows — same weighting the live dashboard uses.
+  defp weighted_mean_sgp([]), do: nil
+
+  defp weighted_mean_sgp(rows) do
+    {sum, weight} =
+      rows
+      |> Enum.filter(&(&1.mean_sgp && &1.total_included))
+      |> Enum.reduce({0.0, 0}, fn r, {s, w} ->
+        {s + Decimal.to_float(r.mean_sgp) * r.total_included, w + r.total_included}
+      end)
+
+    if weight > 0, do: Float.round(sum / weight, 1), else: nil
+  end
 
   defp decimal_to_float(nil), do: nil
   defp decimal_to_float(%Decimal{} = d), do: Decimal.to_float(d)
@@ -532,14 +683,16 @@ defmodule Emisint.Reports.School.SchoolVsLeaPdf do
         school_ela: school_ela,
         school_ela_suppressed: school_ela_suppressed,
         school_ela_approximate: school_ela_approximate,
-        school_ela_display: grade_display(school_ela, school_ela_suppressed, school_ela_approximate),
+        school_ela_display:
+          grade_display(school_ela, school_ela_suppressed, school_ela_approximate),
         lea_ela: to_float(row["lea_ela"]),
         state_ela: to_float(row["state_ela"]),
         ela_delta: to_float(row["ela_delta"]),
         school_math: school_math,
         school_math_suppressed: school_math_suppressed,
         school_math_approximate: school_math_approximate,
-        school_math_display: grade_display(school_math, school_math_suppressed, school_math_approximate),
+        school_math_display:
+          grade_display(school_math, school_math_suppressed, school_math_approximate),
         lea_math: to_float(row["lea_math"]),
         state_math: to_float(row["state_math"]),
         math_delta: to_float(row["math_delta"])

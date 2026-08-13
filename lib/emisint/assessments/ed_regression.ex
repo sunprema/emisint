@@ -16,6 +16,43 @@ defmodule Emisint.Assessments.EdRegression do
   alias Emisint.Repo
 
   @doc """
+  Shapes an `mstep_analysis/2` or `sat_analysis/2` result for a Typst
+  template: stringifies the quadrant atom and flattens thresholds/regression
+  into a flat map. Shared by every PDF that renders this regression (ESP
+  Portfolio overview, the dedicated Regression PDF) so they can't drift out
+  of sync with each other or with the underlying calculation.
+  """
+  def for_display(analysis, y_unit) do
+    %{
+      points:
+        Enum.map(analysis.points, fn p ->
+          %{
+            school_name: p.school_name,
+            building_code: p.building_code,
+            ed_pct: p.ed_pct,
+            value: p.value,
+            quadrant: Atom.to_string(p.quadrant)
+          }
+        end),
+      excluded:
+        Enum.map(analysis.excluded, fn s ->
+          %{
+            school_name: s.school_name,
+            building_code: s.building_code,
+            ed_pct: s.ed_pct,
+            value: s.value
+          }
+        end),
+      excluded_count: length(analysis.excluded),
+      threshold_ed_pct: analysis.thresholds.ed_pct,
+      threshold_value: analysis.thresholds.value,
+      slope: analysis.regression && analysis.regression.slope,
+      intercept: analysis.regression && analysis.regression.intercept,
+      y_unit: y_unit
+    }
+  end
+
+  @doc """
   M-STEP vs ED% analysis for `management_organization` in `school_year`.
   Returns `%{points:, excluded:, thresholds:, regression:}` — see
   `build_analysis/4`.

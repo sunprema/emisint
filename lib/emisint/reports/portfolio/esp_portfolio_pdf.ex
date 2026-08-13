@@ -20,7 +20,12 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
   def generate_report(emo_name, year, _opts \\ []) do
     template = File.read!(Application.app_dir(:emisint, @template_path))
     data = build_data(emo_name, year)
-    config = Imprintor.Config.new(template, data)
+
+    config =
+      Imprintor.Config.new(template, data,
+        root_directory: Application.app_dir(:emisint, "priv/typst")
+      )
+
     Imprintor.compile_to_pdf(config)
   end
 
@@ -300,25 +305,7 @@ defmodule Emisint.Reports.Portfolio.EspPortfolioPdf do
     }
   end
 
-  defp format_regression(analysis, y_unit) do
-    %{
-      points:
-        Enum.map(analysis.points, fn p ->
-          %{
-            school_name: p.school_name,
-            ed_pct: p.ed_pct,
-            value: p.value,
-            quadrant: Atom.to_string(p.quadrant)
-          }
-        end),
-      excluded_count: length(analysis.excluded),
-      threshold_ed_pct: analysis.thresholds.ed_pct,
-      threshold_value: analysis.thresholds.value,
-      slope: analysis.regression && analysis.regression.slope,
-      intercept: analysis.regression && analysis.regression.intercept,
-      y_unit: y_unit
-    }
-  end
+  defp format_regression(analysis, y_unit), do: EdRegression.for_display(analysis, y_unit)
 
   defp decimal_to_float(nil), do: nil
   defp decimal_to_float(%Decimal{} = d), do: Decimal.to_float(d)

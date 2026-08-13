@@ -359,12 +359,19 @@ defmodule EmisintWeb.Dashboard.EspPortfolioLive do
                   </div>
                   <.link
                     href={
-                      ~p"/esp-portfolio/portfolio.pdf?#{%{emo: @selected_emo.name, year: @stats_year}}"
+                      if @active_tab == :regression do
+                        ~p"/esp-portfolio/regression.pdf?#{%{emo: @selected_emo.name, year: @stats_year}}"
+                      else
+                        ~p"/esp-portfolio/portfolio.pdf?#{%{emo: @selected_emo.name, year: @stats_year}}"
+                      end
                     }
                     target="_blank"
                     class="btn btn-sm btn-outline btn-primary gap-1.5 shrink-0"
                   >
-                    <.icon name="hero-arrow-down-tray" class="size-3.5" /> Download PDF
+                    <.icon name="hero-arrow-down-tray" class="size-3.5" />
+                    {if @active_tab == :regression,
+                      do: "Download Regression PDF",
+                      else: "Download PDF"}
                   </.link>
                 </div>
               </div>

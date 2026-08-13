@@ -17,7 +17,12 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
   def generate_report(agency_code, year, _opts \\ []) do
     template = File.read!(Application.app_dir(:emisint, @template_path))
     data = build_data(agency_code, year)
-    config = Imprintor.Config.new(template, data)
+
+    config =
+      Imprintor.Config.new(template, data,
+        root_directory: Application.app_dir(:emisint, "priv/typst")
+      )
+
     Imprintor.compile_to_pdf(config)
   end
 
@@ -177,7 +182,11 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
 
     # Step 4: LEA SAT results
     lea_codes =
-      lea_map |> Map.values() |> Enum.map(& &1.lea_district_code) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+      lea_map
+      |> Map.values()
+      |> Enum.map(& &1.lea_district_code)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
 
     lea_sat =
       if lea_codes == [] do
@@ -237,7 +246,10 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
       }
     end)
     |> Enum.reject(fn s -> is_nil(s.school_score) and s.school_name == s.building_code end)
-    |> Enum.sort_by(fn s -> if s.no_lea_found, do: -99_999.0, else: s.delta || -99_999.0 end, :desc)
+    |> Enum.sort_by(
+      fn s -> if s.no_lea_found, do: -99_999.0, else: s.delta || -99_999.0 end,
+      :desc
+    )
   rescue
     _ -> []
   end

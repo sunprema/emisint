@@ -1,22 +1,22 @@
 // Emisint — School vs Geographic LEA District Comparison Report
 // Design: matches comprehensive.typ palette and layout
 
-// ── Colour palette ────────────────────────────────────────────────────────────
-#let c-red      = rgb("#b91c1c")
-#let c-red-bg   = rgb("#fef2f2")
-#let c-blue     = rgb("#1d4ed8")
-#let c-blue-bg  = rgb("#eff6ff")
-#let c-green    = rgb("#15803d")
-#let c-green-bg = rgb("#f0fdf4")
-#let c-amber    = rgb("#b45309")
-#let c-amber-bg = rgb("#fffbeb")
-#let c-text     = rgb("#1e293b")
-#let c-muted    = rgb("#64748b")
-#let c-border   = rgb("#e2e8f0")
-#let c-row-alt  = rgb("#f8fafc")
-#let c-th-bg    = rgb("#f1f5f9")
-#let c-school   = rgb("#1d4ed8")
-#let c-lea      = rgb("#b45309")
+#import "/shared/design_system.typ": *
+
+// Local aliases so this template's body (written against the original
+// standalone color names) didn't need a full rewrite during the Phase 0
+// design-system migration — see PLAN_betterPDF.md. `c-school`/`c-lea`
+// already exist as role aliases in the shared partial.
+#let c-red      = c-error
+#let c-red-bg   = c-error-bg
+#let c-blue     = c-school
+#let c-blue-bg  = c-accent-bg
+#let c-green    = c-success
+#let c-green-bg = c-success-bg
+#let c-amber    = c-warning
+#let c-amber-bg = c-warning-bg
+// c-pink/c-pink-bg are a one-off accent used only in this template — not
+// part of the shared palette.
 #let c-pink     = rgb("#db2777")
 #let c-pink-bg  = rgb("#fdf2f8")
 
@@ -61,106 +61,14 @@
   else { upper(s.first()) + s.slice(1) }
 }
 
-// Section header with left red bar
-#let section-title(title, subtitle: "") = {
-  v(20pt)
-  grid(
-    columns: (4pt, 1fr),
-    gutter: 10pt,
-    rect(width: 4pt, height: if subtitle != "" { 32pt } else { 22pt }, fill: c-red, radius: 1pt),
-    {
-      text(weight: "bold", size: 11pt, fill: c-text, title)
-      if subtitle != "" {
-        linebreak()
-        text(size: 8.5pt, fill: c-muted, subtitle)
-      }
-    }
-  )
-  v(8pt)
-}
-
-// KPI stat box
-#let stat-box(label, value, sub: "") = rect(
-  width: 100%,
-  inset: (x: 14pt, y: 12pt),
-  stroke: 0.75pt + c-border,
-  radius: 2pt,
-  {
-    text(size: 8pt, fill: c-muted, upper(label))
-    v(4pt)
-    text(size: 22pt, weight: "bold", fill: c-blue, value)
-    if sub != "" {
-      linebreak()
-      text(size: 7.5pt, fill: c-muted, sub)
-    }
-  }
-)
-
-// Table header cell
-#let th(t) = table.cell(
-  fill: c-th-bg,
-  text(weight: "bold", size: 8pt, fill: c-muted, upper(t))
-)
-
-// Coerces any Elixir/JSON numeric value to a Typst float, or none.
-// Handles: Typst none, string "nil", empty string, float, integer, numeric string.
-#let to-num(v) = {
-  if v == none { none }
-  else if type(v) == str {
-    let t = v.trim()
-    if t == "nil" or t == "" or t == "N/A" { none }
-    else { float(t) }
-  } else { float(v) }
-}
-
-// Proficiency % badge — colour-coded by threshold (value is 0–100)
-// approximate: true adds a "*" suffix and light gray background to signal a
-// Rule 2 range value (e.g. "<=50%" stored as 50).
-#let pct-badge(v, school: false, approximate: false) = {
-  // JSON round-trip may deliver booleans as strings — normalise to bool
-  let approximate = if type(approximate) == str { approximate == "true" } else { approximate }
-  // Handle none / nil first
-  let v = if v == none { none }
-          else if type(v) == str {
-            let trimmed = v.trim()
-            if trimmed == "nil" or trimmed == "" or trimmed == "N/A" { none }
-            else { float(trimmed) }
-          } else { v }
-  if v == none {
-    box(fill: c-row-alt, inset: (x: 7pt, y: 3pt), radius: 3pt,
-      text(fill: c-muted, weight: "bold", size: 8.5pt, "—"))
-  } else {
-    let (bg, fg) = if approximate {
-      (luma(220), rgb("#555555"))
-    } else if v >= 60 {
-      (c-green-bg, c-green)
-    } else if v >= 40 {
-      (c-amber-bg, c-amber)
-    } else {
-      (c-red-bg, c-red)
-    }
-    let label = str(calc.round(v, digits: 1)) + "%" + if approximate { "*" } else { "" }
-    box(fill: bg, inset: (x: 7pt, y: 3pt), radius: 3pt,
-      text(fill: fg, weight: "bold", size: 8.5pt, label))
-  }
-}
-
-// Delta badge: positive = school leads (green), negative = school trails (red)
-#let delta-badge(v) = {
-  if v == none {
-    box(fill: c-row-alt, inset: (x: 6pt, y: 3pt), radius: 3pt,
-      text(fill: c-muted, size: 8pt, "—"))
-  } else {
-    let v = to-num(v)
-    let (bg, fg) = if v >= 0 { (c-green-bg, c-green) } else { (c-red-bg, c-red) }
-    let label = if v >= 0 {
-      "+" + str(calc.round(v, digits: 1)) + " pts"
-    } else {
-      str(calc.round(v, digits: 1)) + " pts"
-    }
-    box(fill: bg, inset: (x: 6pt, y: 3pt), radius: 3pt,
-      text(fill: fg, weight: "bold", size: 8pt, label))
-  }
+// Shortens common MDE subject names to match the "Sch ELA"/"LEA ELA" style
+// abbreviations already used elsewhere in this template.
+#let sgp-subject-abbr(s) = {
+  if s == "English Language Arts" { "ELA" }
+  else if s == "Mathematics" { "Math" }
+  else if s == "Science" { "Sci" }
+  else if s == "Social Studies" { "SS" }
+  else { s }
 }
 
 // Tri progress bar: school (blue, top) vs LEA (amber, middle) vs State (green, bottom)
@@ -319,9 +227,6 @@
   )
 }
 
-// Integer formatter (nil → em dash)
-#let fmt-int(v) = if v == none { "—" } else { str(v) }
-
 // Percentage sub-label for stat boxes
 #let fmt-pct-sub(v) = {
   let n = to-num(v)
@@ -334,14 +239,7 @@
   columns: (auto, 1fr, auto),
   gutter: 12pt,
   align: horizon,
-  rect(
-    width: 40pt, height: 40pt,
-    fill: c-red,
-    radius: 3pt,
-    align(center + horizon,
-      text(fill: white, weight: "bold", size: 14pt, "APM")
-    )
-  ),
+  image("/school/emisint_small_logo.png", width: 40pt),
   {
     text(weight: "bold", size: 18pt, fill: c-text, elixir_data.school.name)
     linebreak()
@@ -401,32 +299,14 @@
 // ── Section 0: School Details ─────────────────────────────────────────────────
 #section-title("School Details", subtitle: "MDE entity information")
 
-#let detail-row(label, value) = {
-  grid(
-    columns: (120pt, 1fr),
-    gutter: 0pt,
-    rect(
-      width: 100%, inset: (x: 10pt, y: 7pt),
-      stroke: (bottom: 0.5pt + c-border, right: 0.5pt + c-border),
-      fill: c-th-bg,
-      text(size: 8pt, weight: "bold", fill: c-muted, upper(label))
-    ),
-    rect(
-      width: 100%, inset: (x: 10pt, y: 7pt),
-      stroke: (bottom: 0.5pt + c-border),
-      text(size: 9pt, fill: c-text, if value == none or value == "" { text(fill: c-muted, style: "italic", "—") } else { value })
-    )
-  )
-}
-
 #let ed = elixir_data.entity_details
 
-#detail-row("ISD Code", ed.isd_code)
-#detail-row("ISD Name", ed.isd_official_name)
-#detail-row("Chartering Agency Code", ed.entity_chartering_agency_code)
-#detail-row("Chartering Agency", ed.entity_chartering_agency_name)
-#detail-row("Authorized Grades", ed.entity_authorized_grades)
-#detail-row("Actual Grades", ed.entity_actual_grades)
+#detail-row("ISD Code", ed.isd_code, label-width: 120pt)
+#detail-row("ISD Name", ed.isd_official_name, label-width: 120pt)
+#detail-row("Chartering Agency Code", ed.entity_chartering_agency_code, label-width: 120pt)
+#detail-row("Chartering Agency", ed.entity_chartering_agency_name, label-width: 120pt)
+#detail-row("Authorized Grades", ed.entity_authorized_grades, label-width: 120pt)
+#detail-row("Actual Grades", ed.entity_actual_grades, label-width: 120pt)
 
 #pagebreak()
 // ── Section 1 (Page 1): Student Enrollment ────────────────────────────────────
@@ -839,6 +719,66 @@
       align(center, pct-badge(row.state_math))
     )}
   )
+]
+
+#pagebreak()
+
+// ── Section 3.5: Student Growth Percentile (SGP) ─────────────────────────────
+#section-title("Student Growth Percentile (SGP)",
+  subtitle: "Mean SGP by subject · All Grades · school vs geographic LEA district · " + elixir_data.school_year)
+
+#if elixir_data.sgp.subjects.len() == 0 [
+  #rect(
+    width: 100%, inset: 14pt, stroke: 0.5pt + c-border, radius: 2pt,
+    text(fill: c-muted, style: "italic", "No SGP data available for this school or LEA district.")
+  )
+] else [
+  #table(
+    columns: (2fr, 1fr, 1fr),
+    stroke: (x, y) => if y == 0 { none } else { (bottom: 0.5pt + c-border) },
+    inset: (x: 10pt, y: 8pt),
+    fill: (x, y) => if y == 0 { c-th-bg } else if calc.odd(y) { white } else { c-row-alt },
+    th("Subject"), th("School"), th("LEA"),
+    ..elixir_data.sgp.subject_bars.map(row => (
+      text(size: 9pt, weight: "semibold", row.subject),
+      align(center, sgp-badge(row.school)),
+      align(center, sgp-badge(row.lea))
+    )).flatten()
+  )
+  #v(6pt)
+  #text(size: 8pt, fill: c-muted)[
+    SGP key: #box(fill: c-green-bg, inset: (x: 5pt, y: 2pt), radius: 3pt,
+      stroke: 0.5pt + c-green.lighten(40%),
+      text(fill: c-green, size: 7.5pt, weight: "bold", "≥ 50 Strong"))
+    #h(5pt)
+    #box(fill: c-amber-bg, inset: (x: 5pt, y: 2pt), radius: 3pt,
+      stroke: 0.5pt + c-amber.lighten(40%),
+      text(fill: c-amber, size: 7.5pt, weight: "bold", "40–49 Typical"))
+    #h(5pt)
+    #box(fill: c-red-bg, inset: (x: 5pt, y: 2pt), radius: 3pt,
+      stroke: 0.5pt + c-red.lighten(40%),
+      text(fill: c-red, size: 7.5pt, weight: "bold", "< 40 Below"))
+    #h(10pt)
+    SGP scale: 1–99, 50 = typical growth
+  ]
+
+  #if elixir_data.sgp.grades.len() > 0 [
+    #v(14pt)
+    #text(weight: "bold", size: 9.5pt, fill: c-text, "SGP by Grade")
+    #v(6pt)
+    #table(
+      columns: (auto,) + (1fr, 1fr) * elixir_data.sgp.subjects.len(),
+      stroke: (x, y) => if y == 0 { none } else { (bottom: 0.5pt + c-border) },
+      inset: (x: 6pt, y: 7pt),
+      fill: (x, y) => if y == 0 { c-th-bg } else if calc.odd(y) { white } else { c-row-alt },
+      th("Grade"),
+      ..elixir_data.sgp.subjects.map(s => (th(sgp-subject-abbr(s) + " Sch"), th(sgp-subject-abbr(s) + " LEA"))).flatten(),
+      ..elixir_data.sgp.grades.map(row => (
+        text(size: 8.5pt, weight: "semibold", row.grade),
+        ..row.cells.map(c => (align(center, sgp-badge(c.school)), align(center, sgp-badge(c.lea)))).flatten()
+      )).flatten()
+    )
+  ]
 ]
 
 #pagebreak()

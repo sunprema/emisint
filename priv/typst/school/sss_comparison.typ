@@ -1,20 +1,19 @@
 // Emisint — Statistically Similar Schools (SSS) Comparison Report
 
-#let c-red      = rgb("#b91c1c")
-#let c-red-bg   = rgb("#fef2f2")
-#let c-blue     = rgb("#1d4ed8")
-#let c-blue-bg  = rgb("#eff6ff")
-#let c-green    = rgb("#15803d")
-#let c-green-bg = rgb("#f0fdf4")
-#let c-amber    = rgb("#b45309")
-#let c-amber-bg = rgb("#fffbeb")
-#let c-text     = rgb("#1e293b")
-#let c-muted    = rgb("#64748b")
-#let c-border   = rgb("#e2e8f0")
-#let c-row-alt  = rgb("#f8fafc")
-#let c-th-bg    = rgb("#f1f5f9")
-#let c-school   = rgb("#1d4ed8")
-#let c-peer     = rgb("#15803d")
+#import "/shared/design_system.typ": *
+
+// Local aliases so this template's body (written against the original
+// standalone color names) didn't need a full rewrite during the Phase 0
+// design-system migration — see PLAN_betterPDF.md. `c-peer` already exists
+// as a role alias in the shared partial.
+#let c-red      = c-error
+#let c-red-bg   = c-error-bg
+#let c-blue     = c-school
+#let c-blue-bg  = c-accent-bg
+#let c-green    = c-success
+#let c-green-bg = c-success-bg
+#let c-amber    = c-warning
+#let c-amber-bg = c-warning-bg
 
 #set page(
   paper: "us-letter",
@@ -47,78 +46,6 @@
 
 #set text(font: "Helvetica Neue", size: 9.5pt, fill: c-text)
 #set par(leading: 0.6em, spacing: 0.6em)
-
-#let to-num(v) = {
-  if v == none { none }
-  else if type(v) == str {
-    let t = v.trim()
-    if t == "nil" or t == "" or t == "N/A" { none } else { float(t) }
-  } else { float(v) }
-}
-
-#let truthy(v) = if type(v) == str { v == "true" } else { v == true }
-
-#let th(t) = table.cell(fill: c-th-bg, text(weight: "bold", size: 8pt, fill: c-muted, upper(t)))
-
-#let section-title(title, subtitle: "") = {
-  v(18pt)
-  grid(
-    columns: (4pt, 1fr),
-    gutter: 10pt,
-    rect(width: 4pt, height: if subtitle != "" { 32pt } else { 22pt }, fill: c-red, radius: 1pt),
-    {
-      text(weight: "bold", size: 11pt, fill: c-text, title)
-      if subtitle != "" {
-        linebreak()
-        text(size: 8.5pt, fill: c-muted, subtitle)
-      }
-    }
-  )
-  v(8pt)
-}
-
-#let mini-badge(v, fg, bg, suffix: "%") = {
-  let n = to-num(v)
-  if n == none {
-    box(fill: c-row-alt, inset: (x: 6pt, y: 2pt), radius: 3pt,
-      text(fill: c-muted, weight: "bold", size: 8pt, "—"))
-  } else {
-    box(fill: bg, inset: (x: 6pt, y: 2pt), radius: 3pt,
-      text(fill: fg, weight: "bold", size: 8pt, str(calc.round(n, digits: 1)) + suffix))
-  }
-}
-
-#let pct-badge(v) = {
-  let n = to-num(v)
-  if n == none {
-    box(fill: c-row-alt, inset: (x: 7pt, y: 3pt), radius: 3pt,
-      text(fill: c-muted, weight: "bold", size: 8.5pt, "—"))
-  } else {
-    let (bg, fg) = if n >= 60 { (c-green-bg, c-green) }
-                   else if n >= 40 { (c-amber-bg, c-amber) }
-                   else { (c-red-bg, c-red) }
-    box(fill: bg, inset: (x: 7pt, y: 3pt), radius: 3pt,
-      text(fill: fg, weight: "bold", size: 8.5pt, str(calc.round(n, digits: 1)) + "%"))
-  }
-}
-
-#let score-cell(v) = {
-  let n = to-num(v)
-  if n == none { text(fill: c-muted, "—") } else { [#calc.round(n, digits: 1)] }
-}
-
-#let delta-badge(school, other, suffix: " pts") = {
-  let s = to-num(school)
-  let o = to-num(other)
-  if s == none or o == none {
-    box(fill: c-row-alt, inset: (x: 6pt, y: 2pt), radius: 3pt, text(fill: c-muted, size: 7.5pt, "—"))
-  } else {
-    let d = calc.round(s - o, digits: 1)
-    let (bg, fg) = if d >= 0 { (c-green-bg, c-green) } else { (c-red-bg, c-red) }
-    let lbl = (if d >= 0 { "+" } else { "" }) + str(d) + suffix
-    box(fill: bg, inset: (x: 6pt, y: 2pt), radius: 3pt, text(fill: fg, weight: "bold", size: 7.5pt, lbl))
-  }
-}
 
 #let bi-bar(school, peer, max-val) = {
   let s = to-num(school)
@@ -154,32 +81,17 @@
       gutter: 8pt,
       align: (left, right),
       [],
-      { text(size: 7pt, fill: c-muted, "vs SSS "); delta-badge(school, peer) },
+      { text(size: 7pt, fill: c-muted, "vs SSS "); delta-badge-between(school, peer) },
     )
     v(10pt)
   })
-}
-
-#let detail-row(label, value) = {
-  let empty = value == none or value == "" or (type(value) == str and value.trim() == "nil")
-  grid(
-    columns: (150pt, 1fr),
-    gutter: 0pt,
-    rect(width: 100%, inset: (x: 10pt, y: 7pt),
-      stroke: (bottom: 0.5pt + c-border, right: 0.5pt + c-border), fill: c-th-bg,
-      text(size: 8pt, weight: "bold", fill: c-muted, upper(label))),
-    rect(width: 100%, inset: (x: 10pt, y: 7pt), stroke: (bottom: 0.5pt + c-border),
-      if empty { text(fill: c-muted, style: "italic", "—") }
-      else { text(size: 9pt, fill: c-text, value) })
-  )
 }
 
 #grid(
   columns: (auto, 1fr, auto),
   gutter: 12pt,
   align: horizon,
-  rect(width: 40pt, height: 40pt, fill: c-red, radius: 3pt,
-    align(center + horizon, text(fill: white, weight: "bold", size: 14pt, "APM"))),
+  image("/school/emisint_small_logo.png", width: 40pt),
   {
     text(weight: "bold", size: 18pt, fill: c-text, elixir_data.school.name)
     linebreak()
@@ -272,7 +184,7 @@
   pct-badge(elixir_data.composite.mstep.avg),
 )
 
-#if truthy(elixir_data.has_any_sat) {
+#if to-bool(elixir_data.has_any_sat) {
   section-title("SAT College Readiness",
     subtitle: "School vs SSS composite (scaled score)")
 
@@ -326,7 +238,7 @@
   table.cell(fill: c-green-bg, pct-badge(elixir_data.composite.mstep.avg)),
 )
 
-#if truthy(elixir_data.has_any_sat) {
+#if to-bool(elixir_data.has_any_sat) {
   section-title("SSS Peer Schools — SAT", subtitle: "Per-school SAT scaled scores")
 
   table(

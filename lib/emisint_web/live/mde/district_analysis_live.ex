@@ -1286,7 +1286,6 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           </div>
         </div>
 
-
         <%!-- ══ Tab 4: SSS Comparison ══════════════════════════════════════════ --%>
         <div :if={@active_tab == "sss_comparison"} class="space-y-6">
           <div
@@ -1877,7 +1876,6 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
           </.collapsible_section>
         </div>
 
-
         <%!-- ══ Tab 1: School vs Geographic LEA ════════════════════════════════════ --%>
         <div :if={@active_tab == "school_vs_lea"} class="space-y-6">
           <%!-- Building selector — only shown when district has multiple buildings --%>
@@ -1986,7 +1984,10 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                 </div>
               </div>
               <%!-- Download PDF button — only when LEA data is available --%>
-              <div :if={!@school_vs_lea.no_lea_found && !@school_vs_lea.no_results} class="shrink-0">
+              <div
+                :if={!@school_vs_lea.no_lea_found && !@school_vs_lea.no_results}
+                class="shrink-0 flex flex-col gap-2"
+              >
                 <.link
                   href={
                     ~p"/mde/lea-comparison.pdf?building=#{@selected_building_code}&year=#{@selected_year}"
@@ -1995,6 +1996,24 @@ defmodule EmisintWeb.Mde.DistrictAnalysisLive do
                   class="inline-flex items-center gap-2 px-4 py-2.5 bg-info text-white text-sm font-semibold hover:bg-info/90 transition-colors"
                 >
                   <.icon name="hero-arrow-down-tray" class="size-4" /> Download PDF
+                </.link>
+                <.link
+                  href={
+                    ~p"/mde/performance-report.pdf?building=#{@selected_building_code}&year=#{@selected_year}"
+                  }
+                  target="_blank"
+                  class="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+                >
+                  <.icon name="hero-document-text" class="size-4" /> Full Performance Report
+                </.link>
+                <.link
+                  href={
+                    ~p"/mde/board-summary.pdf?building=#{@selected_building_code}&year=#{@selected_year}"
+                  }
+                  target="_blank"
+                  class="inline-flex items-center gap-2 px-4 py-2.5 bg-secondary text-white text-sm font-semibold hover:bg-secondary/90 transition-colors"
+                >
+                  <.icon name="hero-clipboard-document-check" class="size-4" /> Board Summary
                 </.link>
               </div>
             </div>
