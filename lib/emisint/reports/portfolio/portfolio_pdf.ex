@@ -2,7 +2,8 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
   @moduledoc """
   Generates a Portfolio Overview PDF for a chartering agency.
 
-  Includes M-STEP vs LEA comparison, SAT vs LEA comparison, and school directory.
+  Includes M-STEP vs LEA comparison, M-STEP vs Composite Resident District
+  (CRD) comparison, SAT vs LEA comparison, and school directory.
   """
 
   @template_path "priv/typst/portfolio/portfolio.typ"
@@ -11,7 +12,7 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
 
   require Ash.Query
 
-  alias Emisint.Assessments.MdeEntityMaster
+  alias Emisint.Assessments.{CrdComparison, MdeEntityMaster}
   alias Emisint.Repo
 
   def generate_report(agency_code, year, _opts \\ []) do
@@ -29,12 +30,22 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
     schools = load_schools(agency_code)
     building_codes = schools |> Enum.map(& &1.entity_code) |> Enum.reject(&is_nil/1)
 
+    # CRD is keyed by charter district, not building — same collapse as the
+    # CRD Dashboard tab in PortfolioLive.
+    district_codes =
+      schools
+      |> Enum.map(& &1.district_code)
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+      |> Enum.uniq()
+
     agency_task = Task.async(fn -> load_agency_info(agency_code, schools) end)
     mstep_task = Task.async(fn -> load_mstep_stats(building_codes, year) end)
+    crd_task = Task.async(fn -> load_crd_stats(district_codes, year) end)
     sat_task = Task.async(fn -> load_sat_stats(building_codes, year) end)
 
     agency_info = Task.await(agency_task)
     mstep_raw = Task.await(mstep_task)
+    crd_raw = Task.await(crd_task)
     sat_raw = Task.await(sat_task)
 
     %{
@@ -43,6 +54,7 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
       report_date: Date.utc_today() |> Calendar.strftime("%b %d, %Y"),
       schools: format_schools(schools),
       mstep: format_section(mstep_raw, :mstep),
+      crd: format_section(crd_raw, :crd),
       sat: format_section(sat_raw, :sat)
     }
   end
@@ -104,6 +116,12 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
     )
     |> Repo.all()
     |> Enum.sort_by(fn s -> if s.no_lea_found, do: -9999.0, else: s.delta || -9999.0 end, :desc)
+  rescue
+    _ -> []
+  end
+
+  defp load_crd_stats(district_codes, year) do
+    CrdComparison.portfolio_deltas(district_codes, year)
   rescue
     _ -> []
   end
@@ -177,7 +195,11 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
 
     # Step 4: LEA SAT results
     lea_codes =
-      lea_map |> Map.values() |> Enum.map(& &1.lea_district_code) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+      lea_map
+      |> Map.values()
+      |> Enum.map(& &1.lea_district_code)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
 
     lea_sat =
       if lea_codes == [] do
@@ -237,7 +259,10 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
       }
     end)
     |> Enum.reject(fn s -> is_nil(s.school_score) and s.school_name == s.building_code end)
-    |> Enum.sort_by(fn s -> if s.no_lea_found, do: -99_999.0, else: s.delta || -99_999.0 end, :desc)
+    |> Enum.sort_by(
+      fn s -> if s.no_lea_found, do: -99_999.0, else: s.delta || -99_999.0 end,
+      :desc
+    )
   rescue
     _ -> []
   end
@@ -280,6 +305,42 @@ defmodule Emisint.Reports.Portfolio.PortfolioPdf do
       excluded:
         Enum.map(excluded, fn s ->
           %{school_name: s.school_name || s.building_code, building_code: s.building_code}
+        end)
+    }
+  end
+
+  # Rows come from CrdComparison.portfolio_deltas/2, already sorted best → worst
+  # with excluded rows last. Decimals become floats so Typst's to-num sees
+  # plain numbers after the JSON round-trip.
+  defp format_section(stats, :crd) do
+    comparable = Enum.reject(stats, & &1.excluded?)
+    excluded = Enum.filter(stats, & &1.excluded?)
+
+    %{
+      exceeds: Enum.count(comparable, &(&1.delta > 0)),
+      below: Enum.count(comparable, &(&1.delta <= 0)),
+      no_data: length(excluded),
+      total_comparable: length(comparable),
+      schools:
+        Enum.map(comparable, fn s ->
+          %{
+            school_name: s.district_name,
+            district_code: s.district_code,
+            school_pct: decimal_to_float(s.charter_avg),
+            crd_pct: decimal_to_float(s.composite_avg),
+            delta: s.delta,
+            scored_count: s.scored_count,
+            resident_count: s.resident_count,
+            total_students: s.total_students
+          }
+        end),
+      excluded:
+        Enum.map(excluded, fn s ->
+          %{
+            school_name: s.district_name,
+            district_code: s.district_code,
+            exclusion_reason: s.exclusion_reason || "No comparison available"
+          }
         end)
     }
   end

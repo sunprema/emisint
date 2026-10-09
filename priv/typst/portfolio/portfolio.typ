@@ -247,6 +247,7 @@
 #let agency      = elixir_data.agency
 #let school-year = elixir_data.school_year
 #let mstep       = elixir_data.mstep
+#let crd         = elixir_data.at("crd", default: none)
 #let sat-data    = elixir_data.sat
 #let schools-dir = elixir_data.schools
 #let regression  = elixir_data.at("regression", default: none)
@@ -339,6 +340,79 @@
       text(size: 7pt, fill: luma(160), s.building_code)
     )).flatten()
   )
+}
+
+// ============================================================
+// CRD Section — M-STEP vs. Composite Resident District
+// ============================================================
+#if crd != none {
+  pagebreak()
+  section-rule(
+    "M-STEP vs. Composite Resident District (CRD)",
+    "Schools where % proficient exceeds the enrollment-weighted resident district average"
+  )
+
+  let ct = to-num(crd.total_comparable)
+  let ce-pct = if ct != none and ct > 0 {
+    str(calc.round(to-num(crd.exceeds) / ct * 100, digits: 0)) + "%"
+  } else { "—" }
+  let cb-pct = if ct != none and ct > 0 {
+    str(calc.round(to-num(crd.below) / ct * 100, digits: 0)) + "%"
+  } else { "—" }
+
+  grid(columns: (1fr, 1fr, 1fr), gutter: 8pt,
+    stat-box("Exceeds CRD",  crd.exceeds,  ce-pct, rgb("#16a34a")),
+    stat-box("Below CRD",    crd.below,    cb-pct, rgb("#dc2626")),
+    stat-box("No CRD Data",  crd.no_data,  "",     luma(170)),
+  )
+
+  v(8pt)
+
+  // `crd.schools` holds only comparable rows (one per charter district),
+  // already sorted best → worst by the Elixir side.
+  let crd-max-d = crd.schools.fold(0.0, (acc, s) => {
+    let d = to-num(s.delta)
+    if d == none { acc } else { calc.max(acc, calc.abs(d)) }
+  })
+
+  if crd.schools.len() > 0 {
+    grid(columns: (1fr, 2fr, 70pt), gutter: 0pt,
+      text(size: 6.5pt, fill: luma(140), weight: "semibold", upper("School")),
+      align(center, text(size: 6.5pt, fill: luma(140), weight: "semibold",
+        upper("CRD delta (pp) · school vs composite · best → worst"))),
+      align(right, text(size: 6.5pt, fill: luma(140), weight: "semibold", upper("Delta")))
+    )
+    v(3pt)
+    table(
+      columns: (1fr, 2fr, 70pt),
+      stroke: none,
+      inset: (x: 4pt, y: 2.5pt),
+      fill: (_, row) => if calc.odd(row) { luma(249) } else { white },
+      ..crd.schools.map(s =>
+        bar-row(s.school_name, s.delta, crd-max-d, fmt-delta-pp)
+      ).flatten()
+    )
+  } else {
+    text(size: 7.5pt, fill: luma(140), "No CRD or M-STEP data found for this year.")
+  }
+
+  if crd.excluded.len() > 0 {
+    v(8pt)
+    text(size: 7pt, fill: luma(140), weight: "semibold",
+      upper(str(crd.excluded.len()) + " districts excluded — no CRD delta available"))
+    v(3pt)
+    table(
+      columns: (1fr, auto, 1fr),
+      stroke: none,
+      inset: (x: 4pt, y: 2.5pt),
+      fill: luma(249),
+      ..crd.excluded.map(s => (
+        text(size: 7pt, fill: luma(130), s.school_name),
+        text(size: 7pt, fill: luma(160), s.district_code),
+        text(size: 7pt, fill: luma(160), s.exclusion_reason)
+      )).flatten()
+    )
+  }
 }
 
 #pagebreak()

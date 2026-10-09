@@ -5,7 +5,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
 
   require Ash.Query
 
-  alias Emisint.Assessments.MdeEntityMaster
+  alias Emisint.Assessments.{CrdComparison, MdeEntityMaster}
   alias Emisint.Repo
 
   on_mount {EmisintWeb.LiveUserAuth, :live_user_required}
@@ -33,6 +33,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       |> assign(:stats_year, hd(@stats_years))
       |> assign(:portfolio_stats, [])
       |> assign(:sat_portfolio_stats, [])
+      |> assign(:crd_portfolio_stats, [])
 
     if connected?(socket) do
       agencies = load_chartering_agencies()
@@ -56,6 +57,7 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
       year = socket.assigns.stats_year
       stats = load_portfolio_stats(building_codes, year)
       sat_stats = load_sat_portfolio_stats(building_codes, year)
+      crd_stats = load_crd_portfolio_stats(schools, year)
 
       {:noreply,
        socket
@@ -64,7 +66,8 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
        |> assign(:school_search, "")
        |> assign(:filtered_schools, schools)
        |> assign(:portfolio_stats, stats)
-       |> assign(:sat_portfolio_stats, sat_stats)}
+       |> assign(:sat_portfolio_stats, sat_stats)
+       |> assign(:crd_portfolio_stats, crd_stats)}
     else
       {:noreply, socket}
     end
@@ -79,7 +82,8 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
      |> assign(:filtered_schools, [])
      |> assign(:active_tab, :schools)
      |> assign(:portfolio_stats, [])
-     |> assign(:sat_portfolio_stats, [])}
+     |> assign(:sat_portfolio_stats, [])
+     |> assign(:crd_portfolio_stats, [])}
   end
 
   # ---------------------------------------------------------------------------
@@ -128,12 +132,14 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
 
     stats = load_portfolio_stats(building_codes, year)
     sat_stats = load_sat_portfolio_stats(building_codes, year)
+    crd_stats = load_crd_portfolio_stats(socket.assigns.schools, year)
 
     {:noreply,
      socket
      |> assign(:stats_year, year)
      |> assign(:portfolio_stats, stats)
-     |> assign(:sat_portfolio_stats, sat_stats)}
+     |> assign(:sat_portfolio_stats, sat_stats)
+     |> assign(:crd_portfolio_stats, crd_stats)}
   end
 
   # ---------------------------------------------------------------------------
@@ -325,6 +331,22 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
                 </button>
                 <button
                   phx-click="switch_tab"
+                  phx-value-tab="crd_dashboard"
+                  class={[
+                    "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    if(@active_tab == :crd_dashboard,
+                      do: "border-primary text-primary bg-base-100",
+                      else:
+                        "border-transparent text-base-content/50 hover:text-base-content hover:border-base-300"
+                    )
+                  ]}
+                >
+                  <div class="flex items-center gap-2">
+                    <.icon name="hero-arrows-right-left" class="size-3.5" /> CRD Dashboard
+                  </div>
+                </button>
+                <button
+                  phx-click="switch_tab"
                   phx-value-tab="sat_dashboard"
                   class={[
                     "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
@@ -465,6 +487,14 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
               <div :if={@active_tab == :dashboard}>
                 <.portfolio_dashboard
                   stats={@portfolio_stats}
+                  stats_year={@stats_year}
+                  stats_years={@stats_years}
+                />
+              </div>
+              <%!-- Tab: CRD Dashboard --%>
+              <div :if={@active_tab == :crd_dashboard}>
+                <.crd_dashboard
+                  stats={@crd_portfolio_stats}
                   stats_year={@stats_year}
                   stats_years={@stats_years}
                 />
@@ -654,6 +684,187 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
 
                 <td class="px-3 py-1.5 text-xs font-mono text-base-content/30 text-right">
                   {s.building_code}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :stats, :list, required: true
+  attr :stats_year, :string, required: true
+  attr :stats_years, :list, required: true
+
+  # CRD Delta per charter district: school all-subjects M-STEP vs the
+  # enrollment-weighted Composite Resident District average. Rows come from
+  # `CrdComparison.portfolio_deltas/2`, already sorted best → worst with
+  # excluded rows last.
+  defp crd_dashboard(assigns) do
+    scored = Enum.reject(assigns.stats, & &1.excluded?)
+    excluded = Enum.filter(assigns.stats, & &1.excluded?)
+    exceeds = Enum.count(scored, &(&1.delta > 0))
+    below = length(scored) - exceeds
+    total_comparable = length(scored)
+
+    max_abs_delta =
+      scored
+      |> Enum.map(&abs(&1.delta))
+      |> Enum.max(fn -> 1.0 end)
+
+    max_abs_delta = if max_abs_delta == 0, do: 1.0, else: max_abs_delta
+
+    assigns =
+      assigns
+      |> Map.put(:scored, scored)
+      |> Map.put(:excluded, excluded)
+      |> Map.put(:exceeds, exceeds)
+      |> Map.put(:below, below)
+      |> Map.put(:no_data, length(excluded))
+      |> Map.put(:total_comparable, total_comparable)
+      |> Map.put(:max_abs_delta, max_abs_delta)
+
+    ~H"""
+    <div class="bg-base-50/50">
+      <%!-- Dashboard header --%>
+      <div class="px-6 pt-4 pb-3 flex items-center justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-semibold">M-STEP All Subjects — vs. Composite Resident District</h3>
+
+          <p class="text-xs text-base-content/40 mt-0.5">
+            Schools exceeding the enrollment-weighted average of the districts their students reside in
+          </p>
+        </div>
+        <%!-- Year selector --%>
+        <select
+          phx-change="select_stats_year"
+          name="year"
+          class="select select-xs select-bordered text-xs"
+        >
+          <option :for={y <- @stats_years} value={y} selected={y == @stats_year}>{y}</option>
+        </select>
+      </div>
+      <%!-- Summary cards --%>
+      <div class="px-6 pb-4 grid grid-cols-3 gap-3">
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">Exceeds CRD</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-success">{@exceeds}</span>
+            <span class="text-xs text-base-content/40 mb-0.5">
+              {if @total_comparable > 0,
+                do: "#{round(@exceeds / @total_comparable * 100)}%",
+                else: "—"}
+            </span>
+          </div>
+        </div>
+
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">Below CRD</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-error">{@below}</span>
+            <span class="text-xs text-base-content/40 mb-0.5">
+              {if @total_comparable > 0,
+                do: "#{round(@below / @total_comparable * 100)}%",
+                else: "—"}
+            </span>
+          </div>
+        </div>
+
+        <div class="bg-base-100 border border-base-200 px-4 py-3 flex flex-col gap-1">
+          <span class="text-xs text-base-content/40 font-medium">No CRD Data</span>
+          <div class="flex items-end gap-2">
+            <span class="text-2xl font-bold text-base-content/30">{@no_data}</span>
+          </div>
+        </div>
+      </div>
+      <%!-- Stacked proportion bar --%>
+      <div :if={@total_comparable > 0} class="px-6 pb-4">
+        <div class="flex h-2 overflow-hidden bg-base-200 gap-px">
+          <div
+            class="bg-success transition-all duration-500"
+            style={"width: #{round(@exceeds / @total_comparable * 100)}%"}
+          />
+          <div
+            class="bg-error transition-all duration-500"
+            style={"width: #{round(@below / @total_comparable * 100)}%"}
+          />
+        </div>
+
+        <div class="flex justify-between mt-1">
+          <span class="text-[10px] text-success font-medium">Exceeds</span>
+          <span class="text-[10px] text-error font-medium">Below</span>
+        </div>
+      </div>
+      <%!-- No stats at all --%>
+      <div
+        :if={@stats == []}
+        class="px-6 pb-4 text-xs text-base-content/30 italic"
+      >
+        No CRD or M-STEP data found for this year.
+      </div>
+      <%!-- Per-district delta chart --%>
+      <div :if={@stats != []} class="px-6 pb-5 space-y-2">
+        <p class="text-[10px] text-base-content/30 uppercase tracking-wide font-medium">
+          CRD Delta (pp) — school vs composite, sorted best to worst
+        </p>
+
+        <div class="space-y-1.5">
+          <.link
+            :for={s <- @scored}
+            navigate={~p"/mde/districts/#{s.district_code}?tab=crd_comparison"}
+            class="flex items-center gap-3 group"
+            title={"#{s.district_name}: #{s.charter_avg}% vs CRD #{s.composite_avg}% · #{s.scored_count}/#{s.resident_count} resident districts scored · #{s.total_students} students"}
+          >
+            <%!-- District name --%>
+            <div class="w-40 shrink-0 truncate text-xs text-base-content/60 group-hover:text-base-content transition-colors text-right leading-tight">
+              {short_name(s.district_name)}
+            </div>
+            <%!-- Bar --%>
+            <div class="flex-1 flex items-center gap-1 min-w-0">
+              <div class="relative flex-1 h-4 flex items-center">
+                <%!-- Zero axis --%>
+                <div class="absolute left-1/2 top-0 bottom-0 w-px bg-base-300 z-10" />
+                <%!-- Bar fill --%>
+                <div
+                  class={[
+                    "absolute h-3 transition-all duration-300",
+                    if(s.delta >= 0,
+                      do: "bg-success/70 left-1/2",
+                      else: "bg-error/70 right-1/2"
+                    )
+                  ]}
+                  style={"width: #{min(abs(s.delta) / @max_abs_delta * 50, 50)}%"}
+                />
+              </div>
+            </div>
+            <%!-- Delta badge --%>
+            <div class={[
+              "text-xs font-mono font-semibold w-14 shrink-0 text-right",
+              if(s.delta >= 0, do: "text-success", else: "text-error")
+            ]}>
+              {if s.delta >= 0, do: "+", else: ""}{format_delta(s.delta)}pp
+            </div>
+          </.link>
+        </div>
+        <%!-- Excluded districts table --%>
+        <div :if={@no_data > 0} class="mt-3 border border-base-200 overflow-hidden">
+          <div class="px-3 py-2 bg-base-200/50 border-b border-base-200">
+            <p class="text-[10px] text-base-content/40 uppercase tracking-wide font-medium">
+              {@no_data} district{if @no_data != 1, do: "s", else: ""} excluded — no CRD delta available
+            </p>
+          </div>
+
+          <table class="w-full">
+            <tbody>
+              <tr :for={s <- @excluded} class="border-b border-base-200 last:border-0">
+                <td class="px-3 py-1.5 text-xs text-base-content/40">{s.district_name}</td>
+
+                <td class="px-3 py-1.5 text-xs text-base-content/30">{s.exclusion_reason}</td>
+
+                <td class="px-3 py-1.5 text-xs font-mono text-base-content/30 text-right">
+                  {s.district_code}
                 </td>
               </tr>
             </tbody>
@@ -900,6 +1111,18 @@ defmodule EmisintWeb.Dashboard.PortfolioLive do
     )
     |> Repo.all()
     |> Enum.sort_by(fn s -> if s.no_lea_found, do: -9999, else: s.delta || -9999 end, :desc)
+  rescue
+    _ -> []
+  end
+
+  # CRD data is keyed by charter district, not building, so the portfolio's
+  # buildings collapse to their distinct district codes before loading.
+  defp load_crd_portfolio_stats(schools, year) do
+    schools
+    |> Enum.map(& &1.district_code)
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    |> Enum.uniq()
+    |> CrdComparison.portfolio_deltas(year)
   rescue
     _ -> []
   end
