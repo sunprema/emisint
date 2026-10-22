@@ -1,0 +1,37 @@
+AcademicYear,InstitutionName,InstitutionID,Grade,Subject,AssessmentType,Accomodations,Subgroup,NoviceRangeLow,NoviceRangeHigh,PartiallyRangeLow,PartiallyRangeHigh,ProficientRangeLow,ProficientRangeHigh,AdvancedRangeLow,AdvancedRangeHigh
+2024-2025,Fort Yates Middle School,4300429212,6,Math,Comp,All,All,0.7,0.79,0.3,0.39,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,6,Reading,Comp,All,All,0.4,0.49,0.5,0.59,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,6,Math,Reg,All,All,0.7,0.79,0.3,0.39,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,6,Reading,Reg,All,All,0.4,0.49,0.5,0.59,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,7,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,7,Reading,Comp,All,All,0.6,0.69,0.3,0.39,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,7,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,7,Reading,Reg,All,All,0.6,0.69,0.3,0.39,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,8,Math,Comp,All,All,0.7,0.79,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,8,Reading,Comp,All,All,0.4,0.49,0.2,0.29,0.4,0.49,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,8,Science,Comp,All,All,0.8,1,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,8,Math,Reg,All,All,0.7,0.79,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,8,Reading,Reg,All,All,0.4,0.49,0.2,0.29,0.4,0.49,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,8,Science,Reg,All,All,0.8,1,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Comp,All,All,0.7,0.79,0.1,0.19,0,0.1,0,0.1
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Comp,All,Female,0.7,0.79,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Comp,All,Homeless,0.7,0.79,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Comp,All,Male,0.7,0.79,0,0.2,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Comp,All,Non-Homeless,0.7,0.79,0.1,0.19,0,0.1,0,0.1
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Comp,All,All,0.4,0.49,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Comp,All,Female,0.4,0.49,0.2,0.29,0.3,0.39,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Comp,All,Homeless,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Comp,All,Male,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Comp,All,Non-Homeless,0.4,0.49,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Science,Comp,All,All,0.8,1,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Reg,All,All,0.7,0.79,0.1,0.19,0,0.1,0,0.1
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Reg,All,Female,0.7,0.79,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Reg,All,Homeless,0.7,0.79,0.2,0.29,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Reg,All,Male,0.7,0.79,0,0.2,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Math,Reg,All,Non-Homeless,0.7,0.79,0.1,0.19,0,0.1,0,0.1
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Reg,All,All,0.4,0.49,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Reg,All,Female,0.4,0.49,0.2,0.29,0.3,0.39,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Reg,All,Homeless,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Reg,All,Male,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Reading,Reg,All,Non-Homeless,0.4,0.49,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Fort Yates Middle School,4300429212,All Grades,Science,Reg,All,All,0.8,1,0.2,0.29,0,0.2,0,0.2

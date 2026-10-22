@@ -1,10 +1,11 @@
 import Config
 config :ash, policies: [show_policy_breakdowns?: true]
+config :emisint, :allow_dev_seeds, true
 
 # Configure your database
 config :emisint, Emisint.Repo,
-  username: "postgres",
-  password: "postgres",
+  username: System.get_env("PGUSER", "postgres"),
+  password: System.get_env("PGPASSWORD", "postgres"),
   hostname: "localhost",
   database: "emisint_dev",
   port: 5433,

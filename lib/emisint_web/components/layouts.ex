@@ -94,6 +94,11 @@ defmodule EmisintWeb.Layouts do
                   <.icon name="hero-building-office-2" class="size-4" /> Entity Master
                 </.link>
               </li>
+              <li>
+                <.link navigate={~p"/school-goals"} class="flex items-center gap-2">
+                  <.icon name="hero-flag" class="size-4" /> School Goals
+                </.link>
+              </li>
               <li :if={@current_user && @current_user.role in [:emo_admin, :system_admin]}>
                 <.link navigate={~p"/admin/import"} class="flex items-center gap-2">
                   <.icon name="hero-arrow-up-tray" class="size-4" /> Data Import
@@ -149,7 +154,6 @@ defmodule EmisintWeb.Layouts do
               >
                 <.icon name="hero-arrow-right-on-rectangle" class="size-4" /> Sign Out
               </.link>
-
             </div>
           </div>
         </aside>

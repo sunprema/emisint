@@ -71,6 +71,9 @@ defmodule EmisintWeb.Router do
       live "/mde", Mde.OverviewLive, :index
       live "/mde/districts/:district_code", Mde.DistrictAnalysisLive, :index
       live "/mde/entities", Mde.EntityMasterLive, :index
+      live "/school-goals", Improvement.SchoolGoalsIndexLive, :index
+      live "/school-goals/:slug", Improvement.SchoolGoalsLive, :show
+      live "/school-goals/:slug/metrics/:code", Improvement.MetricHistoryLive, :show
     end
 
     get "/mde/lea-comparison.pdf", MdeLeaReportController, :show

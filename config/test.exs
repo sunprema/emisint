@@ -2,6 +2,7 @@ import Config
 config :emisint, Oban, testing: :manual
 config :emisint, token_signing_secret: "ojAWroj6K/vK/H6yNLB1JnrZ5zhRzD2j"
 config :bcrypt_elixir, log_rounds: 1
+config :emisint, :allow_dev_seeds, true
 config :ash, policies: [show_policy_breakdowns?: true], disable_async?: true
 
 # Configure your database
@@ -10,8 +11,8 @@ config :ash, policies: [show_policy_breakdowns?: true], disable_async?: true
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
 config :emisint, Emisint.Repo,
-  username: "postgres",
-  password: "postgres",
+  username: System.get_env("PGUSER", "postgres"),
+  password: System.get_env("PGPASSWORD", "postgres"),
   hostname: "localhost",
   database: "emisint_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,

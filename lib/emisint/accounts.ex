@@ -26,5 +26,16 @@ defmodule Emisint.Accounts do
     end
 
     resource Emisint.Accounts.ApiKey
+
+    resource Emisint.Accounts.School do
+      define :list_schools, action: :read
+      define :get_school, action: :read, get_by: [:id]
+      define :get_school_by_slug, action: :read, get_by: [:slug]
+    end
+
+    resource Emisint.Accounts.SchoolMembership do
+      define :create_school_membership, action: :create
+      define :list_school_memberships, action: :read
+    end
   end
 end
