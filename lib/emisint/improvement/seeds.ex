@@ -8,6 +8,10 @@ defmodule Emisint.Improvement.Seeds do
       allowed when `config :emisint, :allow_dev_seeds` is true (dev/test).
     * A record that already matches the seed is reported as `:unchanged`.
       A record that differs is reported as `:drift` and **left untouched**.
+    * Before seeding Fort Yates, `GrowthPercentile.run/2` applies the
+      October 31, 2026 growth-percentile decision to an existing G2-M3 and
+      G3-M3 (repeat-safe; reported as `converted`), so an existing database
+      ends with the same definitions as a fresh seed.
     * Workbook ratings are created once per metric × period through the
       `ImplementationRating` `:import_workbook` action. Existing observations
       (and any corrections made since) are never modified.
@@ -24,12 +28,29 @@ defmodule Emisint.Improvement.Seeds do
     AnnualAssessmentGoal,
     Goal,
     GoalPlan,
+    GrowthPercentile,
     ImplementationRating,
     Metric,
     ReportingPeriod
   }
 
-  alias Emisint.Improvement.Seeds.FortYates
+  alias Emisint.Improvement.Seeds.{FortYates, Oberon, ValleyMiddle}
+
+  # Seeded by default: the current release is the Fort Yates pilot.
+  @schools [FortYates]
+
+  # ND First schools whose MOU sheet, PDF targets and InstitutionID map to a
+  # single verified building. The others are kept for later expansion and are
+  # seeded only when passed explicitly as `schools:`. See PLAN_nd_first.md for
+  # the five participants whose district-level sheets do not (yet) map to one
+  # building.
+  @available_schools [FortYates, Oberon, ValleyMiddle]
+
+  @doc "School definition modules seeded by default."
+  def schools, do: @schools
+
+  @doc "Every verified school definition module, including those deferred for expansion."
+  def available_schools, do: @available_schools
 
   @dev_org_slug "nd-first-pilot-dev"
   @dev_org_name "ND First Pilot — Development"
@@ -42,11 +63,12 @@ defmodule Emisint.Improvement.Seeds do
         }
 
   @doc """
-  Seeds Fort Yates definitions (and, unless `workbook_ratings?: false`, the
-  historical workbook ratings) into `organization_id`.
+  Seeds ND First school definitions (and, unless `workbook_ratings?: false`,
+  the historical workbook ratings) into `organization_id`.
 
   Options:
 
+    * `:schools` — school definition modules, default `schools/0`
     * `:actor` — user recorded as `recorded_by` on imported ratings
     * `:workbook_ratings?` — default `true`
   """
@@ -55,12 +77,18 @@ defmodule Emisint.Improvement.Seeds do
 
   def run(organization_id, opts) when is_binary(organization_id) and organization_id != "" do
     with {:ok, org} <- fetch_organization(organization_id) do
-      report = seed_definitions(org.id, empty_report())
-
       report =
-        if Keyword.get(opts, :workbook_ratings?, true),
-          do: import_workbook_ratings(org.id, opts[:actor], report),
-          else: report
+        opts
+        |> Keyword.get(:schools, @schools)
+        |> Enum.reduce(empty_report(), fn school, report ->
+          report = apply_decisions(org.id, opts[:actor], report, school)
+          report = seed_definitions(org.id, report, school)
+          report = apply_payment_terms(org.id, report, school)
+
+          if Keyword.get(opts, :workbook_ratings?, true),
+            do: import_workbook_ratings(org.id, opts[:actor], report, school),
+            else: report
+        end)
 
       {:ok, finalize(report)}
     end
@@ -138,7 +166,9 @@ defmodule Emisint.Improvement.Seeds do
     [
       {"admin@example.com", "nd-first-admin@example.com", :emo_admin, nil},
       {"school@example.com", "nd-first-contributor@example.com", :school_leader, :contributor},
-      {"viewer@example.com", "nd-first-viewer@example.com", :school_leader, :viewer}
+      {"viewer@example.com", "nd-first-viewer@example.com", :school_leader, :viewer},
+      # Dev-only system admin, so the ND Insights import page can be tried locally.
+      {"sysadmin@example.com", nil, :system_admin, nil}
     ]
   end
 
@@ -146,11 +176,11 @@ defmodule Emisint.Improvement.Seeds do
   # Definitions
   # ---------------------------------------------------------------------------
 
-  defp seed_definitions(org_id, report) do
-    school_attrs = FortYates.school()
+  defp seed_definitions(org_id, report, school_module) do
+    school_attrs = school_module.school()
     {school, report} = ensure(School, [slug: school_attrs.slug], school_attrs, org_id, report)
 
-    plan_attrs = Map.put(FortYates.goal_plan(), :school_id, school.id)
+    plan_attrs = Map.put(school_module.goal_plan(), :school_id, school.id)
 
     {plan, report} =
       ensure(
@@ -166,7 +196,7 @@ defmodule Emisint.Improvement.Seeds do
       )
 
     report =
-      Enum.reduce(FortYates.reporting_periods(), report, fn attrs, acc ->
+      Enum.reduce(school_module.reporting_periods(), report, fn attrs, acc ->
         attrs = Map.put(attrs, :goal_plan_id, plan.id)
 
         {_period, acc} =
@@ -176,7 +206,7 @@ defmodule Emisint.Improvement.Seeds do
       end)
 
     {goals_by_number, report} =
-      Enum.reduce(FortYates.goals(), {%{}, report}, fn attrs, {goals, acc} ->
+      Enum.reduce(school_module.goals(), {%{}, report}, fn attrs, {goals, acc} ->
         attrs = Map.put(attrs, :goal_plan_id, plan.id)
 
         {goal, acc} =
@@ -186,7 +216,7 @@ defmodule Emisint.Improvement.Seeds do
       end)
 
     report =
-      Enum.reduce(FortYates.metrics(), report, fn attrs, acc ->
+      Enum.reduce(school_module.metrics(), report, fn attrs, acc ->
         {goal_number, attrs} = Map.pop!(attrs, :goal_number)
         attrs = Map.put(attrs, :goal_id, Map.fetch!(goals_by_number, goal_number).id)
 
@@ -196,7 +226,7 @@ defmodule Emisint.Improvement.Seeds do
         acc
       end)
 
-    Enum.reduce(FortYates.annual_assessment_goals(), report, fn attrs, acc ->
+    Enum.reduce(school_module.annual_assessment_goals(), report, fn attrs, acc ->
       attrs = Map.put(attrs, :school_id, school.id)
       key = [school_id: school.id, school_year: attrs.school_year, subject: attrs.subject]
       {_goal, acc} = ensure(AnnualAssessmentGoal, key, attrs, org_id, acc)
@@ -204,13 +234,69 @@ defmodule Emisint.Improvement.Seeds do
     end)
   end
 
+  defp apply_decisions(org_id, actor, report, FortYates) do
+    case GrowthPercentile.run(org_id, actor: actor) do
+      {:ok, result} ->
+        Enum.reduce(result.converted, report, fn code, acc ->
+          add(acc, :converted, "Metric #{code} → growth percentile")
+        end)
+
+      {:error, reason} ->
+        raise "growth-percentile conversion stopped: #{reason}"
+    end
+  end
+
+  defp apply_decisions(_org_id, _actor, report, _school), do: report
+
+  # Payment terms are set only through GoalPlan's `:set_payment_terms`
+  # (which versions them) and only when they differ, so re-running changes
+  # nothing and a recorded estimate keeps the version it used.
+  defp apply_payment_terms(org_id, report, school_module) do
+    if function_exported?(school_module, :payment_terms, 0) do
+      terms = school_module.payment_terms()
+      %{program: program, definition_version: version} = school_module.goal_plan()
+
+      school =
+        Ash.read_one!(Ash.Query.filter(School, slug == ^school_module.school().slug),
+          tenant: org_id,
+          authorize?: false
+        )
+
+      plan =
+        GoalPlan
+        |> Ash.Query.filter(
+          school_id == ^school.id and program == ^program and definition_version == ^version
+        )
+        |> Ash.read_one!(tenant: org_id, authorize?: false)
+
+      if map_size(differences(plan, terms)) == 0 do
+        report
+      else
+        plan
+        |> Ash.Changeset.for_update(:set_payment_terms, terms,
+          tenant: org_id,
+          authorize?: false
+        )
+        |> Ash.update!()
+
+        add(
+          report,
+          :converted,
+          "Goal plan #{school.slug} payment terms → #{terms.payment_terms_status}"
+        )
+      end
+    else
+      report
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Workbook ratings
   # ---------------------------------------------------------------------------
 
-  defp import_workbook_ratings(org_id, actor, report) do
+  defp import_workbook_ratings(org_id, actor, report, school_module) do
     school =
-      Ash.read_one!(Ash.Query.filter(School, slug == ^FortYates.school().slug),
+      Ash.read_one!(Ash.Query.filter(School, slug == ^school_module.school().slug),
         tenant: org_id,
         authorize?: false
       )
@@ -219,7 +305,7 @@ defmodule Emisint.Improvement.Seeds do
       Ash.read_one!(
         Ash.Query.filter(
           GoalPlan,
-          school_id == ^school.id and program == ^FortYates.goal_plan().program
+          school_id == ^school.id and program == ^school_module.goal_plan().program
         ),
         tenant: org_id,
         authorize?: false
@@ -228,11 +314,17 @@ defmodule Emisint.Improvement.Seeds do
     metrics = index_by(Metric, plan.id, :code, org_id)
     periods = index_by(ReportingPeriod, plan.id, :code, org_id)
 
-    Enum.reduce(FortYates.workbook_ratings(), report, fn {code, period_code, score, source_ref},
-                                                         acc ->
+    Enum.reduce(school_module.workbook_ratings(), report, fn {code, period_code, score,
+                                                              source_ref},
+                                                             acc ->
       metric = Map.fetch!(metrics, code)
       period = Map.fetch!(periods, period_code)
-      label = "rating #{code} #{period_code}"
+      label = "rating #{school.slug} #{code} #{period_code}"
+
+      # The workbook's validation list is 3, 2, 1, 0 or N/A; N/A is stored as
+      # not applicable, never as a score.
+      {rating_state, score} =
+        if score == :not_applicable, do: {:not_applicable, nil}, else: {:rated, score}
 
       existing =
         ImplementationRating
@@ -248,10 +340,10 @@ defmodule Emisint.Improvement.Seeds do
             %{
               metric_id: metric.id,
               reporting_period_id: period.id,
-              rating_state: :rated,
+              rating_state: rating_state,
               score: score,
               source_ref: source_ref,
-              source_last_updated_on: FortYates.workbook_last_updated()
+              source_last_updated_on: school_module.workbook_last_updated()
             },
             action: :import_workbook,
             tenant: org_id,
@@ -261,7 +353,12 @@ defmodule Emisint.Improvement.Seeds do
 
           add(acc, :created, label)
 
-        %{source: :workbook_import, score: ^score, source_ref: ^source_ref} ->
+        %{
+          source: :workbook_import,
+          rating_state: ^rating_state,
+          score: ^score,
+          source_ref: ^source_ref
+        } ->
           add(acc, :unchanged, label)
 
         other ->
@@ -308,6 +405,8 @@ defmodule Emisint.Improvement.Seeds do
         ensure_dev_user(email, role, org)
     end
   end
+
+  defp find_user(nil), do: nil
 
   defp find_user(email) do
     Ash.read_one!(Ash.Query.filter(User, email == ^email), authorize?: false)
@@ -384,7 +483,7 @@ defmodule Emisint.Improvement.Seeds do
   defp same?(%Decimal{} = a, %Decimal{} = b), do: Decimal.equal?(a, b)
   defp same?(a, b), do: a == b
 
-  defp empty_report, do: %{created: [], unchanged: [], renamed: [], drift: []}
+  defp empty_report, do: %{created: [], unchanged: [], renamed: [], converted: [], drift: []}
 
   defp add(report, key, label), do: Map.update!(report, key, &[label | &1])
 

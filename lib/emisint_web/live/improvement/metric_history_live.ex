@@ -8,7 +8,7 @@ defmodule EmisintWeb.Improvement.MetricHistoryLive do
 
   import EmisintWeb.Improvement.Components
 
-  alias Emisint.Improvement.{Access, Dashboard}
+  alias Emisint.Improvement.{Access, Dashboard, Display, GrowthPercentile}
 
   @impl true
   def mount(%{"slug" => slug, "code" => code}, _session, socket) do
@@ -50,6 +50,17 @@ defmodule EmisintWeb.Improvement.MetricHistoryLive do
             Goal {@history.goal.number} · {@history.metric.code}
           </div>
           <h1 class="text-2xl font-bold">{@history.metric.description}</h1>
+          <div :if={Display.unit_label(@history.metric)} class="mt-1" id="history-unit">
+            <span class="badge badge-outline badge-sm">{Display.unit_label(@history.metric)}</span>
+            <span
+              :if={@history.metric.source_values["description"]}
+              class="text-xs text-base-content/60 ml-1"
+              id="history-original-wording"
+            >
+              Workbook wording: “{@history.metric.source_values["description"]["raw"]}” · read as a
+              growth percentile (decision of {GrowthPercentile.decision_date()})
+            </span>
+          </div>
           <div class="flex flex-wrap gap-4 mt-2 text-sm">
             <span>Baseline: <.target metric={@history.metric} field={:baseline_value} /></span>
             <span>18-month target: <.target metric={@history.metric} field={:target_18m} /></span>
@@ -97,7 +108,12 @@ defmodule EmisintWeb.Improvement.MetricHistoryLive do
   attr :kind, :atom, required: true
 
   defp history_section(assigns) do
-    assigns = assign(assigns, :groups, group_by_period(assigns.entries, assigns.periods))
+    assigns =
+      assign(assigns,
+        groups: group_by_period(assigns.entries, assigns.periods),
+        legacy: GrowthPercentile.legacy_entry_ids(assigns.entries),
+        legacy_metric: %{assigns.metric | unit: :percent}
+      )
 
     ~H"""
     <section class="bg-base-100 border border-base-200 rounded-xl overflow-hidden" id={@id}>
@@ -120,7 +136,19 @@ defmodule EmisintWeb.Improvement.MetricHistoryLive do
           >
             <div class="space-y-1">
               <div class="flex flex-wrap items-center gap-2">
-                <span :if={@kind == :actual}><.actual_value entry={entry} metric={@metric} /></span>
+                <span :if={@kind == :actual}>
+                  <.actual_value
+                    entry={entry}
+                    metric={if MapSet.member?(@legacy, entry.id), do: @legacy_metric, else: @metric}
+                  />
+                </span>
+                <span
+                  :if={MapSet.member?(@legacy, entry.id)}
+                  class="badge badge-ghost badge-xs"
+                  title="Entered as a percentage before the growth-percentile decision; shown as entered."
+                >
+                  Entered as %
+                </span>
                 <span :if={@kind == :rating}><.rating_value entry={entry} /></span>
                 <span :if={entry.current?} class="badge badge-success badge-xs">Current</span>
                 <span :if={!entry.current?} class="badge badge-ghost badge-xs">Superseded</span>

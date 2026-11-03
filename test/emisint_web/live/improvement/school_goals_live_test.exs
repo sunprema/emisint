@@ -40,7 +40,47 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
   end
 
   describe "navigation and index" do
-    test "the sidebar links to School Goals and members see their school", %{
+    test "the landing page is titled ND First with a factual introduction", %{
+      conn: conn,
+      contributor: user
+    } do
+      {:ok, view, _html} = live(log_in(conn, user), "/school-goals")
+
+      assert has_element?(view, "h1", "ND First")
+      assert has_element?(view, "#nd-first-intro a[href*=\"nd.gov/dpi\"]")
+      assert has_element?(view, "nav a[href=\"/school-goals\"]", "ND First")
+      refute has_element?(view, "#nd-import-link")
+    end
+
+    test "the ND Insights import button is on the Fort Yates dashboard, not the landing page",
+         %{conn: conn, org: org, contributor: contributor} do
+      admin = user!(org, :system_admin)
+      admin_conn = log_in(conn, admin, %{"admin_org_id" => org.id})
+
+      {:ok, landing, _html} = live(admin_conn, "/school-goals")
+      refute has_element?(landing, "#nd-import-link")
+
+      {:ok, dashboard, _html} = live(admin_conn, "/school-goals/fort-yates-ms")
+
+      # Beside the official state results heading (shown even before any
+      # import); Export PDF stays in the page header.
+      assert has_element?(
+               dashboard,
+               ~s(#state-results #nd-import-link[href="/school-goals/fort-yates-ms/import"]),
+               "Import ND Insights data"
+             )
+
+      assert has_element?(dashboard, "#state-results-empty")
+      assert has_element?(dashboard, "#download-pdf", "Export PDF")
+      refute has_element?(dashboard, "#state-results #download-pdf")
+
+      # Other roles see the PDF export but no import button.
+      {:ok, view, _html} = live(log_in(conn, contributor), "/school-goals/fort-yates-ms")
+      assert has_element?(view, "#download-pdf")
+      refute has_element?(view, "#nd-import-link")
+    end
+
+    test "the sidebar links to ND First and members see their school", %{
       conn: conn,
       contributor: user
     } do
@@ -77,9 +117,15 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
       assert has_element?(view, "#annual-goals", "2030-2031")
       assert has_element?(view, "#annual-goals", "47%")
 
+      # Goal 3's description is shown with the workbook typos corrected.
+      assert has_element?(view, "#goal-3", "students performing at the novice level")
+      assert has_element?(view, "#goal-3", "data-driven practices")
+      refute html =~ "perfoming"
+      refute html =~ "data-drive practices"
+
       assert has_element?(view, "#payment-card", "Awaiting review")
-      assert has_element?(view, "#payment-card", "8 metrics")
-      assert has_element?(view, "#payment-card", "10 metrics")
+      assert has_element?(view, "#payment-calculation", "8 metrics")
+      assert has_element?(view, "#payment-calculation", "10 metrics")
     end
 
     test "missing actuals show “Not reported”, never zero", %{conn: conn, viewer: user} do
@@ -150,6 +196,8 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
       assert_patch(view, "#{@dashboard}?period=spr_26")
 
       assert has_element?(view, "#rating-G1-M1", "Workbook import")
+      # Soft badge with the accessible text color, like the rubric badges.
+      assert has_element?(view, "#rating-G1-M1 .badge-soft.nd-text-info", "Workbook import")
       assert has_element?(view, "#rating-G1-M1", "Original author unknown")
       assert has_element?(view, "#rating-G1-M1", "Ft Yates Goals!E4")
       assert has_element?(view, "#rating-G1-M1", "workbook last updated Aug 18, 2026")
@@ -272,6 +320,19 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
   end
 
   describe "submitting actual results" do
+    test "a seasonal result shows no target due and no status color", %{
+      conn: conn,
+      contributor: user
+    } do
+      view = open_update(conn, user, "G1-M1")
+      submit_actual(view, %{value_state: "exact", value: "92", measurement_date: "2026-10-15"})
+
+      assert has_element?(view, "#actual-G1-M1", "92%")
+      assert has_element?(view, "#status-G1-M1", "No target due this period")
+      refute has_element?(view, "#actual-G1-M1 [class*=nd-text-]")
+      assert has_element?(view, "#status-legend", "Meets target")
+    end
+
     test "percentages typed as 0–100 are stored as 0–1, with server-side author and time",
          %{conn: conn, org: org, contributor: user} do
       view = open_update(conn, user, "G2-M1")
@@ -646,6 +707,414 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
         )
 
       assert has_element?(view, "#actual-G2-M1", "24%")
+    end
+  end
+
+  describe "review checkpoints and growth percentiles (synthetic results)" do
+    test "both reviews are selectable; a review shows the target due and formal rating entry", %{
+      conn: conn,
+      contributor: user
+    } do
+      {:ok, view, _html} = live(log_in(conn, user), "#{@dashboard}?period=review_18m")
+
+      assert has_element?(view, "#period option[value=review_18m]", "18-Month Review")
+      assert has_element?(view, "#period option[value=review_36m]", "36-Month Review")
+
+      assert has_element?(
+               view,
+               "#status-G2-M3",
+               "18-month target 43 · Not compared: no result reported"
+             )
+
+      refute has_element?(view, "#actual-G2-M3 [class*=nd-text-]")
+      assert has_element?(view, "#rating-G2-M3", "Not rated")
+      assert has_element?(view, "#payment-card", "Awaiting review")
+
+      view |> element("#update-G2-M3") |> render_click()
+      assert has_element?(view, "#review-entry-note")
+      assert has_element?(view, "#actual-form")
+
+      assert has_element?(
+               view,
+               "#rating-form #review-rating-heading",
+               "Formal review rating (0–3)"
+             )
+    end
+
+    test "growth percentiles display without a percent sign", %{conn: conn, contributor: user} do
+      {:ok, view, html} = live(log_in(conn, user), "#{@dashboard}?period=fal_26")
+
+      assert has_element?(view, "#unit-G2-M3", "Growth percentile")
+      assert has_element?(view, "#unit-G3-M3", "Growth percentile")
+      refute has_element?(view, "#unit-G2-M1")
+      assert has_element?(view, "#metric-G2-M3", "Overall growth percentile (ELA)")
+
+      row = html |> LazyHTML.from_fragment() |> LazyHTML.query("#metric-G2-M3") |> LazyHTML.text()
+      assert row =~ "38"
+      refute row =~ "38%"
+      refute row =~ "43%"
+
+      assert has_element?(
+               view,
+               "#insights-source-G2-M3",
+               "Overall Growth Percentile · ELA · All Grades · All students"
+             )
+
+      refute has_element?(view, "#insights-source-G4-M2")
+    end
+
+    test "published percentiles are reference only until a year is chosen and saved", %{
+      conn: conn,
+      org: org,
+      contributor: user
+    } do
+      # One uniquely keyed synthetic row (the published 2024-2025 value),
+      # instead of a fixture import that would share keys with other async tests.
+      file =
+        Ash.Seed.seed!(Emisint.NdInsights.SourceFile, %{
+          dataset: :growth_rate,
+          file_name: "SYNTHETIC_growth_test.csv",
+          sha256: "synthetic-#{System.unique_integer([:positive])}",
+          publication_version: "test"
+        })
+
+      Ash.Seed.seed!(Emisint.NdInsights.StateResult, %{
+        dataset: :growth_rate,
+        academic_year: "2024-2025",
+        institution_id: "4300429212",
+        subject: "ELA",
+        grade: "All Grades",
+        subgroup: "All",
+        measure: "OverallGrowthPercentile",
+        unit: :percentile,
+        value_state: :exact,
+        value: Decimal.new("38"),
+        natural_key: "synthetic|#{System.unique_integer([:positive])}",
+        publication_version: "test",
+        source_file_id: file.id
+      })
+
+      {:ok, view, _html} = live(log_in(conn, user), "#{@dashboard}?period=review_18m")
+
+      assert has_element?(view, "#insights-latest-G2-M3", "Published 2024-2025: 38")
+      assert has_element?(view, "#insights-latest-G2-M3", "reference only")
+      # Not copied in as a result.
+      assert has_element?(view, "#actual-G2-M3", "Not reported")
+
+      view |> element("#update-G2-M3") |> render_click()
+      assert has_element?(view, "#published-form")
+      refute has_element?(view, "#published-none")
+      # Every published year is offered; none is preselected and nothing is saved yet.
+      assert has_element?(
+               view,
+               "#published_source_year option[value=\"2024-2025\"]",
+               "2024-2025: 38"
+             )
+
+      assert has_element?(view, "#published_source_year option[value=\"\"][selected]")
+      refute has_element?(view, "#published-preview")
+      assert has_element?(view, "#published-form button[type=submit][disabled]")
+
+      # Choosing a year shows exactly what will be saved, with its source year.
+      view |> form("#published-form", published: %{source_year: "2024-2025"}) |> render_change()
+
+      assert has_element?(
+               view,
+               "#published-preview",
+               "Saving records 38 as the 18-Month Review result"
+             )
+
+      assert has_element?(view, "#published-preview", "Source year 2024-2025")
+      refute has_element?(view, "#published-form button[type=submit][disabled]")
+      assert current(ActualResult, org, "G2-M3", "review_18m") == []
+
+      # Saving is the intentional step; the source year stays visible on the result.
+      view |> form("#published-form", published: %{source_year: "2024-2025"}) |> render_submit()
+      assert [entry] = current(ActualResult, org, "G2-M3", "review_18m")
+      assert entry.source == :nd_insights
+      assert has_element?(view, "#actual-G2-M3 .nd-text-error", "38")
+      assert has_element?(view, "#actual-G2-M3", "ND Insights · source year 2024-2025")
+
+      # Seasonal periods never offer the published value.
+      view = open_update(conn, user, "G2-M3", "fal_26")
+      refute has_element?(view, "#published-form")
+    end
+
+    for {value, class, label} <- [
+          {"44", "nd-text-success", "Meets target"},
+          {"43", "nd-text-success", "Meets target"},
+          {"42", "nd-text-error", "Below target"}
+        ] do
+      test "a percentile of #{value} at the 18-month review: #{label}", %{
+        conn: conn,
+        org: org,
+        contributor: user
+      } do
+        view = open_update(conn, user, "G2-M3", "review_18m")
+        assert has_element?(view, "label", "Growth percentile (0–100, no % sign)")
+
+        submit_actual(view, %{
+          value_state: "exact",
+          value: unquote(value),
+          measurement_date: "2027-09-15"
+        })
+
+        assert [entry] = current(ActualResult, org, "G2-M3", "review_18m")
+        assert Decimal.equal?(entry.value, unquote(value))
+
+        assert has_element?(view, "#actual-G2-M3 .#{unquote(class)}", unquote(value))
+        assert has_element?(view, "#status-G2-M3", "18-month target 43 · #{unquote(label)}")
+        refute has_element?(view, "#actual-G2-M3", "#{unquote(value)}%")
+      end
+    end
+
+    test "a lower-is-better metric at the 36-month review meets at or below its target", %{
+      conn: conn,
+      contributor: user
+    } do
+      view = open_update(conn, user, "G2-M2", "review_36m")
+      submit_actual(view, %{value_state: "exact", value: "31", measurement_date: "2028-09-15"})
+
+      assert has_element?(view, "#actual-G2-M2 .nd-text-success", "31%")
+      assert has_element?(view, "#status-G2-M2", "36-month target 31% · Meets target")
+    end
+
+    test "history shows review entries as percentiles, and pre-decision entries as entered", %{
+      conn: conn,
+      org: org,
+      contributor: user
+    } do
+      # Simulate a database from before the decision: the percent definition
+      # and a result entered as a percentage, then the conversion.
+      metric = metric!(org, "G3-M3")
+
+      metric
+      |> Ash.Changeset.for_update(
+        :apply_unit_decision,
+        %{
+          unit: :percent,
+          description: "Percentage of students met state growth expectations",
+          performance_measure: :met_growth_expectation,
+          baseline_value: Decimal.new("0.41"),
+          target_18m: Decimal.new("0.46"),
+          target_36m: Decimal.new("0.52"),
+          source_values: Map.take(metric.source_values, ["baseline", "target_18m", "target_36m"])
+        },
+        tenant: org.id,
+        authorize?: false
+      )
+      |> Ash.update!()
+
+      view = open_update(conn, user, "G3-M3", "fal_26")
+      submit_actual(view, %{value_state: "exact", value: "45", measurement_date: "2026-10-15"})
+      assert [%{value: legacy}] = current(ActualResult, org, "G3-M3", "fal_26")
+      assert Decimal.equal?(legacy, "0.45")
+
+      admin = user!(nil, :system_admin)
+
+      assert {:ok, %{restated: 1}} =
+               Emisint.Improvement.GrowthPercentile.run(org.id, actor: admin)
+
+      view = open_update(conn, user, "G3-M3", "review_18m")
+      submit_actual(view, %{value_state: "exact", value: "47", measurement_date: "2027-09-15"})
+
+      {:ok, history, _html} =
+        live(log_in(conn, user), "/school-goals/fort-yates-ms/metrics/G3-M3")
+
+      assert has_element?(history, "#history-unit", "Growth percentile")
+
+      assert has_element?(
+               history,
+               "#history-original-wording",
+               "Percentage of students met state growth expectations"
+             )
+
+      assert has_element?(history, "#actual-history", "18-Month Review")
+      assert has_element?(history, "#actual-history", "47")
+      assert has_element?(history, "#actual-history", "Unit correction")
+      # The superseded entry keeps its original unit and is labeled.
+      assert has_element?(history, "#actual-history", "45%")
+      assert has_element?(history, "#actual-history", "Entered as %")
+
+      [restated] = current(ActualResult, org, "G3-M3", "fal_26")
+      assert Decimal.equal?(restated.value, "45")
+      refute has_element?(history, "#entry-#{restated.id}", "45%")
+    end
+
+    test "viewers cannot enter review results", %{conn: conn, org: org, viewer: viewer} do
+      {:ok, view, _html} = live(log_in(conn, viewer), "#{@dashboard}?period=review_18m")
+      refute has_element?(view, "#update-G2-M3")
+
+      render_hook(view, "save_actual", %{
+        "actual" => %{
+          "value_state" => "exact",
+          "value" => "60",
+          "measurement_date" => "2027-09-15"
+        }
+      })
+
+      assert current(ActualResult, org, "G2-M3", "review_18m") == []
+    end
+  end
+
+  describe "formal review ratings and the provisional payment estimate" do
+    # Every Fort Yates metric except G2-M3 gets a formal 18-month review
+    # rating of 3; the test enters G2-M3 through the form.
+    defp review_ratings_except_g2_m3!(org, user) do
+      period = period!(org, "review_18m")
+
+      for metric <- Ash.read!(Emisint.Improvement.Metric, tenant: org.id, authorize?: false),
+          metric.code != "G2-M3" do
+        Ash.create!(
+          ImplementationRating,
+          %{metric_id: metric.id, reporting_period_id: period.id, rating_state: :rated, score: 3},
+          action: :record_review,
+          tenant: org.id,
+          actor: user
+        )
+      end
+    end
+
+    test "entering the last review rating (an explicit 0) produces the estimate, a labeled subtotal",
+         %{conn: conn, org: org, contributor: user} do
+      review_ratings_except_g2_m3!(org, user)
+      {:ok, view, _html} = live(log_in(conn, user), "#{@dashboard}?period=review_18m")
+
+      assert has_element?(
+               view,
+               "#payment-review_18m-estimate",
+               "Awaiting review: 1 review rating not recorded"
+             )
+
+      view |> element("#update-G2-M3") |> render_click()
+
+      html =
+        view
+        |> form("#rating-form", rating: %{rating_state: "rated", score: "0"})
+        |> render_submit()
+
+      assert html =~ "Formal review rating saved."
+
+      assert [%{score: 0, rating_state: :rated}] =
+               current(ImplementationRating, org, "G2-M3", "review_18m")
+
+      # Systems 3; Student Outcome (9 × 3 + 0) ÷ 10 = 2.7.
+      # 3 × 0.70 + 2.7 × 0.30 = 2.91; 35,000 × 2.91 ÷ 3 = 33,950.00.
+      assert has_element?(view, "#payment-calc-review_18m", "2.70")
+      assert has_element?(view, "#payment-calc-review_18m", "2.91")
+      assert has_element?(view, "#payment-review_18m-estimate", "$33,950.00")
+
+      assert has_element?(
+               view,
+               "#payment-review_36m-estimate",
+               "Awaiting review: 18 review ratings"
+             )
+
+      assert has_element?(
+               view,
+               "#payment-combined-text",
+               "Subtotal $33,950.00 (18-month review only); the total awaits the other review"
+             )
+
+      assert has_element?(view, "#payment-card", "Estimated payment — provisional cap and split")
+
+      assert has_element?(
+               view,
+               "#payment-terms-summary",
+               "Working assumption, not confirmed contract terms"
+             )
+
+      # The details state the provisional sentence once, not the summary again.
+      refute has_element?(view, "#payment-terms", "Working assumption")
+
+      # The short summary keeps the provisional total, split and weights in
+      # view; the provenance note and formula sit in the expandable details.
+      assert has_element?(view, "#payment-terms-summary", "$70,000.00 total per school")
+      assert has_element?(view, "#payment-terms-summary", "$35,000.00 to the 18-month review")
+      refute has_element?(view, "#payment-terms-summary", "best-estimate")
+
+      assert has_element?(
+               view,
+               "#payment-details #payment-terms",
+               "Provisional estimate based on an assumed $70,000 total per school, split equally between the 18-month and 36-month checkpoints. Final payment terms are pending confirmation."
+             )
+
+      # No personal attribution or internal history anywhere on the page.
+      html = render(view)
+
+      for text <- ["Ram", "best-estimate", "our selected", "not terms he specified"] do
+        refute html =~ text
+      end
+
+      assert has_element?(view, "#payment-details #payment-formula")
+      assert has_element?(view, "#payment-review_18m", "70% / 30%")
+
+      # Recording an estimate is for org admins only.
+      refute has_element?(view, "#record-estimate-review_18m")
+    end
+
+    test "an org admin records an estimate, which keeps its assumptions", %{
+      conn: conn,
+      org: org,
+      contributor: user
+    } do
+      review_ratings_except_g2_m3!(org, user)
+
+      Ash.create!(
+        ImplementationRating,
+        %{
+          metric_id: metric!(org, "G2-M3").id,
+          reporting_period_id: period!(org, "review_18m").id,
+          rating_state: :rated,
+          score: 0
+        },
+        action: :record_review,
+        tenant: org.id,
+        actor: user
+      )
+
+      admin = user!(org, :emo_admin)
+      {:ok, view, _html} = live(log_in(conn, admin), "#{@dashboard}?period=review_18m")
+
+      assert has_element?(view, "#payment-estimates", "None recorded")
+      html = view |> element("#record-estimate-review_18m") |> render_click()
+
+      assert html =~ "Estimate recorded for the 18-Month Review: $33,950.00"
+      assert has_element?(view, "#payment-estimates", "18-month review: $33,950.00")
+      assert has_element?(view, "#payment-estimates", "cap $70,000.00, allocation $35,000.00")
+
+      assert [estimate] =
+               Ash.read!(Emisint.Improvement.PaymentEstimate, tenant: org.id, authorize?: false)
+
+      assert Decimal.equal?(estimate.amount, "33950.00")
+    end
+
+    test "a forged record event from a contributor is refused", %{
+      conn: conn,
+      org: org,
+      contributor: user
+    } do
+      {:ok, view, _html} = live(log_in(conn, user), "#{@dashboard}?period=review_18m")
+
+      assert render_hook(view, "record_estimate", %{"checkpoint" => "review_18m"}) =~
+               "Only org admins can record a payment estimate."
+
+      assert Ash.count!(Emisint.Improvement.PaymentEstimate, tenant: org.id, authorize?: false) ==
+               0
+    end
+
+    test "seasonal ratings never fill in the payment", %{conn: conn, org: org, contributor: user} do
+      # The seeded workbook ratings are seasonal (spring and summer 2026).
+      assert [%{rating_state: :rated}] = current(ImplementationRating, org, "G1-M1", "spr_26")
+      {:ok, view, _html} = live(log_in(conn, user), "#{@dashboard}?period=spr_26")
+
+      assert has_element?(
+               view,
+               "#payment-review_18m-estimate",
+               "Awaiting review: 18 review ratings"
+             )
+
+      assert has_element?(view, "#payment-combined-text", "Awaiting review")
     end
   end
 end

@@ -1,8 +1,14 @@
 defmodule Emisint.Improvement.ImplementationRating do
   @moduledoc """
-  An append-only seasonal implementation rating (0–3) for a metric. Separate
-  from `ActualResult`, so a rating update never hides an actual result and
-  vice versa. Never used for payment calculations.
+  An append-only implementation rating (0–3) for a metric in a reporting
+  period. Separate from `ActualResult`, so a rating update never hides an
+  actual result and vice versa.
+
+    * `:record` — a seasonal implementation rating (a progress check). Never
+      a payment input.
+    * `:record_review` — a **formal review rating** at the 18- or 36-month
+      review. These, and only these, feed `Improvement.Payment`. The period
+      kind keeps the two apart; corrections stay in their period.
 
   Rubric: 3 Demonstrated Progress, 2 Implementation on Track, 1 Some Progress,
   0 Not Started. A 3 means demonstrated progress, not that the target was met.
@@ -43,6 +49,18 @@ defmodule Emisint.Improvement.ImplementationRating do
       accept [:metric_id, :reporting_period_id | @value_fields]
 
       change {ScopeEntry, kind: :observation, period_kinds: [:seasonal]}
+      change set_attribute(:source, :manual)
+      change {SetActor, attribute: :author_id, required?: true}
+      change {SetActor, attribute: :recorded_by_id}
+
+      validate RatingShape
+    end
+
+    create :record_review do
+      description "Record the formal 18- or 36-month review rating for a metric (payment input)."
+      accept [:metric_id, :reporting_period_id | @value_fields]
+
+      change {ScopeEntry, kind: :observation, period_kinds: [:review_18m, :review_36m]}
       change set_attribute(:source, :manual)
       change {SetActor, attribute: :author_id, required?: true}
       change {SetActor, attribute: :recorded_by_id}
@@ -106,7 +124,7 @@ defmodule Emisint.Improvement.ImplementationRating do
       authorize_if {CanReadSchoolData, via: :school}
     end
 
-    policy action([:record, :correct]) do
+    policy action([:record, :record_review, :correct]) do
       authorize_if {CanWriteSchoolData, roles: [:contributor]}
     end
 

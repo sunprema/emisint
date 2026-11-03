@@ -42,29 +42,59 @@ defmodule Emisint.Improvement.PercentAndPaymentTest do
     end
   end
 
-  describe "Payment.summary/2" do
-    test "awaits review, has no amount, and counts categories from the plan's metrics" do
+  describe "Payment.summary/3" do
+    test "with no formal review ratings, every checkpoint awaits review and no amount is shown" do
       org = seeded_organization!(workbook_ratings?: true)
       [plan] = Ash.read!(GoalPlan, tenant: org.id, authorize?: false)
       metrics = Ash.read!(Metric, tenant: org.id, authorize?: false)
 
       summary = Payment.summary(plan, metrics)
 
-      assert summary.status == :awaiting_review
-      assert summary.amount == nil
       assert summary.systems_metric_count == 8
       assert summary.outcomes_metric_count == 10
-      assert Decimal.equal?(summary.systems_weight, "0.70")
-      assert Decimal.equal?(summary.payment_cap, "70000")
+      assert summary.terms.status == :provisional
+      assert Decimal.equal?(summary.terms.cap, "70000")
+
+      assert Enum.all?(
+               summary.checkpoints,
+               &(&1.status == :awaiting_review and &1.estimate == nil)
+             )
+
+      assert summary.combined.status == :awaiting_review
+      assert Payment.combined_text(summary.combined) == "Awaiting review"
+    end
+
+    test "uses the confirmed per-checkpoint weights, not one fixed pair" do
+      assert [eighteen, thirty_six] = Payment.checkpoints("nd_first_mou")
+
+      assert eighteen.checkpoint == :review_18m
+      assert Decimal.equal?(eighteen.systems_weight, "0.70")
+      assert Decimal.equal?(eighteen.outcomes_weight, "0.30")
+
+      assert thirty_six.checkpoint == :review_36m
+      assert Decimal.equal?(thirty_six.systems_weight, "0.30")
+      assert Decimal.equal?(thirty_six.outcomes_weight, "0.70")
+
+      # Other programs have no confirmed weights; nothing is assumed.
+      assert Payment.checkpoints("other_program") == []
     end
 
     test "counts follow the metrics given, not hard-coded totals" do
-      plan = %{payment_cap: nil, systems_weight: nil, outcomes_weight: nil, max_rating: 3}
+      plan = %{
+        payment_cap: nil,
+        allocation_18m: nil,
+        allocation_36m: nil,
+        payment_terms_status: :unconfirmed,
+        payment_terms_note: nil,
+        payment_terms_version: 1,
+        program: "nd_first_mou",
+        max_rating: 3
+      }
 
       metrics = [
-        %{category: :systems},
-        %{category: :student_outcome},
-        %{category: :student_outcome}
+        %{id: "a", code: "A", category: :systems},
+        %{id: "b", code: "B", category: :student_outcome},
+        %{id: "c", code: "C", category: :student_outcome}
       ]
 
       assert %{systems_metric_count: 1, outcomes_metric_count: 2} = Payment.summary(plan, metrics)

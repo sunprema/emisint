@@ -1,11 +1,20 @@
 defmodule Emisint.Improvement.ActualResult do
   @moduledoc """
-  An append-only actual result for a metric in a seasonal reporting period.
+  An append-only actual result for a metric in a reporting period: a
+  seasonal update or the 18-/36-month review (actual-result entry only;
+  review ratings and payment scoring are separate, Phase 3).
 
   Entries are never updated or deleted:
 
     * `:record`  — the first value (`kind: :observation`) for a metric × period
     * `:correct` — a `kind: :correction` that replaces exactly one current entry
+    * `:record_published` / `:correct_published` — the same, taking the value
+      from a published ND Insights row for an explicit `source_year`
+      (growth-percentile metrics at a review only; `Changes.FromNdInsights`).
+      `source: :nd_insights`, and `source_ref` names the year, population,
+      measure, publication version and file.
+    * `:convert_unit` — a system restatement after a unit decision
+      (`GrowthPercentile.run/2`); no policy allows it for other users
 
   The **current** entry for a metric × period is the one no other entry
   corrects. It is defined structurally, never by timestamp. A partial unique
@@ -24,9 +33,11 @@ defmodule Emisint.Improvement.ActualResult do
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer]
 
-  alias Emisint.Improvement.Changes.{ScopeEntry, SetActor}
+  alias Emisint.Improvement.Changes.{FromNdInsights, ScopeEntry, SetActor}
   alias Emisint.Improvement.Checks.{CanReadSchoolData, CanWriteSchoolData}
   alias Emisint.Improvement.Validations.{ActualValueShape, PercentBounds}
+
+  @review_kinds [:review_18m, :review_36m]
 
   @value_fields [
     :value_state,
@@ -54,10 +65,10 @@ defmodule Emisint.Improvement.ActualResult do
     defaults [:read]
 
     create :record do
-      description "Record the first actual result for a metric in a seasonal period."
+      description "Record the first actual result for a metric in a period."
       accept [:metric_id, :reporting_period_id | @value_fields]
 
-      change {ScopeEntry, kind: :observation, period_kinds: [:seasonal]}
+      change {ScopeEntry, kind: :observation, period_kinds: [:seasonal | @review_kinds]}
       change set_attribute(:source, :manual)
       change {SetActor, attribute: :author_id, required?: true}
       change {SetActor, attribute: :recorded_by_id}
@@ -82,6 +93,54 @@ defmodule Emisint.Improvement.ActualResult do
       validate {PercentBounds, fields: [:value, :range_low, :range_high]}
     end
 
+    create :record_published do
+      description "Record a review result from a published ND Insights value."
+      accept [:metric_id, :reporting_period_id, :notes]
+
+      argument :source_year, :string, allow_nil?: false
+
+      change {ScopeEntry, kind: :observation, period_kinds: @review_kinds}
+      change {SetActor, attribute: :author_id, required?: true}
+      change {SetActor, attribute: :recorded_by_id}
+      change FromNdInsights
+
+      validate {ActualValueShape, require_measurement_date?: false}
+      validate {PercentBounds, fields: [:value, :range_low, :range_high]}
+    end
+
+    create :correct_published do
+      description "Replace the current review result with a published ND Insights value."
+      accept [:metric_id, :reporting_period_id, :correction_reason, :notes]
+
+      argument :corrects_id, :uuid, allow_nil?: false
+      argument :source_year, :string, allow_nil?: false
+
+      change {ScopeEntry, kind: :correction}
+      change {SetActor, attribute: :author_id, required?: true}
+      change {SetActor, attribute: :recorded_by_id}
+      change FromNdInsights
+
+      validate present(:correction_reason), message: "is required for a correction"
+      validate {ActualValueShape, require_measurement_date?: false}
+      validate {PercentBounds, fields: [:value, :range_low, :range_high]}
+    end
+
+    create :convert_unit do
+      description "Restate a current result in its metric's corrected unit (system only)."
+      accept [:correction_reason, :source_ref, :author_id | @value_fields]
+
+      argument :corrects_id, :uuid, allow_nil?: false
+
+      change {ScopeEntry, kind: :correction}
+      change set_attribute(:source, :unit_conversion)
+      change {SetActor, attribute: :recorded_by_id}
+
+      validate present(:correction_reason)
+      validate present(:source_ref)
+      validate {ActualValueShape, require_measurement_date?: false}
+      validate {PercentBounds, fields: [:value, :range_low, :range_high]}
+    end
+
     read :current do
       filter expr(not exists(correction, true))
       prepare build(sort: [recorded_at: :desc])
@@ -103,7 +162,8 @@ defmodule Emisint.Improvement.ActualResult do
       authorize_if {CanReadSchoolData, via: :school}
     end
 
-    policy action_type(:create) do
+    # :convert_unit has no policy, so only the system (or a system admin) can run it.
+    policy action([:record, :correct, :record_published, :correct_published]) do
       authorize_if {CanWriteSchoolData, roles: [:contributor]}
     end
   end
@@ -166,7 +226,7 @@ defmodule Emisint.Improvement.ActualResult do
     attribute :source, :atom do
       allow_nil? false
       public? true
-      constraints one_of: [:manual]
+      constraints one_of: [:manual, :nd_insights, :unit_conversion]
     end
 
     attribute :source_ref, :string do

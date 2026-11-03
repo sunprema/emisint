@@ -10,10 +10,12 @@ defmodule Emisint.Improvement do
   overwrite each other:
 
     * `ActualResult`         — measured metric results
-    * `ImplementationRating` — seasonal 0–3 implementation ratings
+    * `ImplementationRating` — 0–3 ratings: seasonal implementation ratings
+      (`:record`) and formal 18-/36-month review ratings (`:record_review`)
+    * `PaymentEstimate`      — recorded estimated payments with the terms used
 
-  Formal review ratings used for payments are a separate, later resource and
-  are never derived from either of these.
+  Only formal review ratings feed payment estimates; seasonal ratings, targets
+  and actual results never do. There are no actual (paid) payments here.
   """
   use Ash.Domain, otp_app: :emisint, extensions: [AshAdmin.Domain]
 
@@ -52,10 +54,16 @@ defmodule Emisint.Improvement do
 
     resource Emisint.Improvement.ImplementationRating do
       define :record_implementation_rating, action: :record
+      define :record_review_rating, action: :record_review
       define :correct_implementation_rating, action: :correct
       define :import_workbook_implementation_rating, action: :import_workbook
       define :list_current_implementation_ratings, action: :current
       define :list_implementation_rating_history, action: :history, args: [:metric_id]
+    end
+
+    resource Emisint.Improvement.PaymentEstimate do
+      define :record_payment_estimate, action: :record
+      define :list_payment_estimates, action: :read
     end
   end
 end

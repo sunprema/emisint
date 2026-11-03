@@ -1,9 +1,11 @@
 defmodule Emisint.NdInsights.SchoolResultsTest do
   use Emisint.DataCase, async: true
 
+  import Emisint.NdInsightsFixtures
+
   import Emisint.ImprovementFixtures
 
-  alias Emisint.NdInsights.{Importer, SchoolResults}
+  alias Emisint.NdInsights.SchoolResults
 
   @fixtures Path.expand("../../fixtures/nd_insights", __DIR__)
   @fort_yates "4300429212"
@@ -15,16 +17,14 @@ defmodule Emisint.NdInsights.SchoolResultsTest do
       Insights-AssessmentParticipation-CSV-2024-2025-v20251113.csv
     )
 
-    {:ok, _} =
-      Importer.import_files(Enum.map(files, &Path.join(@fixtures, &1)),
-        institution_ids: [@fort_yates]
-      )
+    import_insights!(Enum.map(files, &Path.join(@fixtures, &1)),
+      institution_ids: [@fort_yates]
+    )
 
-    {:ok, _} =
-      Importer.import_files(
-        [Path.join(@fixtures, "Insights-AssessmentPerformance-CSV-2099-2100-v20990101.csv")],
-        institution_ids: ["TEST000001"]
-      )
+    import_insights!(
+      [Path.join(@fixtures, "Insights-AssessmentPerformance-CSV-2099-2100-v20990101.csv")],
+      institution_ids: ["TEST000001"]
+    )
 
     viewer = user!(organization!(), :school_leader)
 

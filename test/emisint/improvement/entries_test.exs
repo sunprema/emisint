@@ -180,13 +180,17 @@ defmodule Emisint.Improvement.EntriesTest do
       assert :suppression_reason in error_fields(error)
     end
 
-    test "review periods are not accepted for seasonal entries", ctx do
-      review = period!(ctx.org, "review_18m")
-      assert {:error, error} = record_actual(ctx, %{reporting_period_id: review.id})
-      assert :reporting_period_id in error_fields(error)
+    test "actual results can be recorded at a review; implementation ratings cannot", ctx do
+      for code <- ["review_18m", "review_36m"] do
+        review = period!(ctx.org, code)
 
-      assert {:error, error} = record_rating(ctx, %{reporting_period_id: review.id})
-      assert :reporting_period_id in error_fields(error)
+        assert {:ok, %{source: :manual, kind: :observation}} =
+                 record_actual(ctx, %{reporting_period_id: review.id})
+
+        # Review ratings are formal payment scoring (Phase 3), not recorded here.
+        assert {:error, error} = record_rating(ctx, %{reporting_period_id: review.id})
+        assert :reporting_period_id in error_fields(error)
+      end
     end
   end
 

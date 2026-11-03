@@ -14,15 +14,31 @@ defmodule Emisint.Improvement.Seeds.FortYates do
   decimal, so their scale is unconfirmed: the raw values are kept in
   `source_values` and `target_36m` is left unset.
 
+  G2-M3 and G3-M3 are growth percentiles (decision of 2026-10-31,
+  `Improvement.GrowthPercentile`): their percent-formatted cells are read as
+  percentiles (0.38 → 38) and the workbook wording is kept in
+  `source_values`.
+
   Goal 4's review column (I26) is headed "Target Check" rather than
   "18-Month Review Rating", although the payment formula reads it; those
   metrics carry `:review_18m_column_heading_unconfirmed`.
   """
 
+  alias Emisint.Improvement.GrowthPercentile
+
   @sheet "Ft Yates Goals"
   @workbook_last_updated ~D[2026-08-18]
 
   def workbook_last_updated, do: @workbook_last_updated
+
+  @doc """
+  The school year in which the plan's first reporting period (Spr '26,
+  workbook column E) falls. A published result from an earlier year
+  predates the plan, so its 18- and 36-month targets were still in the
+  future. This labels reference comparisons only; it doesn't decide which
+  year counts for a review.
+  """
+  def plan_start_year, do: "2025-2026"
 
   def school do
     %{
@@ -50,6 +66,24 @@ defmodule Emisint.Improvement.Seeds.FortYates do
       source_note:
         "ND First School MOU Goal Overview.xlsx: '#{@sheet}' (last updated 2026-08-18) and " <>
           "'Performance-Based Payment'. Progress-monitoring link listed as TBD (#{@sheet}!B1)."
+    }
+  end
+
+  @doc """
+  Provisional payment terms, set through `GoalPlan.set_payment_terms`.
+  Ram authorized a best-estimate rule on November 1, 2026, pending
+  confirmation of the actual terms. The $70,000 total and the equal
+  $35,000 split are our selected provisional assumptions, not terms he
+  specified, and not contract terms.
+  """
+  def payment_terms do
+    %{
+      payment_cap: Decimal.new("70000"),
+      allocation_18m: Decimal.new("35000"),
+      allocation_36m: Decimal.new("35000"),
+      payment_terms_status: :provisional,
+      payment_terms_note:
+        "Ram authorized a best-estimate payment rule on November 1, 2026, pending confirmation of the actual terms. The $70,000 total and the equal $35,000 split are our selected provisional assumptions, not terms he specified."
     }
   end
 
@@ -200,6 +234,7 @@ defmodule Emisint.Improvement.Seeds.FortYates do
         flags: t36_flags ++ if(goal == 4, do: [:review_18m_column_heading_unconfirmed], else: []),
         position: position
       }
+      |> GrowthPercentile.definition()
     end)
   end
 

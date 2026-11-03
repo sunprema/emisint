@@ -15,6 +15,15 @@ defmodule Emisint.Improvement.GoalPlan do
 
   alias Emisint.Improvement.Changes.InheritScope
   alias Emisint.Improvement.Checks.CanReadSchoolData
+  alias Emisint.Improvement.Validations.PaymentTerms
+
+  @terms_fields [
+    :payment_cap,
+    :allocation_18m,
+    :allocation_36m,
+    :payment_terms_status,
+    :payment_terms_note
+  ]
 
   postgres do
     table "improvement_goal_plans"
@@ -37,10 +46,40 @@ defmodule Emisint.Improvement.GoalPlan do
         :systems_weight,
         :outcomes_weight,
         :max_rating,
-        :source_note
+        :source_note,
+        :allocation_18m,
+        :allocation_36m,
+        :payment_terms_status,
+        :payment_terms_note
       ]
 
       change {InheritScope, from: :school_id, resource: Emisint.Accounts.School, copy: []}
+      validate PaymentTerms
+    end
+
+    update :set_payment_terms do
+      description """
+      Set the payment cap, checkpoint allocations and their status (system
+      only; no user policy). Bumps `payment_terms_version` whenever a value
+      changes, so a recorded estimate can name the terms it used.
+      """
+
+      accept @terms_fields
+      require_atomic? false
+
+      validate PaymentTerms
+
+      change fn changeset, _context ->
+        if Enum.any?(@terms_fields, &Ash.Changeset.changing_attribute?(changeset, &1)) do
+          Ash.Changeset.force_change_attribute(
+            changeset,
+            :payment_terms_version,
+            (changeset.data.payment_terms_version || 0) + 1
+          )
+        else
+          changeset
+        end
+      end
     end
   end
 
@@ -91,11 +130,49 @@ defmodule Emisint.Improvement.GoalPlan do
     attribute :systems_weight, :decimal do
       public? true
       constraints min: 0, max: 1
+
+      description "The 18-month review weight from the payment sheet. Weights differ by checkpoint; \
+use `Emisint.Improvement.Payment.checkpoints/1`."
     end
 
     attribute :outcomes_weight, :decimal do
       public? true
       constraints min: 0, max: 1
+
+      description "The 18-month review weight from the payment sheet. Weights differ by checkpoint; \
+use `Emisint.Improvement.Payment.checkpoints/1`."
+    end
+
+    attribute :allocation_18m, :decimal do
+      public? true
+      constraints min: 0
+      description "Share of `payment_cap` allocated to the 18-month review."
+    end
+
+    attribute :allocation_36m, :decimal do
+      public? true
+      constraints min: 0
+      description "Share of `payment_cap` allocated to the 36-month review."
+    end
+
+    attribute :payment_terms_status, :atom do
+      allow_nil? false
+      default :unconfirmed
+      public? true
+      constraints one_of: [:unconfirmed, :provisional, :confirmed]
+      description "Whether the cap and allocations are confirmed contract terms."
+    end
+
+    attribute :payment_terms_note, :string do
+      public? true
+      description "Who authorized the terms and why (e.g. a provisional working assumption)."
+    end
+
+    attribute :payment_terms_version, :integer do
+      allow_nil? false
+      default 1
+      public? true
+      constraints min: 1
     end
 
     attribute :max_rating, :integer do

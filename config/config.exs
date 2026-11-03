@@ -77,6 +77,11 @@ config :emisint,
     Emisint.NdInsights
   ]
 
+# ND First schools included in this release, by verified ND InstitutionID.
+# Other participants may be seeded for later expansion, but only these are
+# listed on the ND First landing page and offered by the ND Insights import UI.
+config :emisint, :nd_first, pilot_institution_ids: ["4300429212"]
+
 # Configure the endpoint
 config :emisint, EmisintWeb.Endpoint,
   url: [host: "localhost"],

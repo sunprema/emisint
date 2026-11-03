@@ -20,17 +20,29 @@ defmodule Emisint.Improvement.Dashboard do
     ImplementationRating,
     Metric,
     Payment,
+    PaymentEstimate,
     ReportingPeriod
   }
 
   @program "nd_first_mou"
 
-  @doc "Schools the actor can read in the current tenant, by name."
-  def list_schools(scope) do
+  @doc """
+  Schools the actor can read in the current tenant, by name.
+
+  Pass `institution_ids:` to limit the list to those verified ND
+  InstitutionIDs (e.g. `Emisint.Improvement.Pilot.institution_ids/0`).
+  """
+  def list_schools(scope, opts \\ []) do
     School
     |> Ash.Query.sort(name: :asc)
+    |> limit_to_institutions(Keyword.fetch(opts, :institution_ids))
     |> Ash.read!(scope: scope)
   end
+
+  defp limit_to_institutions(query, :error), do: query
+
+  defp limit_to_institutions(query, {:ok, ids}),
+    do: Ash.Query.filter(query, state_entity_id in ^ids)
 
   @doc "Fetches a readable school by slug."
   def fetch_school(scope, slug) when is_binary(slug) do
@@ -44,8 +56,10 @@ defmodule Emisint.Improvement.Dashboard do
   end
 
   @doc """
-  The school's current goal plan and its definitions: goals, metrics, seasonal
-  periods, annual assessment goals and the payment summary.
+  The school's current goal plan and its definitions: goals, metrics, all
+  reporting periods (seasonal and the 18-/36-month reviews, in workbook
+  order), annual assessment goals, the payment summary (from the current
+  formal review ratings) and the recorded payment estimates, newest first.
   """
   def load_plan(scope, school) do
     plan =
@@ -60,24 +74,36 @@ defmodule Emisint.Improvement.Dashboard do
 
   defp definitions(scope, school, plan) do
     metrics = read_for_plan(Metric, plan, scope, position: :asc)
+    periods = read_for_plan(ReportingPeriod, plan, scope, position: :asc)
 
     %{
       plan: plan,
       goals: read_for_plan(Goal, plan, scope, number: :asc),
       metrics: metrics,
       metrics_by_goal: Enum.group_by(metrics, & &1.goal_id),
-      periods:
-        Enum.filter(
-          read_for_plan(ReportingPeriod, plan, scope, position: :asc),
-          &(&1.kind == :seasonal)
-        ),
+      periods: periods,
       annual_goals:
         AnnualAssessmentGoal
         |> Ash.Query.filter(school_id == ^school.id)
         |> Ash.Query.sort(school_year: :asc, subject: :asc)
         |> Ash.read!(scope: scope),
-      payment: Payment.summary(plan, metrics)
+      payment: Payment.summary(plan, metrics, review_ratings(scope, school, periods)),
+      payment_estimates:
+        PaymentEstimate
+        |> Ash.Query.filter(goal_plan_id == ^plan.id)
+        |> Ash.Query.sort(recorded_at: :desc)
+        |> Ash.read!(scope: scope)
     }
+  end
+
+  # Current formal review ratings per checkpoint, keyed by metric id. Only the
+  # 18- and 36-month review periods are read; seasonal ratings never feed
+  # payment.
+  defp review_ratings(scope, school, periods) do
+    for %{kind: kind} = period <- periods, kind in [:review_18m, :review_36m], into: %{} do
+      ratings = current(ImplementationRating, scope, school, period)
+      {kind, Map.new(ratings, &{&1.metric_id, &1})}
+    end
   end
 
   defp read_for_plan(resource, plan, scope, sort) do
@@ -110,8 +136,8 @@ defmodule Emisint.Improvement.Dashboard do
   end
 
   @doc """
-  The latest seasonal period that has any entry, else the first one. Used as
-  the default selection.
+  The latest period that has any entry, else the first one. Used as the
+  default selection.
   """
   def default_period(scope, school, periods) do
     used =

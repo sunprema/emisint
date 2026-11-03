@@ -2,7 +2,8 @@ defmodule Emisint.Improvement.EntryForm do
   @moduledoc """
   Turns submitted form params into an actual result or implementation rating.
 
-  * Percent inputs are typed as 0–100 and normalized to 0–1 here.
+  * Percent inputs are typed as 0–100 and normalized to 0–1 here. Growth
+    percentiles are typed and stored as percentiles (0–100, no `%`).
   * With no current entry the submission is an observation (`:record`); with
     one it is a correction (`:correct`) of exactly that entry and needs a
     reason. The corrected entry's id is fixed when the form is opened, so a
@@ -27,18 +28,50 @@ defmodule Emisint.Improvement.EntryForm do
     end
   end
 
-  @doc "Submits an implementation rating for `metric` in `period`, correcting `current` if given."
-  def submit_rating(scope, metric, period, current, params) do
-    with {:ok, values} <- rating_values(params) do
-      submit(ImplementationRating, scope, metric, period, current, values, params)
-    end
-  end
-
-  defp submit(resource, scope, metric, period, current, values, params) do
+  @doc """
+  Submits a review result taken from the published ND Insights value for
+  `params["source_year"]` (growth-percentile metrics only), correcting
+  `current` if given. The year is required; the server checks the period,
+  the year and the published row.
+  """
+  def submit_published(scope, metric, period, current, params) do
     {action, attrs} =
       case current do
         nil ->
-          {:record, Map.merge(values, %{metric_id: metric.id, reporting_period_id: period.id})}
+          {:record_published, %{metric_id: metric.id, reporting_period_id: period.id}}
+
+        %{id: id} ->
+          {:correct_published,
+           %{corrects_id: id, correction_reason: blank_to_nil(params["correction_reason"])}}
+      end
+
+    attrs =
+      Map.merge(attrs, %{
+        source_year: blank_to_nil(params["source_year"]),
+        notes: blank_to_nil(params["notes"])
+      })
+
+    create(ActualResult, action, attrs, scope)
+  end
+
+  @doc """
+  Submits an implementation rating for `metric` in `period`, correcting
+  `current` if given. In an 18- or 36-month review period this is the formal
+  review rating (`:record_review`, the payment input); otherwise it is a
+  seasonal rating (`:record`).
+  """
+  def submit_rating(scope, metric, period, current, params) do
+    with {:ok, values} <- rating_values(params) do
+      record = if period.kind in [:review_18m, :review_36m], do: :record_review, else: :record
+      submit(ImplementationRating, scope, metric, period, current, values, params, record)
+    end
+  end
+
+  defp submit(resource, scope, metric, period, current, values, params, record \\ :record) do
+    {action, attrs} =
+      case current do
+        nil ->
+          {record, Map.merge(values, %{metric_id: metric.id, reporting_period_id: period.id})}
 
         %{id: id} ->
           {:correct,
@@ -48,6 +81,10 @@ defmodule Emisint.Improvement.EntryForm do
            })}
       end
 
+    create(resource, action, attrs, scope)
+  end
+
+  defp create(resource, action, attrs, scope) do
     resource
     |> Ash.Changeset.for_create(action, attrs, scope: scope)
     |> Ash.create()

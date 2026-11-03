@@ -104,3 +104,27 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* ND First: colored text for published values (state level categories and
+   goal status). Each theme color is mixed toward the body text color so the
+   text stays readable on light and dark backgrounds. */
+.nd-text-success { color: color-mix(in oklab, var(--color-success) 60%, var(--color-base-content)); }
+.nd-text-info { color: color-mix(in oklab, var(--color-info) 60%, var(--color-base-content)); }
+.nd-text-warning { color: color-mix(in oklab, var(--color-warning) 55%, var(--color-base-content)); }
+.nd-text-error { color: color-mix(in oklab, var(--color-error) 60%, var(--color-base-content)); }
+
+/* ND First: North Dakota comparison cells. A soft tint of the status color
+   behind the published value (text keeps the body color, so it stays
+   readable in light and dark themes); the status label beside the value
+   carries the meaning without color. */
+.nd-cell-success { background-color: color-mix(in oklab, var(--color-success) 16%, transparent); }
+.nd-cell-error { background-color: color-mix(in oklab, var(--color-error) 16%, transparent); }
+.nd-cell-warning { background-color: color-mix(in oklab, var(--color-warning) 22%, transparent); }
+.nd-cell-neutral { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-base-content) 30%, transparent); }
+.nd-cell-muted { background-color: color-mix(in oklab, var(--color-base-content) 5%, transparent); }
+.nd-swatch {
+  display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 0.2rem; vertical-align: -0.1rem;
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 25%, transparent);
+}
+.nd-mark > summary { list-style: none; }
+.nd-mark > summary::-webkit-details-marker { display: none; }

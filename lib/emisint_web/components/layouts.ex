@@ -96,7 +96,7 @@ defmodule EmisintWeb.Layouts do
               </li>
               <li>
                 <.link navigate={~p"/school-goals"} class="flex items-center gap-2">
-                  <.icon name="hero-flag" class="size-4" /> School Goals
+                  <.icon name="hero-flag" class="size-4" /> ND First
                 </.link>
               </li>
               <li :if={@current_user && @current_user.role in [:emo_admin, :system_admin]}>

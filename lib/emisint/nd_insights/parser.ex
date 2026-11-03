@@ -68,11 +68,9 @@ defmodule Emisint.NdInsights.Parser do
   """
   def parse_file(path, opts) do
     institution_ids = opts |> Keyword.fetch!(:institution_ids) |> MapSet.new()
-    file_name = Path.basename(path)
+    file_name = Keyword.get(opts, :file_name) || Path.basename(path)
 
-    with {:ok, content} <- File.read(path),
-         [header | rows] <-
-           content |> strip_bom() |> __MODULE__.CSV.parse_string(skip_headers: false),
+    with {:ok, header, rows} <- read_rows(path, file_name),
          {:ok, dataset} <- detect_dataset(file_name, header) do
       {observations, errors} =
         rows
@@ -93,11 +91,87 @@ defmodule Emisint.NdInsights.Parser do
          observations: Enum.map(observations, fn {:ok, o} -> o end),
          errors: Enum.map(errors, fn {:error, e} -> e end)
        }}
-    else
-      {:error, reason} when is_binary(reason) -> {:error, reason}
-      {:error, posix} -> {:error, "could not read #{file_name}: #{inspect(posix)}"}
-      [] -> {:error, "#{file_name} is empty"}
     end
+  end
+
+  @doc """
+  Reads a whole (typically statewide) file without importing anything: the
+  dataset, publication version, academic years and every institution in it.
+  `file_name` is the original download name, which carries the version stamp
+  and, for Engagement Survey files, the survey area.
+
+  Returns `{:ok, %{dataset:, file_name:, publication_version:, rows_read:,
+  years:, institutions: %{id => %{names:, rows:, entity_levels:}}}}` or
+  `{:error, reason}`.
+  """
+  def scan_file(path, file_name) do
+    with {:ok, header, rows} <- read_rows(path, file_name),
+         {:ok, dataset} <- detect_dataset(file_name, header) do
+      year_columns = Enum.filter(header, &Regex.match?(~r/^\d{4}-\d{4}$/, &1))
+
+      {institutions, years} =
+        Enum.reduce(rows, {%{}, MapSet.new()}, fn cells, {insts, years} ->
+          row = Map.new(Enum.zip(header, cells))
+
+          case trim(row["InstitutionID"]) do
+            nil ->
+              {insts, years}
+
+            id ->
+              name = trim(row["InstitutionName"] || row["Institution"])
+
+              insts =
+                Map.update(
+                  insts,
+                  id,
+                  %{
+                    names: MapSet.new([name]),
+                    rows: 1,
+                    entity_levels: MapSet.new([trim(row["EntityLevel"])])
+                  },
+                  fn i ->
+                    %{
+                      i
+                      | names: MapSet.put(i.names, name),
+                        rows: i.rows + 1,
+                        entity_levels: MapSet.put(i.entity_levels, trim(row["EntityLevel"]))
+                    }
+                  end
+                )
+
+              years =
+                if year_columns == [],
+                  do: MapSet.put(years, trim(row["AcademicYear"])),
+                  else: Enum.into(year_columns, years)
+
+              {insts, years}
+          end
+        end)
+
+      {:ok,
+       %{
+         dataset: dataset,
+         file_name: file_name,
+         publication_version: publication_version(file_name),
+         rows_read: length(rows),
+         years: years |> MapSet.delete(nil) |> Enum.sort(),
+         institutions: institutions
+       }}
+    end
+  end
+
+  defp read_rows(path, file_name) do
+    with {:ok, content} <- File.read(path) do
+      case content |> strip_bom() |> __MODULE__.CSV.parse_string(skip_headers: false) do
+        [header | rows] -> {:ok, Enum.map(header, &String.trim/1), rows}
+        [] -> {:error, "#{file_name} is empty"}
+      end
+    else
+      {:error, posix} -> {:error, "could not read #{file_name}: #{inspect(posix)}"}
+    end
+  rescue
+    e in NimbleCSV.ParseError ->
+      {:error, "#{file_name} is not a readable CSV file: #{Exception.message(e)}"}
   end
 
   defp strip_bom(<<0xEF, 0xBB, 0xBF, rest::binary>>), do: rest
@@ -115,11 +189,23 @@ defmodule Emisint.NdInsights.Parser do
     has? = &(&1 in header)
 
     cond do
-      has?.("NoviceRangeLow") -> check_header(:assessment_performance, header)
-      has?.("PercentTestedRangeLow") -> check_header(:assessment_participation, header)
-      has?.("DoesNotMeetRangeLow") -> check_header(:growth_rate, header)
-      has?.("EngagementLevel") -> engagement_dataset(file_name, header)
-      true -> {:error, "#{file_name}: unrecognized Insights columns #{inspect(header)}"}
+      has?.("NoviceRangeLow") ->
+        check_header(:assessment_performance, header)
+
+      has?.("PercentTestedRangeLow") ->
+        check_header(:assessment_participation, header)
+
+      has?.("DoesNotMeetRangeLow") ->
+        check_header(:growth_rate, header)
+
+      has?.("EngagementLevel") ->
+        engagement_dataset(file_name, header)
+
+      true ->
+        {:error,
+         "#{file_name}: unrecognized columns #{inspect(Enum.take(header, 8))}. Expected an " <>
+           "ND Insights Assessment Performance, Assessment Participation, Growth Rate or " <>
+           "Engagement Survey CSV with its original headers."}
     end
   end
 
@@ -141,7 +227,11 @@ defmodule Emisint.NdInsights.Parser do
          [] <- ~w(Institution EntityLevel InstitutionID DistrictName EngagementLevel) -- header do
       {:ok, dataset}
     else
-      _ -> {:error, "#{file_name}: cannot identify the Engagement Survey area or columns"}
+      _ ->
+        {:error,
+         "#{file_name}: cannot identify the Engagement Survey area. Engagement files are " <>
+           "recognized by their original Insights file name (for example " <>
+           "Insights-Engagement-Emotional-All-CSV-v20251202.csv); keep the original name when uploading."}
     end
   end
 

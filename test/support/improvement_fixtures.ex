@@ -21,7 +21,10 @@ defmodule Emisint.ImprovementFixtures do
     org = organization!(Keyword.get(opts, :name, "Seeded Org"))
 
     {:ok, _report} =
-      Seeds.run(org.id, workbook_ratings?: Keyword.get(opts, :workbook_ratings?, false))
+      Seeds.run(org.id,
+        workbook_ratings?: Keyword.get(opts, :workbook_ratings?, false),
+        schools: Keyword.get(opts, :schools, [Seeds.FortYates])
+      )
 
     org
   end

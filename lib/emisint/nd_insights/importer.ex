@@ -19,6 +19,10 @@ defmodule Emisint.NdInsights.Importer do
        * new → created; if an older publication had a different value it is
          reported under `changed_from_previous` (the older row is kept).
 
+  A file whose publication version differs from one already stored for the
+  same dataset, years and institutions is a revision and is refused unless
+  `accept_revisions: true` is given.
+
   Imports only write `NdInsights` tables; school entries in `Improvement`
   are never touched. Returns `{:ok, [report]}` or `{:error, reason}`.
   """
@@ -32,7 +36,39 @@ defmodule Emisint.NdInsights.Importer do
   @value_fields [:unit, :value_state, :value, :range_low, :range_high]
   @report_sample 25
 
-  def import_files(paths, opts) do
+  @topic "nd_insights"
+
+  @doc "PubSub topic broadcast after imports: `{:nd_insights_imported, institution_ids}`."
+  def topic, do: @topic
+
+  @doc """
+  The topic for a LiveView session: `topic/0`, or a sub-topic
+  (`"nd_insights:<suffix>"`) stored in the signed session under
+  `"nd_insights_topic"`. Only tests set it (`EmisintWeb.ConnCase`), so
+  concurrent tests never receive each other's import broadcasts.
+  """
+  def topic(%{"nd_insights_topic" => @topic <> ":" <> _ = topic}), do: topic
+  def topic(_session), do: @topic
+
+  @doc """
+  Imports each file for `:institution_ids`. A file may be a path or
+  `{path, original_file_name}` (uploads keep the state's file name, which
+  carries the publication version and Engagement Survey area).
+
+  Options:
+
+    * `:institution_ids` (required) — verified InstitutionIDs to import
+    * `:actor` — the importing user (recorded on the run log)
+    * `:accept_revisions` — a file whose publication version differs from
+      one already stored for the same dataset, years and institutions is a
+      **revision**. It is refused unless this is `true`; when accepted it is
+      stored beside the older publication, never over it.
+    * `:topic` — PubSub topic for the broadcast, default `topic/0`
+
+  Every file gets an `ImportRun` log entry (user, time, outcome, report),
+  including refused and failed ones.
+  """
+  def import_files(files, opts) do
     institution_ids =
       opts |> Keyword.get(:institution_ids, []) |> Enum.map(&to_string/1) |> Enum.uniq()
 
@@ -40,24 +76,74 @@ defmodule Emisint.NdInsights.Importer do
       {:error, "at least one InstitutionID is required"}
     else
       reports =
-        Enum.map(paths, fn path ->
-          case import_file(path, institution_ids, opts[:actor]) do
+        Enum.map(files, fn file ->
+          {path, file_name} = normalize(file)
+
+          result =
+            try do
+              import_file(
+                path,
+                file_name,
+                institution_ids,
+                opts[:actor],
+                opts[:accept_revisions] == true
+              )
+            rescue
+              e -> {:error, "import failed: " <> Exception.message(e)}
+            end
+
+          log_run(result, file_name, institution_ids, opts[:actor])
+
+          case result do
             {:ok, report} -> report
-            {:error, reason} -> %{file: Path.basename(path), error: reason}
+            {:error, reason} -> %{file: file_name, error: describe_error(reason)}
           end
         end)
+
+      imported =
+        for %{created: n, institution_ids: ids} <- reports, n > 0, id <- ids, uniq: true, do: id
+
+      if imported != [] do
+        Phoenix.PubSub.broadcast(
+          Emisint.PubSub,
+          Keyword.get(opts, :topic, @topic),
+          {:nd_insights_imported, imported}
+        )
+      end
 
       {:ok, reports}
     end
   end
 
-  defp import_file(path, institution_ids, actor) do
+  defp normalize({path, file_name}), do: {path, file_name}
+  defp normalize(path), do: {path, Path.basename(path)}
+
+  defp import_file(path, file_name, institution_ids, actor, accept_revisions?) do
     with {:ok, bytes} <- File.read(path),
-         {:ok, parsed} <- Parser.parse_file(path, institution_ids: institution_ids) do
+         {:ok, parsed} <-
+           Parser.parse_file(path, institution_ids: institution_ids, file_name: file_name) do
       sha256 = :sha256 |> :crypto.hash(bytes) |> Base.encode16(case: :lower)
       version = parsed.publication_version || "sha-" <> String.slice(sha256, 0, 12)
 
+      # One import at a time (see `lock_imports/0`); the revision check runs
+      # after the lock so it sees every import committed before this one.
       Emisint.Repo.transaction(fn ->
+        lock_imports()
+        prior = prior_versions(parsed, version)
+
+        if prior != [] and not accept_revisions? do
+          Emisint.Repo.rollback(
+            {:revision_requires_confirmation,
+             %{
+               file: file_name,
+               dataset: parsed.dataset,
+               version: version,
+               prior_versions: prior,
+               sha256: sha256
+             }}
+          )
+        end
+
         source_file = register(parsed, sha256, byte_size(bytes), version, actor)
         report = store(parsed, source_file, version)
 
@@ -66,7 +152,9 @@ defmodule Emisint.NdInsights.Importer do
             file: parsed.file_name,
             dataset: parsed.dataset,
             publication_version: version,
+            prior_versions: prior,
             sha256: sha256,
+            source_file_id: source_file.id,
             institution_ids: institution_ids,
             rows_read: parsed.rows_read,
             parse_errors: Enum.take(parsed.errors, @report_sample),
@@ -83,6 +171,102 @@ defmodule Emisint.NdInsights.Importer do
         report
       end)
     end
+  end
+
+  # Imports write a global (non-tenant) table and share `source_files` rows
+  # (unique by SHA-256) and `state_results` rows (unique by natural key and
+  # publication version). Two imports running at once could otherwise wait on
+  # each other's uncommitted rows: re-uploading the same file concurrently
+  # failed on the SHA-256 index, and transactions that import several files
+  # (each holding its rows until commit) could deadlock (40P01). A
+  # transaction-scoped advisory lock taken before any write serializes
+  # imports; it is released when the transaction ends.
+  @import_lock_key 7_311_400_429_212
+
+  @doc false
+  def import_lock_key, do: @import_lock_key
+
+  defp lock_imports,
+    do:
+      Ecto.Adapters.SQL.query!(Emisint.Repo, "SELECT pg_advisory_xact_lock($1)", [
+        @import_lock_key
+      ])
+
+  @doc """
+  Other publication versions already stored for the same dataset, academic
+  years and institutions as `parsed` (i.e. this file would be a revision).
+  """
+  def prior_versions(%{dataset: dataset, observations: observations}, version) do
+    years = observations |> Enum.map(& &1.academic_year) |> Enum.uniq()
+    ids = observations |> Enum.map(& &1.institution_id) |> Enum.uniq()
+    prior_versions(dataset, years, ids, version)
+  end
+
+  def prior_versions(dataset, years, ids, version) do
+    if years == [] or ids == [] do
+      []
+    else
+      Emisint.Repo.all(
+        from(r in "nd_insights_state_results",
+          where:
+            r.dataset == ^to_string(dataset) and r.academic_year in ^years and
+              r.institution_id in ^ids and r.publication_version != ^version,
+          distinct: true,
+          select: r.publication_version
+        )
+      )
+      |> Enum.sort()
+    end
+  end
+
+  defp describe_error({:revision_requires_confirmation, %{version: v, prior_versions: prior}}),
+    do:
+      "this is a revised publication (v#{v}) of data already stored as v#{Enum.join(prior, ", v")}; " <>
+        "confirm the revision to store it alongside the earlier publication"
+
+  defp describe_error(reason) when is_binary(reason), do: reason
+  defp describe_error(reason), do: inspect(reason)
+
+  defp log_run(result, file_name, institution_ids, actor) do
+    {outcome, attrs} =
+      case result do
+        {:ok, %{created: 0} = report} ->
+          {:no_changes, run_attrs(report)}
+
+        {:ok, report} ->
+          {:imported, run_attrs(report)}
+
+        {:error, {:revision_requires_confirmation, info} = reason} ->
+          {:rejected,
+           %{
+             dataset: info.dataset,
+             publication_version: info.version,
+             sha256: info.sha256,
+             error: describe_error(reason)
+           }}
+
+        {:error, reason} ->
+          {:failed, %{error: describe_error(reason)}}
+      end
+
+    Emisint.NdInsights.ImportRun
+    |> Ash.Changeset.for_create(
+      :log,
+      Map.merge(attrs, %{outcome: outcome, file_name: file_name, institution_ids: institution_ids}),
+      actor: actor,
+      authorize?: false
+    )
+    |> Ash.create!(return_notifications?: true)
+  end
+
+  defp run_attrs(report) do
+    %{
+      dataset: report.dataset,
+      publication_version: report.publication_version,
+      sha256: report.sha256,
+      source_file_id: report.source_file_id,
+      report: json_safe(Map.drop(report, [:source_file_id]))
+    }
   end
 
   defp register(parsed, sha256, bytes, version, actor) do
@@ -123,6 +307,7 @@ defmodule Emisint.NdInsights.Importer do
     initial = %{
       created: 0,
       unchanged: 0,
+      by_institution: %{},
       duplicates: duplicates,
       conflicts: conflicts,
       changed_from_previous: []
@@ -133,7 +318,7 @@ defmodule Emisint.NdInsights.Importer do
         case same_version[obs.natural_key] do
           nil ->
             create!(obs, source_file, version)
-            acc = Map.update!(acc, :created, &(&1 + 1))
+            acc = acc |> Map.update!(:created, &(&1 + 1)) |> count(obs.institution_id, :created)
 
             case previous[obs.natural_key] do
               %{} = old ->
@@ -160,7 +345,10 @@ defmodule Emisint.NdInsights.Importer do
 
           existing ->
             if same_values?(existing, obs),
-              do: Map.update!(acc, :unchanged, &(&1 + 1)),
+              do:
+                acc
+                |> Map.update!(:unchanged, &(&1 + 1))
+                |> count(obs.institution_id, :unchanged),
               else:
                 Map.update!(
                   acc,
@@ -182,6 +370,7 @@ defmodule Emisint.NdInsights.Importer do
       observations: length(parsed.observations),
       created: report.created,
       unchanged: report.unchanged,
+      by_institution: report.by_institution,
       duplicate_count: report.duplicates,
       conflict_count: length(report.conflicts),
       conflicts: report.conflicts |> Enum.reverse() |> Enum.take(@report_sample),
@@ -238,6 +427,14 @@ defmodule Emisint.NdInsights.Importer do
         :natural_key,
         :institution_name
       ])
+
+  # Per-institution counts, so school and state benchmark rows are reported
+  # separately.
+  defp count(acc, institution_id, field) do
+    update_in(acc.by_institution[institution_id], fn counts ->
+      Map.update(counts || %{created: 0, unchanged: 0}, field, 1, &(&1 + 1))
+    end)
+  end
 
   defp stored([], _version), do: %{}
 

@@ -9,9 +9,16 @@ defmodule Emisint.Improvement.Metric do
   `:target_36m_needs_confirmation`), leaving the target unset so it is excluded
   from calculations.
 
+  For `unit: :percentile` (Fort Yates G2-M3 and G3-M3, see
+  `Improvement.GrowthPercentile`) the fields are growth percentiles, 0–100,
+  shown without a percent sign.
+
   `direction` records whether lower values are better (novice and
   disengagement metrics). `performance_measure` keeps "Proficient" distinct
   from "Proficient or Advanced".
+
+  Definitions are seeded. The only update is `:apply_unit_decision`, used by
+  `GrowthPercentile.run/2` (system only: no policy allows it for other users).
   """
   use Ash.Resource,
     otp_app: :emisint,
@@ -23,9 +30,16 @@ defmodule Emisint.Improvement.Metric do
   alias Emisint.Improvement.Checks.CanReadSchoolData
   alias Emisint.Improvement.Validations.PercentBounds
 
+  # :value_as_text — a baseline/target cell is not a plain number in the
+  #   metric's unit (e.g. "> 50%", "60-64%", "Created"); it is shown verbatim
+  #   from source_values and the numeric field is unset.
+  # :source_value_is_date — a baseline/target cell holds an Excel date where a
+  #   number is expected; it needs confirmation and is not used.
   @flags [
     :target_36m_needs_confirmation,
-    :review_18m_column_heading_unconfirmed
+    :review_18m_column_heading_unconfirmed,
+    :value_as_text,
+    :source_value_is_date
   ]
 
   postgres do
@@ -63,6 +77,23 @@ defmodule Emisint.Improvement.Metric do
               from: :goal_id,
               resource: Emisint.Improvement.Goal,
               copy: [school_id: :school_id, goal_plan_id: :goal_plan_id]}
+
+      validate {PercentBounds, fields: [:baseline_value, :target_18m, :target_36m]}
+    end
+
+    update :apply_unit_decision do
+      description "Apply a recorded unit decision to a seeded definition (system conversion)."
+      require_atomic? false
+
+      accept [
+        :description,
+        :unit,
+        :performance_measure,
+        :baseline_value,
+        :target_18m,
+        :target_36m,
+        :source_values
+      ]
 
       validate {PercentBounds, fields: [:baseline_value, :target_18m, :target_36m]}
     end
@@ -106,7 +137,7 @@ defmodule Emisint.Improvement.Metric do
       allow_nil? false
       default :percent
       public? true
-      constraints one_of: [:percent]
+      constraints one_of: [:percent, :percentile, :count, :score, :text]
     end
 
     attribute :direction, :atom do
@@ -119,7 +150,14 @@ defmodule Emisint.Improvement.Metric do
       allow_nil? false
       default :other
       public? true
-      constraints one_of: [:proficient, :novice, :met_growth_expectation, :other]
+
+      constraints one_of: [
+                    :proficient,
+                    :novice,
+                    :met_growth_expectation,
+                    :growth_percentile,
+                    :other
+                  ]
     end
 
     attribute :baseline_value, :decimal do

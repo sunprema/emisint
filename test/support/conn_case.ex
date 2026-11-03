@@ -33,6 +33,17 @@ defmodule EmisintWeb.ConnCase do
 
   setup tags do
     Emisint.DataCase.setup_sandbox(tags)
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+
+    # ND Insights import broadcasts go to a topic of this test's own (see
+    # Emisint.NdInsights.Importer.topic/1), so dashboards opened by concurrent
+    # tests don't reload from this test's imports. Sessions from `log_in`
+    # merge into this one, so a test's own pages share the topic.
+    topic = "#{Emisint.NdInsights.Importer.topic()}:test-#{System.unique_integer([:positive])}"
+
+    conn =
+      Phoenix.ConnTest.build_conn()
+      |> Phoenix.ConnTest.init_test_session(%{"nd_insights_topic" => topic})
+
+    {:ok, conn: conn}
   end
 end

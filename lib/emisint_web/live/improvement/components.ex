@@ -36,7 +36,9 @@ defmodule EmisintWeb.Improvement.Components do
 
   def actual_value(%{entry: %{value_state: :suppressed}} = assigns) do
     ~H"""
-    <span class="badge badge-warning badge-sm">Suppressed</span>
+    <span class="badge badge-ghost badge-sm" title="Suppressed by the source; not classified.">
+      Suppressed
+    </span>
     <div :if={@entry.suppression_reason} class="text-xs text-base-content/60 mt-0.5">
       Source: “{@entry.suppression_reason}”
     </div>
@@ -57,10 +59,16 @@ defmodule EmisintWeb.Improvement.Components do
     """
   end
 
+  # One status badge: the score and the full rubric label, in the rubric's
+  # accessible text color on a restrained tint, wrapping in narrow cells.
   def rating_value(%{entry: %{rating_state: :rated}} = assigns) do
     ~H"""
-    <span class={["badge badge-sm font-semibold", score_badge(@entry.score)]}>{@entry.score}</span>
-    <span class="text-xs text-base-content/70 ml-1">{Rubric.label(@entry.score)}</span>
+    <span class={[
+      "badge h-auto min-h-6 py-0.5 px-2 font-semibold whitespace-normal text-left leading-snug border border-current/30",
+      score_badge(@entry.score)
+    ]}>
+      {@entry.score} · {Rubric.label(@entry.score)}
+    </span>
     """
   end
 
@@ -84,7 +92,7 @@ defmodule EmisintWeb.Improvement.Components do
     ~H"""
     <div class="text-xs text-base-content/60 space-y-0.5">
       <div>
-        <span class="badge badge-info badge-xs">Workbook import</span>
+        <span class="badge badge-soft badge-info nd-text-info badge-xs">Workbook import</span>
         <span class="ml-1">Original author unknown</span>
       </div>
       <div>
@@ -95,6 +103,38 @@ defmodule EmisintWeb.Improvement.Components do
       </div>
       <div>
         Imported {format_datetime(@entry.recorded_at)}{recorder_suffix(@entry, @users)}
+      </div>
+      <.entry_details entry={@entry} />
+    </div>
+    """
+  end
+
+  def provenance(%{entry: %{source: :nd_insights}} = assigns) do
+    ~H"""
+    <div class="text-xs text-base-content/60 space-y-0.5">
+      <div>
+        <span :if={@entry.kind == :correction} class="badge badge-secondary badge-xs mr-1">
+          Correction
+        </span>
+        <span class="badge badge-soft badge-info nd-text-info badge-xs">ND Insights</span>
+        <span class="ml-1">{@entry.source_ref}</span>
+      </div>
+      <div>
+        Selected by {email(@users, @entry.author_id)} · {format_datetime(@entry.recorded_at)}
+      </div>
+      <.entry_details entry={@entry} />
+    </div>
+    """
+  end
+
+  def provenance(%{entry: %{source: :unit_conversion}} = assigns) do
+    ~H"""
+    <div class="text-xs text-base-content/60 space-y-0.5">
+      <div>
+        <span class="badge badge-secondary badge-xs mr-1">Unit correction</span>
+        Originally submitted by {email(@users, @entry.author_id)} · restated {format_datetime(
+          @entry.recorded_at
+        )}{recorder_suffix(@entry, @users)}
       </div>
       <.entry_details entry={@entry} />
     </div>
@@ -152,6 +192,13 @@ defmodule EmisintWeb.Improvement.Components do
   end
 
   defp summary_line(%{source: :workbook_import}, _users), do: "Workbook import · source details"
+
+  defp summary_line(%{source: :nd_insights} = entry, _users) do
+    year = Emisint.Improvement.GrowthPercentile.source_year(entry) || "unknown"
+    "ND Insights · source year #{year} · source details"
+  end
+
+  defp summary_line(%{source: :unit_conversion}, _users), do: "Unit correction · source details"
 
   defp summary_line(entry, users) do
     prefix = if entry.kind == :correction, do: "Corrected by ", else: ""
@@ -256,14 +303,31 @@ defmodule EmisintWeb.Improvement.Components do
 
   defp source_details_id(metric), do: "target-36m-source-#{metric.code}"
 
+  # Same rules as the PDF (Emisint.Improvement.Display.target/2).
   defp plain_target(assigns) do
+    {shape, text} = Emisint.Improvement.Display.target(assigns.metric, assigns.field)
+    source = Emisint.Improvement.Display.target_source(assigns.metric, assigns.field)
+    assigns = assign(assigns, shape: shape, text: text, raw: source && source.raw)
+
     ~H"""
-    <span :if={Map.get(@metric, @field)} data-target-value>
-      {format_number(@metric, Map.get(@metric, @field))}
+    <span :if={@shape == :number} data-target-value>{@text}</span>
+    <span
+      :if={@shape == :text}
+      data-target-value
+      class="italic"
+      title="Shown exactly as written in the goal workbook; not converted or classified."
+    >
+      {@text}
     </span>
-    <span :if={is_nil(Map.get(@metric, @field))} data-target-value class="text-base-content/40">
-      Not set
+    <span
+      :if={@shape == :date}
+      data-target-value
+      class="italic text-base-content/60"
+      title={"The workbook cell holds the date #{@raw} where a number is expected; please confirm the intended value."}
+    >
+      {@text}
     </span>
+    <span :if={@shape == :empty} data-target-value class="text-base-content/40">{@text}</span>
     """
   end
 
@@ -298,8 +362,37 @@ defmodule EmisintWeb.Improvement.Components do
   defp recorder_suffix(%{recorded_by_id: nil}, _users), do: ""
   defp recorder_suffix(%{recorded_by_id: id}, users), do: " by #{email(users, id)}"
 
-  defp score_badge(3), do: "badge-success"
-  defp score_badge(2), do: "badge-info"
-  defp score_badge(1), do: "badge-warning"
-  defp score_badge(_), do: "badge-ghost"
+  attr :status, :map, required: true, doc: "Emisint.Improvement.GoalStatus.evaluate/3"
+  attr :id, :string, required: true
+  slot :inner_block, required: true
+
+  @doc "A result with its applicable target and status; colored only for Meets / Below."
+  def goal_result(assigns) do
+    assigns = assign(assigns, summary: Emisint.Improvement.GoalStatus.summary(assigns.status))
+
+    ~H"""
+    <span class={goal_status_class(@status.status)}>{render_slot(@inner_block)}</span>
+    <div
+      :if={@summary}
+      id={@id}
+      class={["text-xs mt-0.5", goal_status_class(@status.status) || "text-base-content/60"]}
+    >
+      {@summary}
+    </div>
+    """
+  end
+
+  defp goal_status_class(:meets), do: "nd-text-success font-medium"
+  defp goal_status_class(:below), do: "nd-text-error font-medium"
+  defp goal_status_class(_), do: nil
+
+  # Rubric tones are shared with the PDF (Display.score_tone/1). Class names
+  # are literal so Tailwind keeps them.
+  defp score_badge(score), do: score |> Emisint.Improvement.Display.score_tone() |> tone_badge()
+
+  # The nd-text-* color keeps small badge text readable on the soft fill.
+  defp tone_badge(:success), do: "badge-soft badge-success nd-text-success"
+  defp tone_badge(:info), do: "badge-soft badge-info nd-text-info"
+  defp tone_badge(:warning), do: "badge-soft badge-warning nd-text-warning"
+  defp tone_badge(:error), do: "badge-soft badge-error nd-text-error"
 end

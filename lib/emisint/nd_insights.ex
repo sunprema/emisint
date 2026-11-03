@@ -28,5 +28,9 @@ defmodule Emisint.NdInsights do
     resource Emisint.NdInsights.StateResult do
       define :list_state_results, action: :read
     end
+
+    resource Emisint.NdInsights.ImportRun do
+      define :list_recent_import_runs, action: :recent
+    end
   end
 end

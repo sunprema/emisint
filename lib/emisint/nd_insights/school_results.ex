@@ -76,6 +76,45 @@ defmodule Emisint.NdInsights.SchoolResults do
 
   def load(_actor, _institution_id), do: %{rows: [], files: [], years: []}
 
+  @doc """
+  The latest-version "State of North Dakota" benchmark rows
+  (`Emisint.NdInsights.Benchmark`) for one academic year, read as `actor`.
+  """
+  def load_benchmark(_actor, nil), do: []
+
+  def load_benchmark(actor, year) do
+    state_id = Emisint.NdInsights.Benchmark.state_id()
+
+    StateResult
+    |> Ash.Query.filter(institution_id == ^state_id and academic_year == ^year)
+    |> Ash.read!(actor: actor)
+    |> Enum.group_by(& &1.natural_key)
+    |> Enum.map(fn {_key, versions} -> Enum.max_by(versions, & &1.publication_version) end)
+  end
+
+  @doc """
+  The state-results filters for request `params` (`state_year`,
+  `state_type`, `state_subgroup`, `goal_ref`), defaulting to the latest
+  year, the Combined assessment, all students and the 18-month reference
+  target (`Improvement.ResultGoals.reference/1`). Shared by the dashboard
+  and the PDF.
+  """
+  def resolve_filters(%{years: years, rows: rows}, params) do
+    year = if params["state_year"] in years, do: params["state_year"], else: List.first(years)
+    types = Enum.map(@assessment_types, &elem(&1, 0))
+    type = if params["state_type"] in types, do: params["state_type"], else: "Comp"
+    subgroups = subgroups(rows, year)
+    subgroup = if params["state_subgroup"] in subgroups, do: params["state_subgroup"], else: "All"
+
+    %{
+      year: year,
+      type: type,
+      subgroup: subgroup,
+      subgroups: subgroups,
+      reference: Emisint.Improvement.ResultGoals.reference(params["goal_ref"])
+    }
+  end
+
   def subgroups(rows, year) do
     rows
     |> Enum.filter(
@@ -113,7 +152,10 @@ defmodule Emisint.NdInsights.SchoolResults do
     |> Enum.sort_by(&{subject_order(&1.subject), grade_order(&1.grade)})
   end
 
-  @doc "Growth rows: `[%{subject, grade, levels: %{measure => row}}]` (no assessment type in this dataset)."
+  @doc """
+  Growth rows: `[%{subject, grade, levels: %{measure => row}, meets_or_exceeds}]`
+  (no assessment type in this dataset).
+  """
   def growth(rows, year, subgroup) do
     rows
     |> Enum.filter(
@@ -121,7 +163,14 @@ defmodule Emisint.NdInsights.SchoolResults do
     )
     |> Enum.group_by(&{&1.subject, &1.grade})
     |> Enum.map(fn {{subject, grade}, measures} ->
-      %{subject: subject, grade: grade, levels: Map.new(measures, &{&1.measure, &1})}
+      levels = Map.new(measures, &{&1.measure, &1})
+
+      %{
+        subject: subject,
+        grade: grade,
+        levels: levels,
+        meets_or_exceeds: meets_or_exceeds(levels)
+      }
     end)
     |> Enum.sort_by(&{subject_order(&1.subject), grade_order(&1.grade)})
   end
@@ -185,8 +234,16 @@ defmodule Emisint.NdInsights.SchoolResults do
   Derived Proficient-or-Advanced interval from published Proficient and
   Advanced values: `{:ok, low, high}` or `{:not_derivable, reason}`.
   """
-  def proficient_or_advanced(levels) do
-    case derived(levels) do
+  def proficient_or_advanced(levels), do: derived_interval(levels, "Proficient", "Advanced")
+
+  @doc """
+  Derived Meets-or-Exceeds growth interval from published Meets and Exceeds
+  values, built the same way as `proficient_or_advanced/1`.
+  """
+  def meets_or_exceeds(levels), do: derived_interval(levels, "Meets", "Exceeds")
+
+  defp derived_interval(levels, first, second) do
+    case derived(levels, first, second) do
       {:ok, %{low: low, high: high}} -> {:ok, low, high}
       other -> other
     end
@@ -195,9 +252,9 @@ defmodule Emisint.NdInsights.SchoolResults do
   # Adds the published components as given. `exact?` is true only when both
   # components were published as exact values; no rounding or endpoint
   # allowance is ever applied.
-  defp derived(levels) do
-    with {:ok, p} <- bounds(levels["Proficient"]),
-         {:ok, a} <- bounds(levels["Advanced"]) do
+  defp derived(levels, first \\ "Proficient", second \\ "Advanced") do
+    with {:ok, p} <- bounds(levels[first]),
+         {:ok, a} <- bounds(levels[second]) do
       {:ok,
        %{
          low: Decimal.add(p.low, a.low),
@@ -268,6 +325,9 @@ defmodule Emisint.NdInsights.SchoolResults do
   end
 
   def compare_goal(_goal, _rows), do: %{status: :not_comparable}
+
+  @doc "Sort key for a subject and grade, in dashboard order."
+  def order_key(subject, grade), do: {subject_order(subject), grade_order(grade)}
 
   defp subject_order("Reading"), do: 0
   defp subject_order("ELA"), do: 0

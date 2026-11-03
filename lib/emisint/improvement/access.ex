@@ -27,6 +27,17 @@ defmodule Emisint.Improvement.Access do
       |> Ash.exists?(tenant: tenant, authorize?: false)
   end
 
+  @doc """
+  Whether `actor` may record a payment estimate in `tenant`: org admins only,
+  as `PaymentEstimate`'s `:record` policy requires.
+  """
+  def can_record_estimate?(%{role: :system_admin}, _tenant), do: true
+
+  def can_record_estimate?(%{role: :emo_admin, organization_id: org_id}, tenant),
+    do: same_org?(org_id, tenant)
+
+  def can_record_estimate?(_actor, _tenant), do: false
+
   defp same_org?(nil, _tenant), do: false
   defp same_org?(org_id, tenant), do: to_string(org_id) == to_string(tenant)
 end

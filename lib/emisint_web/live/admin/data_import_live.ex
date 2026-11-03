@@ -588,6 +588,24 @@ defmodule EmisintWeb.Admin.DataImportLive do
           </div>
         </div>
 
+        <%!-- ── ND Insights (North Dakota) state data (system_admin only) ─────────── --%>
+        <div
+          :if={@current_user.role == :system_admin}
+          class="p-6 shadow-xl rounded-xl flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+          id="nd-insights-import-card"
+        >
+          <div>
+            <h2 class="text-lg font-semibold">ND Insights (North Dakota) state data</h2>
+            <p class="text-sm text-base-content/60">
+              Official Assessment Performance, Participation, Growth Rate and Engagement Survey CSVs
+              for ND First schools. Kept separate from Michigan data.
+            </p>
+          </div>
+          <.link navigate={~p"/admin/import/nd-insights"} class="btn btn-primary btn-sm">
+            Open ND Insights import
+          </.link>
+        </div>
+
         <%!-- ── Section 2: MDE State Assessment Data (system_admin only) ─────────── --%>
         <div class="divider"></div>
 

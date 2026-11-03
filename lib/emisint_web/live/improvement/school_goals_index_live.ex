@@ -1,18 +1,20 @@
 defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
   @moduledoc """
-  Lists the schools with goal plans that the signed-in user can read in their
-  organization. Users without a school membership see an empty state.
+  ND First landing page: the pilot schools (`Emisint.Improvement.Pilot`) with
+  goal plans that the signed-in user can read in their organization. Users
+  without a school membership see an empty state.
   """
   use EmisintWeb, :live_view
 
-  alias Emisint.Improvement.Dashboard
+  alias Emisint.Improvement.{Dashboard, Pilot}
 
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
-       page_title: "School Goals",
-       schools: Dashboard.list_schools(socket.assigns.scope)
+       page_title: "ND First",
+       schools:
+         Dashboard.list_schools(socket.assigns.scope, institution_ids: Pilot.institution_ids())
      )}
   end
 
@@ -21,11 +23,27 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 class="text-2xl font-bold">School Goals</h1>
-          <p class="text-sm text-base-content/60 mt-1">
-            ND First school improvement goals, seasonal progress and annual assessment targets.
-          </p>
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+          <div>
+            <h1 class="text-2xl font-bold">ND First</h1>
+            <div class="text-sm text-base-content/70 mt-2 space-y-2 max-w-2xl" id="nd-first-intro">
+              <p>
+                ND First schools are listed on the North Dakota Department of Public Instruction's <a
+                  href="https://www.nd.gov/dpi/districtsschools/essa/accountability-support-improvement/nd-first"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="link link-primary"
+                >
+                  accountability, support and improvement pages
+                </a>.
+              </p>
+              <p>
+                For each school, this page tracks its MOU goals and their seasonal 0–3 implementation
+                ratings, its 18- and 36-month targets, its annual Proficient-or-Advanced targets from
+                its continuous improvement plan, and the state's published results from ND Insights.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div

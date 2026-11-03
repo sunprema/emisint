@@ -20,6 +20,10 @@ defmodule Emisint.Improvement.SeedsTest do
 
   defp read!(resource, org), do: Ash.read!(resource, tenant: org.id, authorize?: false)
 
+  # These tests describe the Fort Yates definitions; other schools have their own tests below.
+  defp run(org_id, opts \\ []),
+    do: Seeds.run(org_id, Keyword.put_new(opts, :schools, [Seeds.FortYates]))
+
   describe "organization requirement" do
     test "refuses to run without an explicit, existing organization" do
       assert {:error, "an explicit organization ID is required"} = Seeds.run(nil)
@@ -114,8 +118,10 @@ defmodule Emisint.Improvement.SeedsTest do
     end
 
     test "every normalized percentage is within 0–1", %{org: org} do
+      percent_metrics = Enum.filter(read!(Metric, org), &(&1.unit == :percent))
+
       values =
-        Enum.flat_map(read!(Metric, org), &[&1.baseline_value, &1.target_18m, &1.target_36m]) ++
+        Enum.flat_map(percent_metrics, &[&1.baseline_value, &1.target_18m, &1.target_36m]) ++
           Enum.map(read!(AnnualAssessmentGoal, org), & &1.target_value)
 
       for %Decimal{} = value <- values do
@@ -151,8 +157,22 @@ defmodule Emisint.Improvement.SeedsTest do
     test "metric definitions are read-only (no update or destroy actions)" do
       for resource <- [GoalPlan, Goal, Metric, ReportingPeriod, AnnualAssessmentGoal, School] do
         types = resource |> Ash.Resource.Info.actions() |> Enum.map(& &1.type)
-        refute :update in types, "#{inspect(resource)} has an update action"
         refute :destroy in types, "#{inspect(resource)} has a destroy action"
+
+        # Metric's one update applies a recorded unit decision and GoalPlan's
+        # sets the payment terms; both are system only (see
+        # GrowthPercentileTest and PaymentEstimateTest for the policy checks).
+        updates =
+          for %{type: :update, name: name} <- Ash.Resource.Info.actions(resource), do: name
+
+        expected =
+          case resource do
+            Metric -> [:apply_unit_decision]
+            GoalPlan -> [:set_payment_terms]
+            _ -> []
+          end
+
+        assert updates == expected, "#{inspect(resource)} has update actions #{inspect(updates)}"
       end
     end
   end
@@ -160,11 +180,11 @@ defmodule Emisint.Improvement.SeedsTest do
   describe "idempotence and drift" do
     test "re-running creates nothing and reports everything unchanged" do
       org = organization!()
-      assert {:ok, first} = Seeds.run(org.id)
+      assert {:ok, first} = run(org.id)
       assert first.drift == []
       assert length(first.created) > 0
 
-      assert {:ok, second} = Seeds.run(org.id)
+      assert {:ok, second} = run(org.id)
       assert second.created == []
       assert second.drift == []
       assert length(second.unchanged) == length(first.created)
@@ -178,7 +198,7 @@ defmodule Emisint.Improvement.SeedsTest do
       metric = metric!(org, "G1-M1")
       Ash.Seed.update!(metric, %{target_18m: Decimal.new("0.85")})
 
-      assert {:ok, report} = Seeds.run(org.id, workbook_ratings?: false)
+      assert {:ok, report} = run(org.id, workbook_ratings?: false)
       assert [%{record: record, fields: %{target_18m: {actual, expected}}}] = report.drift
       assert record =~ "G1-M1"
       assert Decimal.equal?(actual, "0.85")
@@ -194,7 +214,7 @@ defmodule Emisint.Improvement.SeedsTest do
       importer = user!(org, :emo_admin)
       started_at = DateTime.utc_now()
 
-      assert {:ok, _report} = Seeds.run(org.id, actor: importer)
+      assert {:ok, _report} = run(org.id, actor: importer)
 
       ratings = read!(ImplementationRating, org)
       assert length(ratings) == 36
@@ -213,13 +233,13 @@ defmodule Emisint.Improvement.SeedsTest do
 
     test "recorded_by is nil when no importing actor is given" do
       org = organization!()
-      assert {:ok, _} = Seeds.run(org.id)
+      assert {:ok, _} = run(org.id)
       assert Enum.all?(read!(ImplementationRating, org), &is_nil(&1.recorded_by_id))
     end
 
     test "seasonal category averages match the workbook's Goals Dashboard" do
       org = organization!()
-      assert {:ok, _} = Seeds.run(org.id)
+      assert {:ok, _} = run(org.id)
 
       metrics = Map.new(read!(Metric, org), &{&1.id, &1})
       periods = Map.new(read!(ReportingPeriod, org), &{&1.id, &1.code})
@@ -242,7 +262,7 @@ defmodule Emisint.Improvement.SeedsTest do
 
     test "re-running leaves later corrections intact" do
       org = organization!()
-      assert {:ok, _} = Seeds.run(org.id)
+      assert {:ok, _} = run(org.id)
       contributor = contributor!(org)
 
       original =
@@ -267,7 +287,7 @@ defmodule Emisint.Improvement.SeedsTest do
           actor: contributor
         )
 
-      assert {:ok, report} = Seeds.run(org.id)
+      assert {:ok, report} = run(org.id)
       assert report.created == []
       assert report.drift == []
 
@@ -296,15 +316,15 @@ defmodule Emisint.Improvement.SeedsTest do
 
     test "creates demo users and memberships idempotently" do
       org = Seeds.ensure_dev_organization!()
-      {:ok, _} = Seeds.run(org.id)
+      {:ok, _} = run(org.id)
 
       first = Seeds.ensure_dev_users!(org)
       assert first.drift == []
-      assert length(first.created) == 5
+      assert length(first.created) == 6
 
       second = Seeds.ensure_dev_users!(org)
       assert second.created == []
-      assert length(second.unchanged) == 5
+      assert length(second.unchanged) == 6
 
       roles = org |> then(&read!(SchoolMembership, &1)) |> Enum.map(& &1.role) |> Enum.sort()
       assert roles == [:contributor, :viewer]
@@ -312,7 +332,7 @@ defmodule Emisint.Improvement.SeedsTest do
 
     test "renames earlier demo accounts in place, keeping id, password and memberships" do
       org = Seeds.ensure_dev_organization!()
-      {:ok, _} = Seeds.run(org.id)
+      {:ok, _} = run(org.id)
 
       legacy =
         Ash.Seed.seed!(Emisint.Accounts.User, %{
@@ -351,7 +371,7 @@ defmodule Emisint.Improvement.SeedsTest do
 
     test "never overwrites or merges an unrelated account that already uses a new address" do
       org = Seeds.ensure_dev_organization!()
-      {:ok, _} = Seeds.run(org.id)
+      {:ok, _} = run(org.id)
       other_org = organization!("Someone else")
 
       unrelated =
@@ -381,6 +401,148 @@ defmodule Emisint.Improvement.SeedsTest do
 
       assert to_string(Ash.get!(Emisint.Accounts.User, legacy.id, authorize?: false).email) ==
                "nd-first-admin@example.com"
+    end
+  end
+
+  describe "additional ND First schools (deferred for expansion)" do
+    setup do
+      org = organization!()
+      {:ok, report} = Seeds.run(org.id, schools: Seeds.available_schools())
+      %{org: org, report: report}
+    end
+
+    defp school_metrics(org, slug) do
+      school = school!(org, slug)
+
+      Metric
+      |> Ash.Query.filter(school_id == ^school.id)
+      |> Ash.read!(tenant: org.id, authorize?: false)
+      |> Map.new(&{&1.code, &1})
+    end
+
+    test "the default seeds only the Fort Yates pilot" do
+      org = organization!()
+      {:ok, _report} = Seeds.run(org.id)
+
+      assert Seeds.schools() == [Seeds.FortYates]
+      assert org |> then(&read!(School, &1)) |> Enum.map(& &1.slug) == ["fort-yates-ms"]
+    end
+
+    test "seeds every verified single-building school when asked", %{org: org, report: report} do
+      assert report.drift == []
+
+      ids = org |> then(&read!(School, &1)) |> Map.new(&{&1.slug, &1.state_entity_id})
+
+      assert ids == %{
+               "fort-yates-ms" => "4300429212",
+               "oberon-elementary" => "0301662261",
+               "valley-middle-school" => "1800189752"
+             }
+    end
+
+    test "Oberon uses its own sheet: 4 goals, 21 metrics, own targets and districts", %{org: org} do
+      school = school!(org, "oberon-elementary")
+      assert school.district_name == "Oberon Public School District"
+      # Insights offers no grade-level filter for Oberon, so the band is not guessed.
+      assert school.grade_span == nil
+
+      metrics = school_metrics(org, "oberon-elementary")
+      assert map_size(metrics) == 21
+      assert Decimal.equal?(metrics["G1-M1"].baseline_value, "0.16")
+      assert Decimal.equal?(metrics["G1-M1"].target_36m, "0.3")
+      assert metrics["G1-M1"].source_values["baseline"]["cell"] == "Oberon Goals!D4"
+    end
+
+    test "non-numeric and date cells stay verbatim and unset", %{org: org} do
+      oberon = school_metrics(org, "oberon-elementary")
+
+      # "60-64%" baseline, "50-54%" target: kept as text, never a midpoint.
+      g3m2 = oberon["G3-M2"]
+      assert g3m2.baseline_value == nil and g3m2.target_18m == nil
+      assert g3m2.source_values["baseline"]["raw"] == "60-64%"
+      assert :value_as_text in g3m2.flags
+
+      # Excel dates where a teacher count is expected are flagged, not used.
+      g4m7 = oberon["G4-M7"]
+      assert g4m7.unit == :count
+      assert g4m7.target_18m == nil
+      assert :source_value_is_date in g4m7.flags
+
+      valley = school_metrics(org, "valley-middle-school")
+      assert valley["G1-M2"].source_values["target_18m"]["raw"] == "> 50%"
+      assert valley["G7-M2"].unit == :text
+      assert valley["G7-M2"].source_values["target_36m"]["raw"] == "Utilized"
+    end
+
+    test "the review-column flag follows each goal's own heading", %{org: org} do
+      oberon = school_metrics(org, "oberon-elementary")
+
+      # Oberon Goal 1 is headed "18-Month Review Rating" (I3); Goals 2-4 "Target Check".
+      refute :review_18m_column_heading_unconfirmed in oberon["G1-M1"].flags
+      assert :review_18m_column_heading_unconfirmed in oberon["G2-M1"].flags
+
+      assert oberon["G2-M1"].source_values["review_18m_heading"] == %{
+               "cell" => "Oberon Goals!I12",
+               "raw" => "Target Check"
+             }
+    end
+
+    test "N/A workbook ratings are stored as not applicable, never scored", %{org: org} do
+      valley = school_metrics(org, "valley-middle-school")
+      spr = period_for(org, "valley-middle-school", "spr_26")
+
+      [rating] =
+        ImplementationRating
+        |> Ash.Query.filter(metric_id == ^valley["G1-M3"].id and reporting_period_id == ^spr.id)
+        |> Ash.read!(tenant: org.id, authorize?: false)
+
+      assert rating.rating_state == :not_applicable
+      assert rating.score == nil
+      assert rating.source_ref == "Valley Goals!E6"
+      assert rating.source_last_updated_on == ~D[2026-08-28]
+    end
+
+    test "annual targets come from each school's own PDF page", %{org: org} do
+      for {slug, year, ela, math} <- [
+            {"oberon-elementary", "2023-2024", "0.22", "0.22"},
+            {"valley-middle-school", "2030-2031", "0.55", "0.51"}
+          ] do
+        school = school!(org, slug)
+
+        goals =
+          AnnualAssessmentGoal
+          |> Ash.Query.filter(school_id == ^school.id and school_year == ^year)
+          |> Ash.read!(tenant: org.id, authorize?: false)
+          |> Map.new(&{&1.subject, &1})
+
+        assert Decimal.equal?(goals[:ela].target_value, ela)
+        assert Decimal.equal?(goals[:math].target_value, math)
+      end
+    end
+
+    test "implementation step counts stored as text in the workbook are kept", %{org: org} do
+      school = school!(org, "valley-middle-school")
+
+      goal =
+        Goal
+        |> Ash.Query.filter(school_id == ^school.id and number == 1)
+        |> Ash.read_one!(tenant: org.id, authorize?: false)
+
+      # Valley Goals!E2:G2 hold '1', '2', '2' as text.
+      assert goal.implementation_steps == %{"spr_26" => 1, "sum_26" => 2, "fal_26" => 2}
+    end
+
+    test "re-running seeds every school without duplicates", %{org: org} do
+      assert {:ok, again} = Seeds.run(org.id)
+      assert again.created == [] and again.drift == []
+    end
+
+    defp period_for(org, slug, code) do
+      school = school!(org, slug)
+
+      ReportingPeriod
+      |> Ash.Query.filter(school_id == ^school.id and code == ^code)
+      |> Ash.read_one!(tenant: org.id, authorize?: false)
     end
   end
 end
