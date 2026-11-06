@@ -493,7 +493,7 @@ defmodule Emisint.NdInsights.StateComparison do
   @doc "One sentence per All Grades note, e.g. for the PDF."
   def coverage_sentence(%{subject: subject, school_grades: s, state_grades: t}),
     do:
-      "#{subject_name(subject)} All Grades is context only: this school's All Grades covers grades #{grade_list(s)}; North Dakota's covers #{grade_list(t)}."
+      "#{subject_name(subject)} All Grades is context only: this school's All Grades covers #{school_grades(s)}; North Dakota's covers #{grade_list(t)}."
 
   @doc """
   The Engagement Survey benchmark status for the section header:
@@ -714,7 +714,7 @@ defmodule Emisint.NdInsights.StateComparison do
   @doc "The status as a full label (readable without color)."
   def status_label(%{reason: :grade_coverage, detail: d}),
     do:
-      "Context only: grades differ (this school #{grade_list(d.school_grades)}; ND #{grade_list(d.state_grades)})"
+      "Context only: grades differ (this school #{school_grades_short(d.school_grades)}; ND #{grade_list(d.state_grades)})"
 
   def status_label(%{reason: {:survey, _}}),
     do: "Context only: no matching middle-school survey benchmark this year"
@@ -756,7 +756,7 @@ defmodule Emisint.NdInsights.StateComparison do
   def explanation(%{reason: :grade_coverage, detail: d} = c),
     do:
       "Gray, context only: All Grades covers different grades (this school " <>
-        "#{grade_list(d.school_grades)}; North Dakota #{grade_list(d.state_grades)}), so the " <>
+        "#{school_grades_short(d.school_grades)}; North Dakota #{grade_list(d.state_grades)}), so the " <>
         "statewide figure is a different population.#{state_note(c)}"
 
   def explanation(%{reason: {:survey, survey}} = c),
@@ -864,6 +864,14 @@ defmodule Emisint.NdInsights.StateComparison do
 
   defp subject_name("Reading"), do: "ELA (Reading)"
   defp subject_name(subject), do: subject
+
+  # A school that publishes no grade-level rows (e.g. Oberon) has no known
+  # grade coverage; say so instead of "none".
+  defp school_grades([]), do: "grades that Insights doesn't publish by grade"
+  defp school_grades(grades), do: "grades " <> grade_list(grades)
+
+  defp school_grades_short([]), do: "grades not published"
+  defp school_grades_short(grades), do: grade_list(grades)
 
   defp grade_list([]), do: "none"
   defp grade_list(grades), do: Enum.join(grades, ", ")

@@ -17,7 +17,7 @@ defmodule EmisintWeb.Improvement.AdditionalSchoolsLiveTest do
     %{org: org, admin: user!(org, :emo_admin)}
   end
 
-  test "the ND First landing page lists only the configured pilot school", %{
+  test "the ND First landing page lists only the configured pilot schools", %{
     conn: conn,
     admin: admin
   } do
@@ -25,7 +25,7 @@ defmodule EmisintWeb.Improvement.AdditionalSchoolsLiveTest do
 
     assert has_element?(view, "#school-fort-yates-ms", "Ft Yates Public School District")
     assert has_element?(view, "#school-fort-yates-ms", "Grades 5-8")
-    refute has_element?(view, "#school-oberon-elementary")
+    assert has_element?(view, "#school-oberon-elementary", "Oberon Public School District")
     refute has_element?(view, "#school-valley-middle-school")
   end
 
@@ -69,16 +69,15 @@ defmodule EmisintWeb.Improvement.AdditionalSchoolsLiveTest do
 
     # Workbook N/A and scores are imported per school.
     assert has_element?(view, "#rating-G1-M1", "Implementation on Track")
-    assert has_element?(view, "#payment-card", "Awaiting review")
+    assert has_element?(view, "#payment-card", "Not configured")
+    assert has_element?(view, "#payment-card", "Estimated payment — not configured")
+    assert has_element?(view, "#payment-card", "No payment terms are set for this school.")
+    refute has_element?(view, "#payment-card", "Provisional, not an actual payment")
     assert has_element?(view, "#payment-review_36m", "30% / 70%")
     # Only Fort Yates has the provisional allocations; nothing is assumed here.
-    assert has_element?(view, "#payment-terms", "Payment terms are not set")
-
-    assert has_element?(
-             view,
-             "#payment-review_18m-estimate",
-             "Not calculated: payment terms not set"
-           )
+    assert has_element?(view, "#payment-terms", "Not configured")
+    refute render(view) =~ "$35,000"
+    assert has_element?(view, "#payment-review_18m-estimate", "Not configured")
   end
 
   test "Valley shows N/A ratings and qualitative targets as written", %{conn: conn, admin: admin} do

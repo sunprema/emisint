@@ -26,7 +26,7 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
   # An Annual Targets cell: the same comparison as the state tables.
   def goal_comparison(%{match: %{status: :not_published}} = assigns) do
     ~H"""
-    <span class="text-base-content/50 italic">Not yet published</span>
+    <span class="text-base-content/50 italic">{@match[:missing] || "Not yet published"}</span>
     """
   end
 
@@ -67,6 +67,8 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
       assign(assigns,
         compared: StateComparison.for_filters(rows, assigns.benchmark_rows, assigns.filters)
       )
+
+    assigns = assign(assigns, config: ResultGoals.config(assigns.school))
 
     assigns =
       assign(assigns,
@@ -214,7 +216,7 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
       </div>
 
       <div :if={@state.years != []} class="divide-y divide-base-200">
-        <.goal_legend reference={@filters.reference} />
+        <.goal_legend reference={@filters.reference} config={@config} />
 
         <div class="p-4 space-y-2" id="state-achievement">
           <h3 class="font-medium">Achievement · {@filters.year}</h3>
@@ -226,7 +228,17 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
             notes={ResultGoals.section_notes(:achievement, @goals.achievement)}
           />
           <p
-            :if={@filters.type != "Comp" and @metrics != []}
+            :if={@config.section_notes[:achievement]}
+            class="text-xs text-base-content/60"
+            id="achievement-matching-note"
+          >
+            {@config.section_notes[:achievement]}
+          </p>
+          <p
+            :if={
+              @filters.type != "Comp" and @metrics != [] and
+                @config.assumptions[:assessment_type] == "Comp"
+            }
             class="text-xs text-base-content/60"
             id="achievement-type-note"
           >
@@ -237,11 +249,7 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
             class="text-xs text-base-content/60"
             id="achievement-goal-years"
           >
-            The school's annual Proficient-or-Advanced goals start in {Enum.min(
-              @annual_goal_years,
-              fn -> "a later year" end
-            )}, so {@filters.year} results have no annual goal (another year's target is never
-            substituted). Workbook goals are compared with the selected reference target.
+            {ResultGoals.annual_years_note(@annual_goal_years, @filters.year)} Workbook goals are compared with the selected reference target.
           </p>
           <.scroll_hint />
           <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Achievement table">
@@ -383,9 +391,8 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
               </tbody>
             </table>
           </div>
-          <p class="text-xs text-base-content/60">
-            The All Grades overall growth percentile is matched to G2-M3 (ELA) and G3-M3 (Math),
-            in percentiles. The category percentages are a distribution of students, not the
+          <p class="text-xs text-base-content/60" id="growth-matching-note">
+            {@config.section_notes[:growth]} The category percentages are a distribution of students, not the
             school's classification, and have no matching goal; neither does the overall growth
             level, whose level numbers Insights doesn't define.
           </p>
@@ -435,11 +442,12 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
 
           <.survey_participation participation={@survey_participation} />
 
-          <p class="text-xs text-base-content/60">
-            Disengaged is compared with the workbook's survey disengagement targets (G4-M2
-            Emotional, G4-M3 Behavioral, G4-M4 Cognitive); lower is better. G4-M1 counts actively engaged students from
-            classroom observations, a different measure from the survey's Committed, so it isn't
-            matched.
+          <p
+            :if={@config.section_notes[:engagement]}
+            class="text-xs text-base-content/60"
+            id="engagement-matching-note"
+          >
+            {@config.section_notes[:engagement]}
           </p>
         </div>
 
@@ -689,6 +697,7 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
     do: "nd-row-#{r.section}-#{slug(r.subject)}-#{slug(r.grade)}-#{slug(r.measure)}"
 
   attr :reference, :atom, required: true
+  attr :config, :map, required: true, doc: "`ResultGoals.config/1`"
 
   defp goal_legend(assigns) do
     ~H"""
@@ -710,7 +719,7 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
           How results are matched to goals
         </summary>
         <ul class="mt-1 space-y-1">
-          <li :for={text <- ResultGoals.methodology()}>{text}</li>
+          <li :for={text <- ResultGoals.methodology(@config)}>{text}</li>
         </ul>
       </details>
     </div>

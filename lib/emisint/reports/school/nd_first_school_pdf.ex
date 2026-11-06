@@ -63,6 +63,7 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
 
       nd? = params["nd_comparison"] == "1"
       plan = %{school: school, metrics: defs.metrics, annual_goals: defs.annual_goals}
+      config = ResultGoals.config(school)
 
       used = used_files(state.files, filters, cited_years(defs, state.rows))
 
@@ -109,8 +110,8 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
         annual: annual_rows(defs.annual_goals, state.rows),
         state: state_section(state, filters, benchmark, plan),
         nd_comparison: nd_comparison(state, filters, nd? && benchmark),
-        guidance: guidance(),
-        appendix: appendix(compared, nd?),
+        guidance: guidance(Map.put(config, :payment_configured?, defs.payment.terms.configured?)),
+        appendix: appendix(compared, nd?, config),
         sources: sources_used(defs.plan, used, compared, nd?),
         file_inventory: inventory_lines(state.files -- used),
         file_inventory_note: inventory_note(state.files, used)
@@ -132,6 +133,11 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
       label: p.label,
       combined: Payment.combined_text(p.combined),
       terms: Payment.terms_text(p.terms),
+      card_note:
+        if(p.terms.configured?,
+          do: "Provisional, not an actual payment. See “Estimated payment” below.",
+          else: "No payment terms are set for this school. See “Estimated payment” below."
+        ),
       terms_summary: Payment.terms_summary(p.terms),
       formula:
         "Estimate = #{p.formula}, capped at the checkpoint allocation and rounded to cents. Category averages are taken separately before the weights apply. Only formal 18- and 36-month review ratings count: seasonal ratings, targets and actual results never do. Every metric needs a review rating (an explicit 0 counts); otherwise the checkpoint stays “Awaiting review”. Estimates are not actual payments.",
@@ -320,7 +326,7 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
   defp annual_tone(nil), do: "neutral"
 
   @doc "An Annual Targets cell as text."
-  def annual_text(%{status: :not_published}), do: "Not yet published"
+  def annual_text(%{status: :not_published} = m), do: m[:missing] || "Not yet published"
 
   def annual_text(m),
     do: "#{m.value || "Not derivable"} derived · #{ResultGoals.short_label(m)}"
@@ -395,6 +401,7 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
     engagement = SchoolResults.engagement(state.rows, f.year)
     compared = StateComparison.for_filters(state.rows, benchmark, f)
     goals = ResultGoals.for_filters(state.rows, f, plan)
+    config = ResultGoals.config(plan.school)
     goal_years = plan.annual_goals |> Enum.map(& &1.school_year) |> Enum.uniq()
 
     %{
@@ -410,19 +417,26 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
       notes: %{
         achievement:
           ResultGoals.section_notes(:achievement, goals.achievement) ++
-            if(f.type != "Comp" and plan.metrics != [],
+            List.wrap(config.section_notes[:achievement]) ++
+            if(
+              f.type != "Comp" and plan.metrics != [] and
+                config.assumptions[:assessment_type] == "Comp",
               do: [
                 "Workbook targets are compared only in the Combined assessment view (demo assumption)."
               ],
               else: []
             ),
         growth: ResultGoals.section_notes(:growth, goals.growth),
-        engagement: ResultGoals.section_notes(:engagement, goals.engagement)
+        engagement: ResultGoals.section_notes(:engagement, goals.engagement),
+        # Which workbook metrics each table is matched to (the school's own).
+        growth_matching: config.section_notes[:growth] || "",
+        engagement_matching: config.section_notes[:engagement] || ""
       },
       goal_years_note:
         if(goal_years != [] and f.year not in goal_years,
           do:
-            "The school's annual Proficient-or-Advanced goals start in #{Enum.min(goal_years)}, so #{f.year} results have no annual goal (another year's target is never substituted). Workbook goals are compared with the #{ResultGoals.reference_label(f.reference)} as a reference.",
+            ResultGoals.annual_years_note(goal_years, f.year) <>
+              " Workbook goals are compared with the #{ResultGoals.reference_label(f.reference)} as a reference.",
           else: ""
         ),
       achievement:
@@ -655,33 +669,51 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
   defp engagement?(dataset), do: dataset |> to_string() |> String.starts_with?("engagement")
 
   # Short guidance printed after the results; methodology is in the appendix.
-  defp guidance do
+  defp guidance(config) do
     [
       "Goal tables: “Not reported” means no actual result has been submitted for this period; “Not rated” means no implementation rating has been submitted. Neither is zero.",
       "Goal status: green “Meets target” or red “Below target” only at the review whose target is due (18-month target at the 18-Month Review, 36-month target at the 36-Month Review), respecting whether the metric should rise or fall. Seasonal periods have no target due. Ratings use the 0–3 rubric colors.",
-      "Estimated payment — provisional cap and split: only formal 18- and 36-month review ratings count. Target values, actual results and seasonal ratings never produce a payment on their own. The cap and split are provisional; see the appendix.",
+      payment_guidance(config),
       "Official state results are compared with the school's goals through their published low and high values: green “Meets target”, red “Below target” (“Above target” when lower is better), amber “Range overlaps target”. Equal meets. A dashboard comparison rule, not an official ND FIRST scoring method.",
       "Workbook goals are compared with the selected reference target (18- or 36-month) and labeled “Reference comparison against future target” or “Reference comparison — review year unconfirmed”. They never record review results, set ratings or affect the payment estimate.",
-      "Demo assumptions (not verified): workbook achievement targets count the Combined assessment, all students, All Grades; engagement targets count this school's schoolwide survey population. Gray: missing or suppressed values, missing targets, or known incompatible comparisons. No shading: no school goal for that measure.",
+      Enum.join(
+        Enum.reject(
+          [
+            config.assumptions_short,
+            "Gray: missing or suppressed values, missing targets, or known incompatible comparisons. No shading: no school goal for that measure."
+          ],
+          &is_nil/1
+        ),
+        " "
+      ),
       "% tested shows the 95% participation target as a label only; it is not a school goal. North Dakota comparisons appear only in the optional “North Dakota comparison” export.",
-      "Annual goals start in 2025-26: earlier results have no annual goal, and another year's target is never substituted.",
+      config.annual_note,
       "[W] marks values imported from the goal workbook (cell shown); see the appendix."
     ]
+    |> Enum.reject(&is_nil/1)
   end
 
+  defp payment_guidance(%{payment_configured?: false}),
+    do:
+      "Estimated payment — not configured: this school's payment terms are not set, so no estimate is calculated. Only formal 18- and 36-month review ratings would count."
+
+  defp payment_guidance(_config),
+    do:
+      "Estimated payment — provisional cap and split: only formal 18- and 36-month review ratings count. Target values, actual results and seasonal ratings never produce a payment on their own. The cap and split are provisional; see the appendix."
+
   # Detailed methodology, printed as an appendix.
-  defp appendix(compared, nd?) do
-    Enum.map(ResultGoals.methodology(), &("School goals. " <> &1)) ++
+  defp appendix(compared, nd?, config) do
+    Enum.map(ResultGoals.methodology(config), &("School goals. " <> &1)) ++
       [
         "Published values. Values are shown as published: exact, a range (never a midpoint) or suppressed. Proficient or Advanced and Meets or Exceeds add the two published components (derived; not published by the state).",
         "95% participation target. 20 U.S.C. 6311(c)(4)(E)(i) requires measuring at least 95% of all students on the reading/language arts and mathematics assessments; Insights' participation charts note the same 95%. Checked only for ELA and math, Combined assessment, all students, All Grades. A dashboard check of published values, not an official compliance finding."
       ] ++
       nd_methodology(compared, nd?) ++
       [
-        "Annual targets table. Matched to the same year, subject, Combined assessment, all grades and all students, and compared by the same dashboard rule as the state results, so the two always agree. Another year's target is never substituted.",
-        "Growth percentiles. G2-M3 and G3-M3 are Overall Growth Percentiles (decision of October 31, 2026), shown without a percent sign; the workbook's wording, “Percentage of students met state growth expectations”, is kept in the source record. Published ND Insights percentiles are reference only; one becomes a review result only when someone explicitly chooses its school year and saves it. Which assessment year applies to each review has not been established.",
-        "Workbook provenance [W]. Baselines, targets and Spring/Summer '26 ratings were imported from “ND First School MOU Goal Overview.xlsx” (sheet “Ft Yates Goals”); the cell is shown with each value. The workbook does not record who entered each value. Values marked “as written” are shown exactly as in the workbook.",
-        "Still to confirm. G1-M4 and G2-M4 36-month targets: Ft Yates Goals!P7 and P16 hold 90 and 80 in General format while the other targets are decimals (e.g. 0.9), so they are flagged and excluded from calculations. Goal 4's 18-month column (I26) is headed “Target Check” rather than “18-Month Review Rating”.",
+        "Annual targets table. Matched to the same year, subject, Combined assessment, all grades and all students, and compared by the same dashboard rule as the state results, so the two always agree. Another year's target is never substituted."
+      ] ++
+      config.report_notes ++
+      [
         "“Not published” means the state's download has no row for that group. Insights notes: “#{@privacy_note}”"
       ]
   end

@@ -10,6 +10,57 @@ defmodule EmisintWeb.Improvement.Components do
 
   alias Emisint.Improvement.{Percent, Rubric}
 
+  attr :tabs, :list, required: true, doc: "`Emisint.Improvement.Pilot.roster/0`"
+  attr :current, :string, default: nil, doc: "the selected school's slug"
+
+  @doc """
+  The "ND FIRST School Dashboard" heading and one tab per ND First school.
+  Enabled schools link to their own dashboard; the selected one is marked
+  with `aria-current`. Schools not yet implemented are labeled "Coming soon"
+  and link nowhere, so no other school's data is ever shown under them.
+  """
+  def school_tabs(assigns) do
+    ~H"""
+    <div class="space-y-2" id="nd-first-school-tabs">
+      <div class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+        ND FIRST School Dashboard
+      </div>
+      <nav aria-label="ND First schools" class="overflow-x-auto">
+        <ul class="flex gap-1 border-b border-base-200 min-w-max">
+          <li :for={tab <- @tabs}>
+            <.link
+              :if={tab.enabled?}
+              navigate={~p"/school-goals/#{tab.slug}"}
+              id={"nd-tab-#{tab.slug}"}
+              aria-current={if tab.slug == @current, do: "page"}
+              class={[
+                "inline-flex items-center px-3 py-2 text-sm -mb-px border-b-2 whitespace-nowrap",
+                if(tab.slug == @current,
+                  do: "border-primary text-primary font-semibold",
+                  else: "border-transparent text-base-content/70 hover:text-base-content"
+                )
+              ]}
+            >
+              {tab.name}
+            </.link>
+            <span
+              :if={!tab.enabled?}
+              id={"nd-tab-soon-#{tab_id(tab.name)}"}
+              aria-disabled="true"
+              class="inline-flex items-center gap-1.5 px-3 py-2 text-sm -mb-px border-b-2 border-transparent text-base-content/40 whitespace-nowrap cursor-not-allowed"
+            >
+              {tab.name}
+              <span class="badge badge-ghost badge-xs">Coming soon</span>
+            </span>
+          </li>
+        </ul>
+      </nav>
+    </div>
+    """
+  end
+
+  defp tab_id(name), do: name |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
+
   attr :entry, :any, required: true
   attr :metric, :map, required: true
 

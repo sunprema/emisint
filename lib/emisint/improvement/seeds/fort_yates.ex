@@ -40,6 +40,66 @@ defmodule Emisint.Improvement.Seeds.FortYates do
   """
   def plan_start_year, do: "2025-2026"
 
+  @doc """
+  How Fort Yates's workbook metrics are compared with published ND Insights
+  results (`Emisint.Improvement.ResultGoals`), and the wording that explains
+  it on the dashboard and in the PDF.
+
+    * `workbook` — `{metric code, expected performance_measure, section,
+      subject or area, published measure, label}`. A metric is matched only
+      when its stored `performance_measure` is the expected one.
+    * `assumptions` — demo assumptions (November 2, 2026): configurable, not
+      verified facts.
+    * `grade_reference` — grade rows compared with the schoolwide target for
+      reference only (not grade-level goals).
+  """
+  def comparison do
+    %{
+      plan_start_year: plan_start_year(),
+      workbook: [
+        {"G2-M1", :proficient, :achievement, "Reading", "Proficient", "ELA Proficient"},
+        {"G2-M2", :novice, :achievement, "Reading", "Novice", "ELA Novice"},
+        {"G3-M1", :proficient, :achievement, "Math", "Proficient", "Math Proficient"},
+        {"G3-M2", :novice, :achievement, "Math", "Novice", "Math Novice"},
+        {"G2-M3", :growth_percentile, :growth, "ELA", "OverallGrowthPercentile",
+         "ELA growth percentile"},
+        {"G3-M3", :growth_percentile, :growth, "Math", "OverallGrowthPercentile",
+         "Math growth percentile"},
+        {"G4-M2", :other, :engagement, :engagement_emotional, "Disengaged",
+         "Emotional Disengaged"},
+        {"G4-M3", :other, :engagement, :engagement_behavioral, "Disengaged",
+         "Behavioral Disengaged"},
+        {"G4-M4", :other, :engagement, :engagement_cognitive, "Disengaged",
+         "Cognitive Disengaged"}
+      ],
+      assumptions: %{assessment_type: "Comp", engagement_population: :schoolwide},
+      grade_reference: %{
+        grades: ~w(6 7 8),
+        achievement: ~w(Novice Proficient),
+        growth: ~w(OverallGrowthPercentile)
+      },
+      matching:
+        "Proficient alone is matched to the workbook Proficient metrics (G2-M1 ELA, G3-M1 Math); Novice to the Novice metrics (G2-M2, G3-M2; lower is better); Proficient or Advanced (derived) to the annual state-assessment target for the same school year, Combined assessment (the annual goals count NDSA and NDAA together); the Overall growth percentile to G2-M3 (ELA) and G3-M3 (Math), in percentiles. Schoolwide results (All Grades, all students) are matched to the schoolwide goals. Eligible grade-level results (grades 6–8, all students: Achievement Novice and Proficient, Combined assessment; Growth, the overall growth percentile) are compared with those same schoolwide targets for reference; these are not separate grade-level goals. Student groups are not matched, and other measures have no school goal.",
+      assumptions_text:
+        "Demo assumptions (configurable, not verified facts; Fort Yates reference comparisons only). The workbook's Proficient and Novice targets are assumed to count the Combined assessment, all students, All Grades, so Standard and Alternate views get no workbook verdict. Its disengagement targets (G4-M2 Emotional, G4-M3 Behavioral, G4-M4 Cognitive) are assumed to count this school's schoolwide survey population. G4-M1 (active engagement from classroom observations) is a different measure from the survey's Committed and is not matched.",
+      assumptions_short:
+        "Demo assumptions (not verified): workbook achievement targets count the Combined assessment, all students, All Grades; engagement targets count this school's schoolwide survey population.",
+      section_notes: %{
+        growth:
+          "The All Grades overall growth percentile is matched to G2-M3 (ELA) and G3-M3 (Math), in percentiles.",
+        engagement:
+          "Disengaged is compared with the workbook's survey disengagement targets (G4-M2 Emotional, G4-M3 Behavioral, G4-M4 Cognitive); lower is better. G4-M1 counts actively engaged students from classroom observations, a different measure from the survey's Committed, so it isn't matched."
+      },
+      annual_note:
+        "Annual goals start in 2025-26: earlier results have no annual goal, and another year's target is never substituted.",
+      report_notes: [
+        "Growth percentiles. G2-M3 and G3-M3 are Overall Growth Percentiles (decision of October 31, 2026), shown without a percent sign; the workbook's wording, “Percentage of students met state growth expectations”, is kept in the source record. Published ND Insights percentiles are reference only; one becomes a review result only when someone explicitly chooses its school year and saves it. Which assessment year applies to each review has not been established.",
+        "Workbook provenance [W]. Baselines, targets and Spring/Summer '26 ratings were imported from “ND First School MOU Goal Overview.xlsx” (sheet “Ft Yates Goals”); the cell is shown with each value. The workbook does not record who entered each value. Values marked “as written” are shown exactly as in the workbook.",
+        "Still to confirm. G1-M4 and G2-M4 36-month targets: Ft Yates Goals!P7 and P16 hold 90 and 80 in General format while the other targets are decimals (e.g. 0.9), so they are flagged and excluded from calculations. Goal 4's 18-month column (I26) is headed “Target Check” rather than “18-Month Review Rating”."
+      ]
+    }
+  end
+
   def school do
     %{
       name: "Fort Yates Middle School",

@@ -62,6 +62,8 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
            match?(%{role: :system_admin}, scope.current_user) and
              Emisint.Improvement.Pilot.pilot?(school),
          editing: nil,
+         comparison: ResultGoals.config(school),
+         tabs: Emisint.Improvement.Pilot.roster(),
          state: load_state(scope, school)
        )}
     else
@@ -393,13 +395,8 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+        <.school_tabs tabs={@tabs} current={@school.slug} />
         <div>
-          <.link
-            navigate={~p"/school-goals"}
-            class="text-sm text-base-content/50 hover:text-base-content flex items-center gap-1 mb-3"
-          >
-            <.icon name="hero-arrow-left" class="size-4" /> ND First
-          </.link>
           <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
               <h1 class="text-2xl font-bold">{@school.name}</h1>
@@ -497,7 +494,10 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
               {Payment.combined_text(@defs.payment.combined)}
             </div>
             <div class="text-xs text-base-content/50">
-              Provisional, not an actual payment. <a href="#payment" class="link">Details</a>
+              {if @defs.payment.terms.configured?,
+                do: "Provisional, not an actual payment.",
+                else: "No payment terms are set for this school."}
+              <a href="#payment" class="link">Details</a>
             </div>
           </div>
         </div>
@@ -674,10 +674,19 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
             <h2 class="font-semibold">Annual state assessment goals</h2>
             <p class="text-sm text-base-content/60 mt-1">
               Percentage of tested students scoring <strong>Proficient or Advanced</strong>
-              on the state assessment, including the alternate assessment. This is a different
-              measure from the workbook's “Proficient” metrics above. A published result is
+              on the state assessment, including the alternate assessment.<span :if={
+                workbook_proficient_alone?(@comparison)
+              }> This is a different
+              measure from the workbook's “Proficient” metrics above.</span> A published result is
               shown only for the same school year, all grades, all students and the combined
               assessment.
+            </p>
+            <p
+              :if={@comparison.annual_note}
+              class="text-xs text-base-content/60 mt-1"
+              id="annual-goal-period"
+            >
+              {@comparison.annual_note}
             </p>
             <p class="text-xs text-base-content/60 mt-1" id="annual-color-key">
               Compared with the same school year's published result by the same rule as the
@@ -959,6 +968,12 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
   defp published_text(%{value_state: :suppressed}), do: "Suppressed"
 
   defp review?(period), do: GrowthPercentile.review_period?(period)
+
+  # Fort Yates's workbook tracks "Proficient" alone, a different measure from
+  # the annual Proficient-or-Advanced goals; Oberon's tracks Proficient &
+  # Advanced.
+  defp workbook_proficient_alone?(comparison),
+    do: Enum.any?(comparison.workbook, &match?({_, _, :achievement, _, "Proficient", _}, &1))
 
   defp error_text(%{errors: errors}) when is_list(errors),
     do: Enum.map_join(errors, "; ", &Exception.message/1)

@@ -57,10 +57,15 @@ defmodule Emisint.Improvement.Payment do
   }
 
   @label "Estimated payment — provisional cap and split"
+  @unconfigured_label "Estimated payment — not configured"
   @formula "checkpoint allocation × weighted review score ÷ 3 (weighted score = Systems average × Systems weight + Student Outcome average × Student Outcome weight)"
 
   @doc "The label used for every estimated amount."
   def label, do: @label
+
+  @doc "The payment heading for a plan's terms: \"not configured\" when no split is set."
+  def label(%{configured?: false}), do: @unconfigured_label
+  def label(_terms), do: @label
 
   @doc "The formula, as text."
   def formula, do: @formula
@@ -121,7 +126,7 @@ defmodule Emisint.Improvement.Payment do
       )
 
     %{
-      label: @label,
+      label: label(terms),
       formula: @formula,
       terms: terms,
       checkpoints: checkpoints,
@@ -220,6 +225,9 @@ defmodule Emisint.Improvement.Payment do
     subtotal = Enum.reduce(done, Decimal.new(0), &Decimal.add(&1.estimate, &2))
 
     cond do
+      checkpoints != [] and Enum.all?(checkpoints, &(&1.status == :no_terms)) ->
+        %{status: :not_configured, amount: nil, included: []}
+
       checkpoints != [] and length(done) == length(checkpoints) ->
         %{status: :complete, amount: subtotal, included: Enum.map(done, & &1.label)}
 
@@ -235,7 +243,8 @@ defmodule Emisint.Improvement.Payment do
 
   @doc "The terms as one sentence, stating that they are not confirmed."
   def terms_text(%{configured?: false}),
-    do: "Payment terms are not set, so no estimate is calculated."
+    do:
+      "Not configured: this school's payment terms (the allocation for each checkpoint) are not set, so no estimate is calculated."
 
   def terms_text(%{status: :confirmed} = t),
     do: "#{money(t.cap)} total: #{allocations_text(t)} (confirmed terms)."
@@ -276,7 +285,7 @@ defmodule Emisint.Improvement.Payment do
 
   @doc "A checkpoint's status line, e.g. \"Awaiting review: 18 of 18 ratings missing\"."
   def status_text(%{status: :estimated, estimate: e}), do: money(e)
-  def status_text(%{status: :no_terms}), do: "Not calculated: payment terms not set"
+  def status_text(%{status: :no_terms}), do: "Not configured"
 
   def status_text(%{status: :awaiting_review, missing: missing, not_scored: not_scored}) do
     parts =
@@ -301,6 +310,7 @@ defmodule Emisint.Improvement.Payment do
     do: "Subtotal #{money(a)} (#{label} only); the total awaits the other review"
 
   def combined_text(%{status: :awaiting_review}), do: "Awaiting review"
+  def combined_text(%{status: :not_configured}), do: "Not configured"
 
   @doc "A decimal amount as dollars and cents, e.g. \"$24,500.00\"."
   def money(nil), do: "—"

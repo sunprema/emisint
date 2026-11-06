@@ -52,6 +52,12 @@ defmodule Emisint.Improvement.Seeds do
   @doc "Every verified school definition module, including those deferred for expansion."
   def available_schools, do: @available_schools
 
+  @doc "The school definition module for a verified ND InstitutionID, or nil."
+  def module_for(institution_id) when is_binary(institution_id),
+    do: Enum.find(@available_schools, &(&1.school().state_entity_id == institution_id))
+
+  def module_for(_institution_id), do: nil
+
   @dev_org_slug "nd-first-pilot-dev"
   @dev_org_name "ND First Pilot — Development"
   @dev_password "nd-first-dev-password"

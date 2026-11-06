@@ -720,6 +720,79 @@ Supersedes the "Gray: assessment type unconfirmed" and "Gray: survey population 
   - The Achievement and Growth column widths were rebalanced toward the goal columns. Rows are still unsplittable.
 - **Unchanged:** targets, matching, colors, ratings, payment amounts, weights, formulas and stored data.
 
+### Expansion: source audit and Oberon (November 4, 2026; branch `nd-first-dashboard`)
+
+Scope: Drayton, Dunseith, Mandaree, Oberon, Valley Middle School and Warwick, one school at a time. Oberon is implemented; the others are audited only and shown as "Coming soon". Cannon Ball is deferred.
+
+**Sources checked.**
+- **Goals workbook:** the Google Sheet (exported November 4) matches the local `references/ND First School MOU Goal Overview.xlsx` cell for cell on every school sheet. Only "Example School" (G4, G7) and "Evidence Tracker" differ.
+- **Annual goals document:** the Google Doc export returned 401 (not shared publicly), so `references/North Dakota - ND First Schools.pdf` (31 pages) was used.
+- **ND Insights statewide CSVs** in `references/nd_insights/` (17 files, 2021-22 to 2024-25 plus the Engagement files). No new downloads were needed for Oberon.
+
+| School (workbook tab) | Verified building ID(s) in Insights | Grades published in Insights | Workbook sheet | PDF annual targets | Gaps before implementation |
+|---|---|---|---|---|---|
+| **Oberon** (`Oberon Goals`) | 0301662261 Oberon Elementary | All Grades only (no grade rows); performance 2021-22–2023-24, none for 2024-25; growth 2021-22–2023-24; participation 2021-22–2024-25; engagement 2018-19–2024-25 | 4 goals, 21 metrics (9 Systems, 12 Student Outcome) | p.23: historical goal period 2018-19–2023-24 only | See "Oberon open items" |
+| **Drayton** (`Drayton Goals`) | 3401919281 Drayton Elementary; 3401919283 Drayton High School | Elementary 3–8 (growth 4–8); High School 10 | 5 goals, 13 metrics, written for "Drayton Public School(s)" (district) | p.7–10: 2025-26–2030-31 | Which building(s) each metric covers; targets like "< 10%", "> 2", "Not monitored" / "Monitored" |
+| **Dunseith** (`Dunseith Goals`) | 4000119681 Dunseith Elementary; 4000119663 Dunseith High School | Elementary 3–8 (growth 4–8); High School 10 | 6 goals, 16 metrics, written for "Dunseith Public Schools" | p.12–16: 2025-26–2030-31 (PDF says it "assume[s] the same six-year sequence") | Campus split (H5/H10 read "50% K-6; 100% 7-12"); text targets ("70% @ Level 2+", "n/a", "< 1.7") |
+| **Mandaree** (`Mandaree Goals`) | 2703654591 Mandaree Elementary; 2703654593 Mandaree High School | Elementary 3–8 (growth 4–8); High School 10 | 6 goals, only 6 metrics (one per goal); Goal 1 names grades 3–10 | p.19–22: 2025-26–2030-31 | Grades 3–10 span two buildings; text targets ("< 2.4", "> 50%") |
+| **Valley Middle School** (`Valley Goals`) | 1800189752 Valley Middle School | 6–8 | 7 goals, 26 metrics; already seeded (dev DB) | p.25–26: 2025-26–2030-31 | 43 non-numeric baselines/targets ("> 50%", "< 22% or within 7% State Avg", "n/a"); Measure 1 and English Learner targets not stored (earlier note) |
+| **Warwick** (`Warwick Goals`) | 0302992191 Warwick Elementary; 0302992192 Warwick Middle School; 0302992193 Warwick High School | Elementary 3–4; Middle 5–8; High School 10 | 5 goals, 25 metrics, written for "Warwick School" | p.27–30: 2025-26–2030-31 | Three buildings; relative targets ("Dec 2-3%", "Inc 4-6%", "Another core") need a baseline-year rule |
+
+Every school's payment row ("Performance-Based Payment" rows 3–11) uses the same 70%/30% formula and "up to $70,000" header. Only Fort Yates has provisional allocations; nothing is assumed for the others.
+
+**Shared school tabs.**
+- `Emisint.Improvement.Pilot.roster/0` lists the tabs in this order: Fort Yates, Oberon, Drayton, Dunseith, Mandaree, Valley Middle School, Warwick.
+- A tab is enabled only for a configured pilot InstitutionID (`config :emisint, :nd_first, pilot_institution_ids: ["4300429212", "0301662261"]`).
+- `EmisintWeb.Improvement.Components.school_tabs/1` renders "ND FIRST School Dashboard" with one tab per school on the landing page and on every school dashboard.
+- The selected tab has `aria-current="page"`. Each enabled school links to its own URL (`/school-goals/:slug`).
+- Disabled tabs are plain text with a "Coming soon" badge. They have no link and show no data. Valley is labeled "Coming soon" even though its definitions are seeded.
+
+**Per-school comparison configuration.**
+- `ResultGoals.config/1` reads each school's `comparison/0` from its definition module, found by InstitutionID through `Seeds.module_for/1`. That config holds the metric mapping, assumptions, grade references, plan start year and wording.
+- Fort Yates's mapping, demo assumptions, grades 6–8 references and texts moved unchanged into `Seeds.FortYates.comparison/0`.
+- A school without a definition module gets no workbook match and no notes.
+- Two new gray reasons:
+  - `:target_is_range`: a target written as a range, e.g. "55-60%". The workbook doesn't define when a range target is met.
+  - A derived Proficient-or-Advanced value that can't be derived.
+- Annual targets with no matching result now say "Not yet published" (no later results imported) or "No result imported" (an earlier year whose download isn't on file).
+
+**Oberon implementation** (`Seeds.Oberon.comparison/0`).
+- **Metric mapping**, from Oberon's own wording, guarded by the exact workbook text because Oberon's metrics are stored with `performance_measure: :other`:
+  - G1-M1 / G2-M1 "Proficient & Advanced" → derived Proficient or Advanced (ELA / Math).
+  - G1-M2 / G2-M2 → Novice (lower is better).
+  - G4-M1 / G4-M2 / G4-M3 → Emotional Committed / Compliant / Disengaged (Disengaged lower is better).
+  - Not matched (no ND Insights counterpart): Goal 3 attendance, G4-M4 referrals and the Systems metrics. Oberon has no growth metric.
+- **No assumptions.**
+  - The workbook doesn't name the assessment behind its achievement targets, and its baselines don't match Insights (ELA Novice baseline 36% vs 50%–79% published), so workbook achievement cells are gray: "assessment type unconfirmed".
+  - Engagement targets are ranges, so they are gray: "target is a range".
+  - No grade-level references, since Insights publishes none for Oberon.
+- **Annual targets:** PDF p.23's historical goal period, 2018-19–2023-24. 2021-22 to 2023-24 are compared with their own year's published derived values (all overlap). 2018-19 to 2020-21 read "No result imported". Where a same-year annual target exists it takes the Proficient-or-Advanced cell; otherwise the workbook's G1-M1 / G2-M1 target does.
+- **Payment:** the plan has a $70,000 cap but no checkpoint allocations (`payment_terms_status: unconfirmed`). The card, table, details and PDF read "Estimated payment — not configured" / "Not configured". No Fort Yates split is copied.
+- **Imports:** `mix nd_insights.import --institution-id 0301662261 references/nd_insights/*.csv` created 232 Oberon measures (280 in total with the 48 already stored), with 0 conflicts. A second run created 0 and left 280 unchanged. The school import page `/school-goals/oberon-elementary/import` is locked to Oberon.
+- **Unchanged:** Oberon's existing goals, metrics, ratings and provenance in the dev database (the seed is drift-safe and was not re-run).
+- **No schema changes, migrations or code generation.**
+
+**Oberon open items (not guessed).**
+1. The assessment type (Combined, Standard or Alternate) and the source and year behind the G1-M1, G1-M2, G2-M1 and G2-M2 baselines.
+2. A rule for range targets (G3-M2, G4-M1 to G4-M3): does "55-60%" mean the lower bound, the whole range, or the band the published range must fall in?
+3. G4-M7's 18- and 36-month targets: the cells hold the date February 3, probably "2-3" converted by the spreadsheet.
+4. G1-M3 and G1-M4 have no baseline.
+5. The grade span isn't stated in the sources.
+6. Annual targets for 2024-25 and later. The PDF shows only the historical period.
+7. Payment allocations per checkpoint.
+8. No 2024-25 performance or growth rows are published for Oberon; the cause (suppression, or no tested students) isn't stated.
+
+**Verification.**
+- Headless Chrome: Oberon at both checkpoints, 2023-24 and 2024-25; Fort Yates at 18 months; Oberon at phone width (no page overflow).
+- Every page of three Oberon PDFs was inspected: 2024-25 default (6 pages), 2023-24 at 36 months (6) and 2023-24 with the ND comparison (9). Fort Yates's PDF is still 7 pages.
+- Text scans of the Oberon PDFs found no "Ft Yates", Fort Yates, $35,000, G2-M3 or Fort Yates assumption text.
+- Fixed while checking: the ND comparison said a school with no grade rows "covers grades none". It now reads "grades not published".
+- Tests:
+  - `oberon_result_goals_test.exs` (13): mapping, no assumptions, both checkpoints, annual precedence, range targets, wording.
+  - `oberon_live_test.exs` (9): tabs, switching, comparisons at both checkpoints, annual targets, update and history scoping, membership and organization isolation, PDF data, locked import and repeat import.
+  - Updated: `additional_schools_live_test.exs` (Oberon is now listed; payment "Not configured") and `payment_estimate_test.exs`.
+- Full suite 382/539. The 157 failures are the legacy set exactly; none are new.
+
 ### Phase 3: 18-month review + payment
 
 - [x] **17.** Formal review ratings: `ImplementationRating.:record_review` (review periods only; contributor policy, `RatingShape` validation and `:correct` history shared with seasonal ratings). No separate `ReviewRating` resource; the `:reviewer` membership role is still unused.
@@ -728,7 +801,7 @@ Supersedes the "Gray: assessment type unconfirmed" and "Gray: survey population 
 
 ### Phase 4: expansion (deferred until the Fort Yates experience is approved)
 
-- [ ] **20.** Decide how to model multi-building participants, resolve the open items, then add Cannon Ball, Drayton, Dunseith, Mandaree, Oberon, Valley Middle School and Warwick from their own sheets and goals.
+- [ ] **20.** Decide how to model multi-building participants, resolve the open items, then add Drayton, Dunseith, Mandaree, Valley Middle School and Warwick from their own sheets and goals (Oberon done November 4, 2026, pending review; Cannon Ball deferred). See "Expansion: source audit and Oberon".
 - [ ] **21.** `PortfolioLive` (`/nd-first`).
 
 ---

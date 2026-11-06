@@ -6,6 +6,8 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
   """
   use EmisintWeb, :live_view
 
+  import EmisintWeb.Improvement.Components, only: [school_tabs: 1]
+
   alias Emisint.Improvement.{Dashboard, Pilot}
 
   @impl true
@@ -13,6 +15,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
     {:ok,
      assign(socket,
        page_title: "ND First",
+       tabs: Pilot.roster(),
        schools:
          Dashboard.list_schools(socket.assigns.scope, institution_ids: Pilot.institution_ids())
      )}
@@ -23,6 +26,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
+        <.school_tabs tabs={@tabs} />
         <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
           <div>
             <h1 class="text-2xl font-bold">ND First</h1>

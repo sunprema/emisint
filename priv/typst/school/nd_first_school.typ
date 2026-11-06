@@ -185,7 +185,7 @@
     stroke: 0.5pt + c-border,
     width: 100%,
     [#th(d.payment.label) \ #text(size: 11pt, weight: "bold", d.payment.combined) \
-      #note("Provisional, not an actual payment. See “Estimated payment” below.")],
+      #note(d.payment.card_note)],
   ),
 )
 
@@ -276,7 +276,7 @@
     ))
   }
 
-  #let growth-head = lead([*Growth*], (if d.state.notes.growth.len() > 0 { (d.state.notes.growth.join(" "),) } else { () }) + ("The All Grades overall growth percentile is matched to G2-M3 (ELA) and G3-M3 (Math), in percentiles; the other growth measures have no matching goal.",))
+  #let growth-head = lead([*Growth*], (if d.state.notes.growth.len() > 0 { (d.state.notes.growth.join(" "),) } else { () }) + ((d.state.notes.growth_matching + " The other growth measures have no matching goal.").trim(),))
   #if d.state.growth.len() == 0 [ #growth-head #note(d.state.growth_empty) ] else {
     kept-table(growth-head, d.state.growth, rows => data-table(
       columns: (0.55fr, 0.7fr, 0.75fr, 0.8fr, 0.7fr, 0.7fr, 0.85fr, 0.6fr, 1.45fr),
@@ -285,7 +285,7 @@
     ))
   }
 
-  #let engagement-head = lead([*Student Engagement Survey* (all students)], (if d.state.notes.engagement.len() > 0 { (d.state.notes.engagement.join(" "),) } else { () }) + ("Disengaged is compared with the workbook's survey disengagement targets (lower is better). G4-M1 (observed active engagement) is a different measure from the survey's Committed and isn't matched.",))
+  #let engagement-head = lead([*Student Engagement Survey* (all students)], (if d.state.notes.engagement.len() > 0 { (d.state.notes.engagement.join(" "),) } else { () }) + (if d.state.notes.engagement_matching != "" { (d.state.notes.engagement_matching,) } else { () }))
   #if d.state.engagement.len() == 0 [ #engagement-head #note(d.state.engagement_empty) ] else {
     kept-table(engagement-head, d.state.engagement, rows => data-table(
       columns: (1.2fr, 1fr, 1fr, 1fr),

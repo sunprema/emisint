@@ -189,8 +189,10 @@ defmodule Emisint.Improvement.PaymentEstimateTest do
         Payment.summary(no_terms, @metrics, %{review_18m: ratings(Map.new(@metrics, &{&1.id, 3}))})
 
       assert Enum.all?(summary.checkpoints, &(&1.status == :no_terms))
-      assert summary.combined.status == :awaiting_review
-      assert Payment.terms_text(summary.terms) =~ "not set"
+      assert summary.combined.status == :not_configured
+      assert Payment.combined_text(summary.combined) == "Not configured"
+      assert summary.label == "Estimated payment — not configured"
+      assert Payment.terms_text(summary.terms) =~ "Not configured"
     end
 
     test "provisional terms are worded as a working assumption, not contract terms" do

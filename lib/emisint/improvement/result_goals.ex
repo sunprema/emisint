@@ -11,34 +11,37 @@ defmodule Emisint.Improvement.ResultGoals do
   (`GoalStatus`, `FromNdInsights`, `Payment`).
 
   **Which goal a published value matches.** Only an explicit correspondence
-  is used; nothing is inferred from similar wording:
+  is used; nothing is inferred from similar wording. Each school's own
+  definition module declares it (`comparison/0`, found by InstitutionID
+  through `Seeds.module_for/1`; see `config/1`), so one school's metric
+  codes, grade rules or assumptions never apply to another:
 
-    * Proficient alone → the workbook Proficient metrics (G2-M1 ELA, G3-M1 Math).
-    * Novice → the workbook Novice metrics (G2-M2, G3-M2); lower is better.
-    * Proficient or Advanced (derived) → the annual state-assessment target
-      for the same school year (`AnnualAssessmentGoal`); never another year's.
-    * Overall growth percentile → G2-M3 (ELA) / G3-M3 (Math), in percentiles.
-    * Engagement Disengaged by domain → G4-M2 (Emotional), G4-M3
-      (Behavioral), G4-M4 (Cognitive). G4-M1 ("actively engaged based on
-      current observations") is never matched to survey "Committed".
+    * Fort Yates (`Seeds.FortYates`): Proficient alone → G2-M1 / G3-M1;
+      Novice → G2-M2 / G3-M2; Overall growth percentile → G2-M3 / G3-M3;
+      Disengaged by domain → G4-M2 / G4-M3 / G4-M4.
+    * Oberon (`Seeds.Oberon`): Proficient or Advanced (derived) → G1-M1 /
+      G2-M1; Novice → G1-M2 / G2-M2; Emotional Committed, Compliant and
+      Disengaged → G4-M1 / G4-M2 / G4-M3.
+    * Proficient or Advanced (derived) → also the annual state-assessment
+      target for the same school year (`AnnualAssessmentGoal`); never another
+      year's. Where both exist, the annual comparison is shown.
 
-  Workbook goals are Fort Yates targets (`Seeds.FortYates`) and match only
-  that school. Every goal is schoolwide: the All Grades row for all students
-  is matched to it. Eligible grade-level Achievement and Growth rows (grades
-  6–8, all students) are compared with the same schoolwide target for
-  reference (`:grade_reference`); they are not separate grade-level goals.
-  Student groups are never matched.
+  A school without a definition module gets no workbook match. Every goal is
+  schoolwide: the All Grades row for all students is matched to it. A school
+  may also compare eligible grade-level rows with the same schoolwide target
+  for reference (`grade_reference`; Fort Yates: grades 6–8, all students);
+  these are not separate grade-level goals. Student groups are never matched.
 
   **Reference checkpoint.** A workbook value is compared with the selected
   checkpoint's target (`:reference`, `:review_18m` or `:review_36m`). Which
   assessment year counts for each review isn't established (PLAN item 27),
   so the comparison is labeled as a reference: "against future target" for
-  a result from before the plan began (`FortYates.plan_start_year/0`),
+  a result from before the plan began (the school's `plan_start_year`),
   otherwise "review year unconfirmed". With an established review year
   (`:established` option) a result from that year is a same-year comparison.
 
-  **Demo assumptions** (`demo_assumptions/0`, Fort Yates reference
-  comparisons only; configurable, not verified facts): the workbook's
+  **Demo assumptions** (each school's `assumptions`; `demo_assumptions/0`
+  is Fort Yates's, configurable, not verified facts): the workbook's
   achievement targets apply to the Combined assessment, all students, All
   Grades, so Standard and Alternate views get no workbook verdict; its
   engagement targets apply to the school's schoolwide survey population.
@@ -57,41 +60,30 @@ defmodule Emisint.Improvement.ResultGoals do
   reasons, timing, tone}` with `status` `:meets | :misses | :overlaps | :gray`.
   """
 
-  alias Emisint.Improvement.{Display, Percent}
+  alias Emisint.Improvement.{Display, Percent, Seeds}
   alias Emisint.Improvement.Seeds.FortYates
   alias Emisint.NdInsights.SchoolResults
 
   @established %{review_years: %{}, assessment_type: nil}
 
-  # Demo assumptions for Fort Yates reference comparisons (November 2, 2026):
-  # configurable, not verified facts. See PLAN_nd_first.md.
-  @demo_assumptions %{assessment_type: "Comp", engagement_population: :schoolwide}
+  # A school without a definition module: no workbook matches, no assumptions.
+  @no_comparison %{
+    plan_start_year: nil,
+    workbook: [],
+    assumptions: %{},
+    grade_reference: nil,
+    matching: nil,
+    assumptions_text: nil,
+    assumptions_short: nil,
+    section_notes: %{},
+    annual_note: nil,
+    report_notes: []
+  }
 
   @not_official "A dashboard comparison rule, not an official ND FIRST scoring method; it doesn't record a review result, set a rating or affect the payment estimate."
 
-  # {metric code, expected performance_measure, section, subject or area, measure, label}
-  @workbook [
-    {"G2-M1", :proficient, :achievement, "Reading", "Proficient", "ELA Proficient"},
-    {"G2-M2", :novice, :achievement, "Reading", "Novice", "ELA Novice"},
-    {"G3-M1", :proficient, :achievement, "Math", "Proficient", "Math Proficient"},
-    {"G3-M2", :novice, :achievement, "Math", "Novice", "Math Novice"},
-    {"G2-M3", :growth_percentile, :growth, "ELA", "OverallGrowthPercentile",
-     "ELA growth percentile"},
-    {"G3-M3", :growth_percentile, :growth, "Math", "OverallGrowthPercentile",
-     "Math growth percentile"},
-    {"G4-M2", :other, :engagement, :engagement_emotional, "Disengaged", "Emotional Disengaged"},
-    {"G4-M3", :other, :engagement, :engagement_behavioral, "Disengaged", "Behavioral Disengaged"},
-    {"G4-M4", :other, :engagement, :engagement_cognitive, "Disengaged", "Cognitive Disengaged"}
-  ]
-
   @grade_note "Grade-level colors compare each grade’s results with the schoolwide target for reference. These are not separate grade-level goals."
   @growth_grade_note "Grade-level colors compare each grade’s growth percentile with the schoolwide target for reference. These are not separate grade-level goals."
-
-  @reference_grades ~w(6 7 8)
-  @grade_reference_measures %{
-    achievement: ~w(Novice Proficient),
-    growth: ~w(OverallGrowthPercentile)
-  }
 
   @checkpoints %{
     review_18m: {:target_18m, "18-month target"},
@@ -107,7 +99,26 @@ defmodule Emisint.Improvement.ResultGoals do
   and `engagement_population` (`:schoolwide`: the engagement targets count
   the school's own survey population). Configurable, not verified.
   """
-  def demo_assumptions, do: @demo_assumptions
+  def demo_assumptions, do: FortYates.comparison().assumptions
+
+  @doc """
+  A school's comparison configuration (its definition module's
+  `comparison/0`, found by InstitutionID), or an empty one: no workbook
+  matches, no assumptions and no notes.
+  """
+  def config(%{state_entity_id: id}) do
+    case Seeds.module_for(id) do
+      nil ->
+        @no_comparison
+
+      module ->
+        if function_exported?(module, :comparison, 0),
+          do: Map.merge(@no_comparison, module.comparison()),
+          else: @no_comparison
+    end
+  end
+
+  def config(_school), do: @no_comparison
 
   @doc "The selectable reference checkpoints, as `[{param, checkpoint, label}]`."
   def references,
@@ -135,11 +146,12 @@ defmodule Emisint.Improvement.ResultGoals do
 
   `plan` is `%{school, metrics, annual_goals}`. Option `:established`
   (default `established/0`) gives `review_years` and the workbook
-  `assessment_type`.
+  `assessment_type`; option `:assumptions` replaces the school's own.
   """
   def for_filters(rows, %{year: year, type: type, subgroup: subgroup} = f, plan, opts \\ []) do
+    config = config(plan.school)
     established = Map.merge(@established, Map.new(Keyword.get(opts, :established, %{})))
-    assumptions = Map.new(Keyword.get(opts, :assumptions, @demo_assumptions))
+    assumptions = Map.new(Keyword.get(opts, :assumptions, config.assumptions))
 
     ctx = %{
       year: year,
@@ -149,10 +161,12 @@ defmodule Emisint.Improvement.ResultGoals do
       established: established,
       assessment_type: established.assessment_type || assumptions[:assessment_type],
       assumed_type?: established.assessment_type == nil and assumptions[:assessment_type] != nil,
-      population: assumptions[:engagement_population]
+      population: assumptions[:engagement_population],
+      plan_start_year: config.plan_start_year,
+      grade_reference: config.grade_reference
     }
 
-    workbook = workbook(plan)
+    workbook = workbook(plan, config)
 
     %{
       achievement:
@@ -181,36 +195,36 @@ defmodule Emisint.Improvement.ResultGoals do
     }
   end
 
-  # The plan's metrics that have an explicit published counterpart.
-  defp workbook(%{school: %{state_entity_id: id}, metrics: metrics}) do
-    if id == FortYates.school().state_entity_id do
-      by_code = Map.new(metrics, &{&1.code, &1})
+  # The plan's metrics that have an explicit published counterpart in the
+  # school's own configuration. A metric is used only when it is still the
+  # expected one: its stored `performance_measure` (an atom) or its exact
+  # workbook wording (a string).
+  defp workbook(%{metrics: metrics}, config) do
+    by_code = Map.new(metrics, &{&1.code, &1})
 
-      for {code, measure, section, key, published, label} <- @workbook,
-          metric = by_code[code],
-          metric != nil and metric.performance_measure == measure,
-          do: %{metric: metric, section: section, key: key, measure: published, label: label}
-    else
-      []
-    end
+    for {code, expected, section, key, published, label} <- config.workbook,
+        metric = by_code[code],
+        metric != nil and expected?(metric, expected),
+        do: %{metric: metric, section: section, key: key, measure: published, label: label}
   end
 
-  defp workbook(_plan), do: []
+  defp expected?(metric, measure) when is_atom(measure), do: metric.performance_measure == measure
+  defp expected?(metric, wording) when is_binary(wording), do: metric.description == wording
 
   defp workbook_matches(workbook, section, row, key, ctx) do
     cond do
       schoolwide?(row, ctx) and type_matches?(section, ctx) ->
         for w <- workbook, w.section == section, w.key == key, into: %{} do
-          {w.measure, workbook_match(w, row.levels[w.measure], section, ctx)}
+          {w.measure, workbook_match(w, published(row, w.measure), section, ctx)}
         end
 
       grade_reference?(section, row, ctx) ->
         for w <- workbook,
             w.section == section,
             w.key == key,
-            w.measure in @grade_reference_measures[section],
+            w.measure in Map.get(ctx.grade_reference, section, []),
             into: %{} do
-          match = workbook_match(w, row.levels[w.measure], section, ctx)
+          match = workbook_match(w, published(row, w.measure), section, ctx)
           {w.measure, Map.merge(match, %{kind: :grade_reference, grade: row.grade})}
         end
 
@@ -219,20 +233,35 @@ defmodule Emisint.Improvement.ResultGoals do
     end
   end
 
-  # Grade rows 6–8, all students, are compared with the schoolwide workbook
-  # target for reference only; they are not grade-level goals. Achievement:
-  # ELA and Math Novice and Proficient alone, under the Combined-assessment
-  # assumption. Growth: the overall growth percentile (the growth download
-  # has no assessment type, so none is required). Subgroups, other measures
-  # and other schools get none.
+  # The published value for a workbook measure: a level row, or the derived
+  # Proficient-or-Advanced interval (as published bounds, never a midpoint).
+  defp published(row, :proficient_or_advanced) do
+    case Map.get(row, :proficient_or_advanced) do
+      {:ok, low, high} when low == high -> %{value_state: :exact, value: low}
+      {:ok, low, high} -> %{value_state: :range, range_low: low, range_high: high}
+      {:not_derivable, _reason} -> :not_derivable
+      _ -> nil
+    end
+  end
+
+  defp published(row, measure), do: row.levels[measure]
+
+  # Grade rows in the school's `grade_reference` grades, all students, are
+  # compared with the schoolwide workbook target for reference only; they
+  # are not grade-level goals. Achievement: ELA and Math, under the school's
+  # assessment-type assumption. Growth: the growth download has no
+  # assessment type, so none is required. Subgroups, other measures and
+  # schools without `grade_reference` get none.
+  defp grade_reference?(_section, _row, %{grade_reference: nil}), do: false
+
   defp grade_reference?(:achievement, row, ctx),
     do:
-      row.grade in @reference_grades and row.subject in ["Reading", "Math"] and
+      row.grade in ctx.grade_reference.grades and row.subject in ["Reading", "Math"] and
         ctx.subgroup == "All" and ctx.assessment_type != nil and ctx.type == ctx.assessment_type
 
   defp grade_reference?(:growth, row, ctx),
     do:
-      row.grade in @reference_grades and row.subject in ["ELA", "Math"] and
+      row.grade in ctx.grade_reference.grades and row.subject in ["ELA", "Math"] and
         ctx.subgroup == "All"
 
   defp grade_reference?(_section, _row, _ctx), do: false
@@ -250,6 +279,9 @@ defmodule Emisint.Improvement.ResultGoals do
 
     blocked =
       cond do
+        range_target?(w.metric, field) ->
+          :target_is_range
+
         not match?({:number, _}, target) ->
           :target_not_comparable
 
@@ -272,10 +304,19 @@ defmodule Emisint.Improvement.ResultGoals do
       year: ctx.year,
       value: value_text(value, w.metric),
       target: %{label: label, text: elem(target, 1)},
-      timing: timing(ctx.established.review_years[ctx.reference], ctx.year),
+      timing: timing(ctx.established.review_years[ctx.reference], ctx.year, ctx.plan_start_year),
       assumed: assumed(section, ctx)
     }
     |> judge(blocked, interval(value), Map.get(w.metric, field))
+  end
+
+  # A target written as a range (e.g. "55-60%"): the workbook doesn't say
+  # when a range target is met, so no verdict is given.
+  defp range_target?(metric, field) do
+    case Display.target(metric, field) do
+      {:text, raw} -> Regex.match?(~r/^\s*\d+(\.\d+)?\s*%?\s*[-–]\s*\d+(\.\d+)?\s*%?\s*$/, raw)
+      _ -> false
+    end
   end
 
   defp assumed(:achievement, %{assumed_type?: true}), do: [:combined_assessment]
@@ -285,13 +326,16 @@ defmodule Emisint.Improvement.ResultGoals do
   # :before_plan — a result from before the plan began, compared with a
   # target that was still in the future; :unconfirmed — the review's
   # assessment year isn't established.
-  defp timing(nil, year) do
-    if year < FortYates.plan_start_year(), do: :before_plan, else: :unconfirmed
+  defp timing(nil, year, start) do
+    if start != nil and year < start, do: :before_plan, else: :unconfirmed
   end
 
-  defp timing(year, year), do: :same_year
-  defp timing(review_year, year) when year < review_year, do: {:before_review, review_year}
-  defp timing(review_year, _year), do: {:after_review, review_year}
+  defp timing(year, year, _start), do: :same_year
+
+  defp timing(review_year, year, _start) when year < review_year,
+    do: {:before_review, review_year}
+
+  defp timing(review_year, _year, _start), do: {:after_review, review_year}
 
   defp judge(match, blocked, _interval, _target) when blocked != nil, do: gray(match, blocked)
   defp judge(match, _blocked, {:missing, reason}, _target), do: gray(match, reason)
@@ -335,6 +379,7 @@ defmodule Emisint.Improvement.ResultGoals do
   defp interval(%{value_state: :exact, value: v}), do: {v, v}
   defp interval(%{value_state: :range, range_low: l, range_high: h}), do: {l, h}
   defp interval(%{value_state: :suppressed}), do: {:missing, :suppressed}
+  defp interval(:not_derivable), do: {:missing, :not_derivable}
   defp interval(_value), do: {:missing, :not_published}
 
   # Annual Proficient-or-Advanced targets: same school year, subject, all
@@ -358,7 +403,8 @@ defmodule Emisint.Improvement.ResultGoals do
   result of its own school year (derived by `SchoolResults.compare_goal/2`)
   under the dashboard rule. Used by the state tables and the Annual Targets
   table, so they always agree. `status` is `:not_published` when no matching
-  result has been imported.
+  result has been imported; `missing` then says "Not yet published" or "No
+  result imported".
   """
   def annual(goal, rows) do
     comparison = SchoolResults.compare_goal(goal, rows)
@@ -379,10 +425,31 @@ defmodule Emisint.Improvement.ResultGoals do
     }
 
     case comparison do
-      %{low: low, high: high} -> judge(match, nil, {low, high}, goal.target_value)
-      %{status: :not_derivable} -> gray(match, :not_derivable)
-      _ -> Map.merge(match, %{status: :not_published, reasons: [:not_published], tone: :muted})
+      %{low: low, high: high} ->
+        judge(match, nil, {low, high}, goal.target_value)
+
+      %{status: :not_derivable} ->
+        gray(match, :not_derivable)
+
+      _ ->
+        Map.merge(match, %{
+          status: :not_published,
+          reasons: [:not_published],
+          tone: :muted,
+          missing: missing_annual_text(goal.school_year, rows)
+        })
     end
+  end
+
+  # An annual target with no matching result: "Not yet published" when no
+  # achievement results from that year or later have been imported, otherwise
+  # "No result imported" (an earlier year whose download isn't on file, e.g.
+  # Oberon's 2018-19 target).
+  defp missing_annual_text(year, rows) do
+    later? =
+      Enum.any?(rows, &(&1.dataset == :assessment_performance and &1.academic_year >= year))
+
+    if later?, do: "No result imported", else: "Not yet published"
   end
 
   defp annual_value(%{low: low, high: high}) do
@@ -431,6 +498,7 @@ defmodule Emisint.Improvement.ResultGoals do
   defp reason_label(:population_unverified), do: "Gray: survey population unverified"
   defp reason_label(:assessment_type_unconfirmed), do: "Gray: assessment type unconfirmed"
   defp reason_label(:target_not_comparable), do: "Gray: target needs confirmation"
+  defp reason_label(:target_is_range), do: "Gray: target is a range"
   defp reason_label(:suppressed), do: "Gray: suppressed"
   defp reason_label(:not_derivable), do: "Gray: not derivable"
   defp reason_label(_missing), do: "Gray: not published"
@@ -530,11 +598,34 @@ defmodule Emisint.Improvement.ResultGoals do
 
   defp reason_text(:target_not_comparable), do: "the target isn't a confirmed number."
 
+  defp reason_text(:target_is_range),
+    do:
+      "the target is written as a range, and the workbook doesn't define when a range target is met."
+
   defp reason_text(:not_derivable),
     do: "a component of Proficient or Advanced is suppressed or not published."
 
   defp reason_text(:suppressed), do: "the published value is suppressed."
   defp reason_text(:not_published), do: "no value is published."
+
+  @doc """
+  Why `year` has no annual goal: the school's goals start later (Fort
+  Yates, 2025-26 on) or ended earlier (Oberon's historical goal period).
+  Another year's target is never substituted.
+  """
+  def annual_years_note([], year),
+    do:
+      "This school has no annual Proficient-or-Advanced goals, so #{year} results have no annual goal."
+
+  def annual_years_note(years, year) do
+    {first, last} = Enum.min_max(years)
+
+    if year > last,
+      do:
+        "The school's annual Proficient-or-Advanced goals end in #{last}, so #{year} results have no annual goal (another year's target is never substituted).",
+      else:
+        "The school's annual Proficient-or-Advanced goals start in #{first}, so #{year} results have no annual goal (another year's target is never substituted)."
+  end
 
   @doc "The one-line legend kept visible with the result tables."
   def legend_short,
@@ -604,13 +695,29 @@ defmodule Emisint.Improvement.ResultGoals do
         "Gray: missing or suppressed, or the comparison isn't compatible (reason shown); no shading: no school goal for this measure"
     ]
 
-  @doc "How results are compared with goals (methodology, dashboard and PDF)."
-  def methodology,
+  @doc """
+  How results are compared with goals (methodology, dashboard and PDF), for a
+  school's `config/1`. `methodology/0` is Fort Yates's.
+  """
+  def methodology, do: methodology(FortYates.comparison())
+
+  def methodology(config) do
+    [rule, reference, gray] = generic_methodology()
+
+    [
+      rule,
+      config.matching && "Matching. " <> config.matching,
+      reference,
+      config.assumptions_text,
+      gray
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp generic_methodology,
     do: [
       "Rule. A dashboard comparison rule, not an official ND FIRST scoring method. Published values are compared through their published low and high values (an exact value has equal bounds; ranges as published at insights.nd.gov/Data, never midpoints or tolerances). Higher is better: lower bound at or above the target meets, upper bound below it misses, otherwise the range overlaps the target. Lower is better: upper bound at or below the target meets, lower bound above it misses, otherwise it overlaps. Equal meets.",
-      "Matching. Proficient alone is matched to the workbook Proficient metrics (G2-M1 ELA, G3-M1 Math); Novice to the Novice metrics (G2-M2, G3-M2; lower is better); Proficient or Advanced (derived) to the annual state-assessment target for the same school year, Combined assessment (the annual goals count NDSA and NDAA together); the Overall growth percentile to G2-M3 (ELA) and G3-M3 (Math), in percentiles. Schoolwide results (All Grades, all students) are matched to the schoolwide goals. Eligible grade-level results (grades 6–8, all students: Achievement Novice and Proficient, Combined assessment; Growth, the overall growth percentile) are compared with those same schoolwide targets for reference; these are not separate grade-level goals. Student groups are not matched, and other measures have no school goal.",
       "Reference checkpoint. Workbook goals are compared with the selected 18- or 36-month target. Which assessment year counts for each review isn't confirmed, so these are reference comparisons: “against future target” for a result from before the plan began, otherwise “review year unconfirmed”. They never record a review result, set a rating or feed the payment estimate.",
-      "Demo assumptions (configurable, not verified facts; Fort Yates reference comparisons only). The workbook's Proficient and Novice targets are assumed to count the Combined assessment, all students, All Grades, so Standard and Alternate views get no workbook verdict. Its disengagement targets (G4-M2 Emotional, G4-M3 Behavioral, G4-M4 Cognitive) are assumed to count this school's schoolwide survey population. G4-M1 (active engagement from classroom observations) is a different measure from the survey's Committed and is not matched.",
       "Gray. Missing or suppressed values, missing or unconfirmed targets, and comparisons known to be incompatible are gray, with the reason."
     ]
 end
