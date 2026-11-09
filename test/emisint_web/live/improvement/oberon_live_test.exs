@@ -61,7 +61,7 @@ defmodule EmisintWeb.Improvement.OberonLiveTest do
   end
 
   describe "school tabs" do
-    test "each enabled school has its own tab and URL; others are coming soon", %{
+    test "each enabled school has its own tab and URL; Cannon Ball is not listed", %{
       conn: conn,
       admin: admin
     } do
@@ -72,11 +72,15 @@ defmodule EmisintWeb.Improvement.OberonLiveTest do
       assert has_element?(view, ~s(#nd-tab-fort-yates-ms[href="#{@fort_yates}"]), "Fort Yates")
       refute has_element?(view, ~s(#nd-tab-fort-yates-ms[aria-current]))
 
-      for name <- ~w(drayton dunseith mandaree valley-middle-school warwick) do
-        assert has_element?(view, ~s(#nd-tab-soon-#{name}[aria-disabled="true"]), "Coming soon")
+      # Every participant is enabled (November 8, 2026), but tabs show only
+      # destinations the user can read: this organization has Fort Yates and
+      # Oberon only, so no other participant's tab appears. None is "Coming soon".
+      for slug <-
+            ~w(valley-middle-school drayton-public-school-district dunseith-public-school-district mandaree-public-school-district warwick-public-school-district) do
+        refute has_element?(view, "#nd-tab-#{slug}")
       end
 
-      refute has_element?(view, ~s(#nd-first-school-tabs a[href*="valley"]))
+      refute has_element?(view, "#nd-first-school-tabs", "Coming soon")
       refute has_element?(view, "#nd-first-school-tabs a", "Cannon Ball")
 
       {:ok, fort_yates, _html} = live(log_in(conn, admin), @fort_yates)
@@ -114,6 +118,11 @@ defmodule EmisintWeb.Improvement.OberonLiveTest do
     } do
       import_oberon!(org)
 
+      # Workbook achievement targets stay gray, awaiting assessment
+      # confirmation (Combined and Standard being identical in 2023-24
+      # doesn't establish it). The Emotional engagement metrics are candidate
+      # mappings (survey population not stated in the sources): gray, with
+      # the value and target shown, no verdict.
       for {ref, novice, committed} <- [{"18m", "29%", "55-60%"}, {"36m", "22%", "60-65%"}] do
         {:ok, view, _html} =
           live(log_in(conn, admin), "#{@oberon}?state_year=2023-2024&goal_ref=#{ref}")
@@ -121,11 +130,30 @@ defmodule EmisintWeb.Improvement.OberonLiveTest do
         novice_cell = ~s([data-goal][data-kind="workbook"][data-status="gray"])
         assert has_element?(view, novice_cell, "G1-M2 ELA Novice")
         assert has_element?(view, novice_cell, "target #{novice}")
-        assert has_element?(view, novice_cell, "Gray: assessment type unconfirmed")
+        assert has_element?(view, novice_cell, "Gray: awaiting assessment confirmation")
+
+        refute has_element?(
+                 view,
+                 ~s([data-goal][data-kind="workbook"][data-status="misses"]),
+                 "Novice"
+               )
 
         assert has_element?(view, ~s([data-goal][data-kind="annual"][data-status="overlaps"]))
         assert has_element?(view, "#engagement-engagement_emotional", "target #{committed}")
-        assert has_element?(view, "#engagement-engagement_emotional", "Gray: target is a range")
+
+        assert has_element?(
+                 view,
+                 ~s(#engagement-engagement_emotional [data-goal][data-status="gray"]),
+                 "Gray: candidate mapping, awaiting confirmation"
+               )
+
+        for status <- ~w(meets misses overlaps) do
+          refute has_element?(
+                   view,
+                   ~s(#engagement-engagement_emotional [data-goal][data-status="#{status}"])
+                 )
+        end
+
         assert has_element?(view, "#achievement-matching-note", "G1-M1 and G2-M1")
         assert has_element?(view, "#growth-matching-note", "no growth metric")
         refute has_element?(view, "#achievement-type-note")

@@ -45,6 +45,71 @@ defmodule Emisint.Improvement.Seeds.ValleyMiddle do
 
   defdelegate reporting_periods, to: Emisint.Improvement.Seeds.FortYates
 
+  @doc """
+  The first school year whose results fall inside the plan: the reporting
+  periods start with Spr '26 (Valley Goals!E3), and the PDF's long-term
+  academic goals run 2025-2026 through 2030-2031 (p.25).
+  """
+  def plan_start_year, do: "2025-2026"
+
+  @doc """
+  How Valley's goals are compared with published ND Insights results
+  (`Emisint.Improvement.ResultGoals`); see `Seeds.FortYates.comparison/0`
+  for the shape.
+
+  G3-M1 ("Disengaged") is a candidate mapping to Overall Disengaged
+  (`candidates`): the survey category isn't named, and its baseline match
+  with the published Overall values is evidence to investigate, not a
+  confirmation, so it shows the value and target gray, without a verdict.
+  No other workbook metric is matched (see `matching`). The PDF's annual
+  Proficient-or-Advanced targets (pp.25-26) are compared, each with the same
+  school year's result.
+  """
+  def comparison do
+    %{
+      plan_start_year: plan_start_year(),
+      workbook: [
+        {"G3-M1",
+         "Percentage of students reported as \"Disengaged\" on the ND Student Engagement Survey",
+         :engagement, :engagement_overall, "Disengaged", "Overall Disengaged"}
+      ],
+      candidates: %{
+        "G3-M1" =>
+          "G3-M1 doesn't name the survey category (Overall, Behavioral, Cognitive or Emotional). Its baseline (28%, Valley Goals!D18) and Goal 3's “2023-2025 baseline of 24-28%” equal Valley's published Overall Disengaged values (28%, 24%, 24% for 2022-23 through 2024-25), and no other area gives both values. Confirming the category would enable a verdict."
+      },
+      assumptions: %{},
+      grade_reference: nil,
+      matching:
+        "G3-M1 (\"Disengaged\") is a candidate mapping to the Engagement Survey's Overall Disengaged (lower is better), shown gray without a verdict until the survey category is confirmed: the workbook doesn't name it, and the baseline match with Valley's published Overall Disengaged values is evidence to investigate, not a confirmation. Its 18-month target is “n/a”; its 36-month target “< 22% or within 7% State Avg” would be compared through its “< 22%” part only (meeting it meets the target; otherwise gray, since “within 7% State Avg” isn't defined in the sources). G1-M1 and G2-M1 count students who maintained proficiency or grew more than 13 scale-score points, which Insights doesn't publish. G5-M2 counts \"Engaged\" or \"Committed\", and \"Engaged\" isn't an Insights level, so it isn't compared. Chronic absenteeism (G5-M4, G5-M5) isn't in the imported datasets. The annual Proficient-or-Advanced targets from the continuous improvement plan are compared, each with the same school year's published result (all grades, all students, Combined assessment).",
+      assumptions_text:
+        "No assumptions are applied for Valley Middle School. G3-M1's survey category is unconfirmed: Overall is a candidate because its baselines equal the published Overall Disengaged values, so the comparison is shown gray, without a verdict. G5-M2 (\"Engaged\" or \"Committed\") stays uncompared: its baseline (30%) equals the published Overall Committed values (30%, 30%, 32% for 2022-23 through 2024-25), but whether “Engaged or Committed” means Insights' Committed level needs confirmation.",
+      assumptions_short:
+        "No assumptions for Valley: G3-M1 → Overall Disengaged is a candidate mapping awaiting confirmation (gray, no verdict); G5-M2 awaits confirmation that “Engaged or Committed” means Committed.",
+      section_notes: %{
+        achievement:
+          "No workbook goal is matched to these results. Where an annual target exists for the same school year, the Proficient or Advanced cell shows that comparison.",
+        growth:
+          "Valley's growth goals (G1-M1, G2-M1) count individual scale-score growth, which Insights doesn't publish, so growth results have no school goal.",
+        engagement:
+          "Overall Disengaged is shown with G3-M1 as a candidate mapping, gray without a verdict until the survey category is confirmed (18-month target “n/a”; 36-month target “< 22% or within 7% State Avg”). Not compared: G5-M2 counts “Engaged” or “Committed”, and “Engaged” isn't an Insights level; its baseline (30%) equals Overall Committed, but that reading needs confirmation."
+      },
+      annual_years: %{
+        status: :confirmed,
+        confirmation:
+          "Confirmed by the user (recorded in PLAN_nd_first.md, November 8, 2026): the six targets map to 2025–2026 through 2030–2031, in order.",
+        location: "North Dakota - ND First Schools.pdf p.25",
+        excerpt: "“Using the assumed 2025–2026 through 2030–2031 sequence:”"
+      },
+      annual_note:
+        "The continuous improvement plan (pp.25-26) lists annual Proficient-or-Advanced targets for 2025-2026 through 2030-2031 (\"using the assumed 2025–2026 through 2030–2031 sequence\"). Each target is compared only with results of its own year (year mapping confirmed by the user); there are no matching results in the imported data for those years yet.",
+      report_notes: [
+        "Workbook provenance [W]. Baselines, targets and Spring/Summer '26 ratings were imported from “ND First School MOU Goal Overview.xlsx” (sheet “Valley Goals”); the cell is shown with each value. The workbook does not record who entered each value. Values marked “as written” are shown exactly as in the workbook.",
+        "Other plan targets. The PDF's Measure 1 targets (ELA 79%, mathematics 65%; no completion date), English Learner targets (20%–71%, assumed years) and chronic absenteeism goal (41% to 33%, no target year) are shown as written under “Other plan targets”, with no comparison.",
+        "Annual targets. North Dakota - ND First Schools.pdf pp.25-26 lists Valley Middle School's annual Proficient-or-Advanced targets for 2025-2026 through 2030-2031 (ELA and math, including the alternate assessment)."
+      ]
+    }
+  end
+
   def goals do
     [
       %{
@@ -752,5 +817,71 @@ defmodule Emisint.Improvement.Seeds.ValleyMiddle do
           "North Dakota - ND First Schools.pdf pp.25-26 (Measure 2 Report Card Annual Proficiency Targets, assumed 2025-2026 through 2030-2031 sequence)"
       }
     end)
+  end
+
+  @doc """
+  Other continuous-improvement-plan targets, shown as written and never
+  compared (`Emisint.Improvement.PlanTargets`).
+  """
+  def plan_targets do
+    [
+      %{
+        id: "measure-1-ela",
+        title: "Measure 1: Student Achievement — School Improvement Plan (ELA)",
+        measure: "Percentage of students scoring Proficient or Advanced.",
+        baseline: "38% in 2023–2024.",
+        long_term: nil,
+        status_note:
+          "No target year: “These targets are listed in the 2025–2026 strategy map; a separate target completion date is not specified.” (p.25)",
+        results_note:
+          "Not compared: the target has no completion year. Published Proficient-or-Advanced results are shown under Official state results.",
+        location: "North Dakota - ND First Schools.pdf p.25",
+        status: :unresolved,
+        targets: [{"Target", "79%"}]
+      },
+      %{
+        id: "measure-1-math",
+        title: "Measure 1: Student Achievement — School Improvement Plan (Mathematics)",
+        measure: "Percentage of students scoring Proficient or Advanced.",
+        baseline: "24% in 2023–2024.",
+        long_term: nil,
+        status_note:
+          "No target year: “These targets are listed in the 2025–2026 strategy map; a separate target completion date is not specified.” (p.25)",
+        results_note:
+          "Not compared: the target has no completion year. Published Proficient-or-Advanced results are shown under Official state results.",
+        location: "North Dakota - ND First Schools.pdf p.25",
+        status: :unresolved,
+        targets: [{"Target", "65%"}]
+      },
+      %{
+        id: "english-learner",
+        title: "Measure 3: English Learner Language Proficiency",
+        measure:
+          "English Learner Proficiency. Overall goal: “Increase English learners’ progress toward English language proficiency.”",
+        baseline: nil,
+        long_term: "Final Displayed Target: 71%.",
+        status_note:
+          "Years confirmed by the user as 2025–2026 through 2030–2031 (recorded November 8, 2026); source wording (North Dakota - ND First Schools.pdf p.26): “Using the same assumed year sequence:”",
+        results_note:
+          "Actual results unavailable: English Learner proficiency is not in the imported ND Insights datasets. No comparison is made.",
+        location: "North Dakota - ND First Schools.pdf p.26",
+        status: :confirmed,
+        targets:
+          Emisint.Improvement.PlanTargets.six_years(["20%", "30%", "41%", "51%", "62%", "71%"])
+      },
+      %{
+        id: "chronic-absenteeism",
+        title: "Related Attendance Goal",
+        measure: "Chronic absenteeism rate, measured through North Dakota Insights.",
+        baseline: "41% in 2023–2024.",
+        long_term: nil,
+        status_note: "No target year is given for this goal (p.26).",
+        results_note:
+          "Actual results unavailable: chronic absenteeism is not in the imported ND Insights datasets. No comparison is made.",
+        location: "North Dakota - ND First Schools.pdf p.26",
+        status: :unresolved,
+        targets: [{"Target", "33%"}]
+      }
+    ]
   end
 end

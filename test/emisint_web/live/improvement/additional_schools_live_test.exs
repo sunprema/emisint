@@ -14,6 +14,9 @@ defmodule EmisintWeb.Improvement.AdditionalSchoolsLiveTest do
         workbook_ratings?: true
       )
 
+    # A registered school outside the pilot, to show the filter still applies.
+    non_pilot_school!(org)
+
     %{org: org, admin: user!(org, :emo_admin)}
   end
 
@@ -26,16 +29,31 @@ defmodule EmisintWeb.Improvement.AdditionalSchoolsLiveTest do
     assert has_element?(view, "#school-fort-yates-ms", "Ft Yates Public School District")
     assert has_element?(view, "#school-fort-yates-ms", "Grades 5-8")
     assert has_element?(view, "#school-oberon-elementary", "Oberon Public School District")
-    refute has_element?(view, "#school-valley-middle-school")
+
+    assert has_element?(
+             view,
+             "#school-valley-middle-school",
+             "Grand Forks Public School District"
+           )
+
+    for slug <-
+          ~w(drayton-public-school-district drayton-elementary drayton-high-school warwick-middle-school) do
+      assert has_element?(view, "#school-#{slug}")
+    end
+
+    refute has_element?(view, "#school-synthetic-non-pilot-school")
   end
 
-  test "schools deferred for expansion stay seeded and listable without the pilot filter", %{
-    admin: admin
-  } do
+  test "every verified record stays listable without the pilot filter", %{admin: admin} do
     scope = %Emisint.Scope{current_user: admin, current_tenant: admin.organization_id}
 
-    assert scope |> Dashboard.list_schools() |> Enum.map(& &1.slug) ==
-             ~w(fort-yates-ms oberon-elementary valley-middle-school)
+    slugs = scope |> Dashboard.list_schools() |> Enum.map(& &1.slug)
+
+    assert Enum.sort(slugs) ==
+             Enum.sort(
+               ["synthetic-non-pilot-school"] ++
+                 Enum.map(Seeds.available_schools(), & &1.school().slug)
+             )
 
     assert scope
            |> Dashboard.list_schools(institution_ids: ["1800189752"])
@@ -87,6 +105,6 @@ defmodule EmisintWeb.Improvement.AdditionalSchoolsLiveTest do
     assert has_element?(view, "#rating-G1-M3", "N/A")
     assert has_element?(view, "#metric-G7-M2 [data-target-value]", "Created")
     assert has_element?(view, "#metric-G1-M2 [data-target-value]", "> 50%")
-    assert has_element?(view, "#annual-2030-2031-ela", "Not yet published")
+    assert has_element?(view, "#annual-2030-2031-ela", "No matching results in the imported data")
   end
 end

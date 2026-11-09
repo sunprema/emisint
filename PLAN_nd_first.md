@@ -289,7 +289,7 @@ Task 15 is split. The CLI import is implemented; the upload screen and backgroun
   - **Layout:** US Letter, repeated table headers, unbreakable rows, goal headings kept with their tables, running header and page footer.
   - **Access:** the school read policy is enforced in the controller (signed out → sign in; no access → redirect with a flash).
 - [x] **M4. Navigation.** "School Goals" is now **"ND First"** in the sidebar and on the landing page, with a factual introduction citing the ND DPI ND First page and the existing tiles. (URLs remain `/school-goals`.)
-- [ ] **M4b. Expansion to the other seven schools: deferred** until the Fort Yates experience is approved. See "Expansion work started before the scope correction" below.
+- [x] **M4b. Expansion to the other schools:** Oberon (November 4, 2026), then Valley Middle, Drayton, Dunseith, Mandaree and Warwick (November 8, 2026), all pending individual review; Cannon Ball deferred. See "Expansion: remaining participants".
 - [x] **M5. Payment weights.** Per checkpoint: 18-month review = 70% Systems / 30% Student Outcomes; 36-month review = 30% Systems / 70% Student Outcomes (`Improvement.Payment`). How the $70,000 maximum applies across checkpoints is awaiting clarification, so there's no payout and no per-checkpoint cap, and Phase 3 stays open. *(Superseded November 1, 2026: Ram authorized a best-estimate rule, and we selected a provisional cap and split; see "Provisional payment rule".)*
 - **Later phase:** the company-wide KPI dashboard.
 
@@ -793,6 +793,497 @@ Every school's payment row ("Performance-Based Payment" rows 3–11) uses the sa
   - Updated: `additional_schools_live_test.exs` (Oberon is now listed; payment "Not configured") and `payment_estimate_test.exs`.
 - Full suite 382/539. The 157 failures are the legacy set exactly; none are new.
 
+### Oberon missing-year fixes and Windows setup (November 8, 2026; uncommitted, pending review)
+
+Scope: Oberon (0301662261) only; Fort Yates checked for regressions. No other school was implemented, nothing was committed or pushed, and there were no schema changes, migrations, database resets or Ash code generation.
+
+**Windows development setup (new PC; the Mac database was not copied).**
+- **Toolchain:** Erlang/OTP 27.3.4.18 (winget), Elixir 1.18.6 for OTP 27 (official release zip, SHA-256 checked, in `%LOCALAPPDATA%\Programs\elixir-1.18.6`), PostgreSQL 17.11 (EDB installer, service `postgresql-x64-17`, port 5432), Visual Studio 2022 C++ Build Tools and Rust 1.99.1.
+- **Native code:** `bcrypt_elixir` and `picosat_elixir` compile with MSVC (`nmake`). Imprintor 0.1.5 publishes no Windows binary, so it was compiled from source once with `FORCE_COMPILE=1`, inside the Visual Studio x64 environment. Plain `mix phx.server` needs neither afterwards; they are needed again only if those dependencies are recompiled.
+- **Credentials:** `PGUSER` / `PGPASSWORD` are Windows user environment variables, read by `config/dev.exs`; nothing is stored in the repo.
+- **Known Windows differences:**
+  - The template font "Helvetica Neue" is not installed, so PDFs use Typst's fallback font. Page counts are unchanged.
+  - LiveView can't symlink `assets/node_modules` for colocated JS without an administrator terminal (a warning only).
+  - The checkout uses `core.autocrlf=true`. `mix format --check-formatted` flags CRLF files, so the changed files were saved with LF (git shows no line-ending diff).
+- **Database:** `emisint_dev` was created with `mix ecto.create` + `mix ecto.migrate`: all 38 migrations, including the teammate's `_dev` migration, whose SSS tables now exist (empty). Then:
+  - `mix run priv/repo/seeds.exs` (Cornerstone demo org);
+  - `mix nd_first.seed --dev`: Fort Yates (4 goals, 18 metrics, 36 workbook ratings, 12 annual goals) and 6 dev users;
+  - `Seeds.run(dev_org, schools: [Seeds.Oberon])`: Oberon (4 goals, 21 metrics, 42 ratings, 12 annual goals); 0 drift.
+- **Reference files:** `references/` was restored from the Mac ZIP (workbook, annual-goals PDF, 17 ND Insights CSVs, SES briefs, verification scripts). All 17 CSVs match `source_manifest.json` SHA-256. Two tracked CRD files differed only in line endings and were kept. The new files are excluded locally in `.git/info/exclude`.
+- **Imports:** `mix nd_insights.import --institution-id 4300429212 --institution-id 0301662261 --institution-id 99999 --actor-email sysadmin@example.com` on the 17 files: 0 conflicts, 0 parse errors, 0 name mismatches. Fort Yates 1,156 measures, Oberon 280 (the same as the Mac), North Dakota 34,015.
+  - The earlier "35,070 state measures" figure (October 31) is not a count of these files' 99999 rows (they hold exactly 34,015). Its origin was not established.
+- **Check A repeated (database vs CSV):** an independent script parsed the CSVs by header name and compared every measure for 4300429212, 0301662261 and 99999: 35,451 / 35,451 match on value state and both bounds, with 0 missing, 0 extra and 0 mismatches.
+
+**Oberon 2024-25 in the source files (unchanged by this work).** Participation has 14 rows (Combined and Standard; Reading and Math for All, Female and Male; Science for All). Engagement has all five areas, and survey participation is 90%–94%. The 2024-25 Performance and Growth files have **no Oberon rows**, so achievement and growth stay missing: nothing is zero-filled and no reason is given (open item 8 stands). From the data, the latest year with matching achievement and growth for Combined, all students is 2023-2024.
+
+**Fixes.**
+1. **Student Group select** (`SchoolResults.subgroups/3`, `resolve_filters/2`, `StateResultsComponents`):
+   - **Cause:** the options came only from that year's achievement and growth rows. For Oberon 2024-25 that list was empty while the filter resolved to "All", so the select rendered blank.
+   - **Options now:** "All students" is always offered, first. Groups come from the year's achievement and % tested rows for the selected assessment type, plus growth rows (which have no assessment type).
+   - **One option:** the select is disabled and shows "All students", with "Only all students published for this year and assessment" (`#state-subgroup-only`).
+   - **Stale groups:** the disabled select isn't submitted, so the `state_filters` handler clears a stale `state_subgroup` from the URL.
+2. **% tested without achievement** (`SchoolResults.performance/4`):
+   - A subject and grade with a published % tested but no achievement levels is returned with `levels: %{}`. Its five level cells read "Achievement not published"; the PDF prints "Not published" in each.
+   - `ResultGoals.for_filters/3` skips those rows, so a missing result is never compared with a goal. The 95% participation label still applies to % tested.
+   - Engagement and survey participation were already independent of achievement; they are confirmed visible for Oberon 2024-25.
+3. **Missing-results note and latest-year link** (`SchoolResults.latest_year_with/3`):
+   - **Matching:** the latest imported year with achievement for the same assessment type and student group, or with growth for the same student group, read from the stored rows.
+   - **Dashboard:** `#achievement-empty` / `#growth-empty` explain that the imported download has no rows for the combination. `#achievement-latest-year` / `#growth-latest-year` link to that year, or say "No imported year has … results for this combination".
+   - **Link behavior:** it changes only `state_year`, on click (a LiveView patch), and keeps `period`, `state_type`, `state_subgroup` and `goal_ref`. The selected year is unchanged until the user clicks.
+   - **PDF:** the same note, with the year as text ("Latest imported year with achievement results for the same filters: 2023-2024."). The achievement table still prints rows that have only % tested.
+
+**Effect on Fort Yates (intended, same rule):** 2023-24 now shows four % tested rows the dashboard previously dropped: Reading and Math, grades 5 and 6, 80%–100%. The official 2023-24 Participation file publishes them, and the Performance file has no grade 5–6 rows. All other Fort Yates rows, colors and comparisons are unchanged, and 2024-25 is unchanged.
+
+**Verification (November 8, 2026, Windows).**
+- **Tests:** new `test/emisint_web/live/improvement/oberon_missing_results_test.exs` (11), with fixtures in `test/fixtures/nd_insights/oberon_missing_years/`: Oberon's rows copied unchanged from the official 2023-24 and 2024-25 Participation and 2023-24 Growth files. It covers:
+  - the selected and disabled states, and year and assessment changes (including clearing a stale group);
+  - % tested with no goal marks, and 2024-25 engagement;
+  - latest-year links that keep filters and change the year only on click;
+  - group- and type-specific years;
+  - that Fort Yates rows never supply Oberon's year, and that Fort Yates' tables are unchanged;
+  - the PDF data for both years;
+  - `SchoolResults` unit cases.
+- **Results:** ND First, ND Insights and report suites 343/343. Full suite 550 tests, 157 failures, all in the legacy orphaned suites listed under Risks; none in ND First files.
+- **Dev server** (http://localhost:4000, `admin@example.com`), rendered pages checked for:
+  - Oberon 2024-25: Combined, Alternate and Female;
+  - Oberon 2023-24: Combined, Female and Alternate;
+  - Fort Yates: default and 2023-24.
+  - Neither school's state results mention the other.
+- **Isolation:** `viewer@example.com` (Fort Yates viewer) opens Fort Yates but is redirected away from Oberon's dashboard and PDF. `admin@cornerstone-emo.edu` (another organization) is redirected away from both schools.
+- **PDFs:** generated through `/school-goals/:slug/report.pdf` with the Windows-built Imprintor: Oberon 2024-25 and 2023-24 (6 pages each), Fort Yates (7). The pages were viewed by rendering the same data and template with the Typst 0.15.1 CLI: Oberon 2024-25, 2023-24 and Female, and Fort Yates 2023-24.
+- **Not done:** interactive headless-Chrome checks. On this PC, headless Chrome stopped responding on every authenticated page, including the unchanged `/school-goals` index. LiveView's client reported "view crashed" after a long-poll fallback, while the server logged a successful mount. The cause was not established, and a check in a normal desktop browser is still needed. Select changes and the link click are covered by the LiveView tests.
+
+### Expansion: remaining participants (November 8, 2026; uncommitted, pending individual review)
+
+Scope: Valley Middle School, Drayton, Dunseith, Mandaree and Warwick, in that order. Cannon Ball (Solen) is still deferred. Nothing was committed, pushed or merged; there were no schema changes, migrations, database resets or Ash code generation. The Fort Yates and Oberon records, imports and fixes are unchanged.
+
+**Sources read for each participant.**
+- **Workbook:** `references/ND First School MOU Goal Overview.xlsx`. It was read with an OTP-only `.xlsx` reader, and the generator was ported from `gen_school_seed.py`, since Python isn't installed on this PC. The port reproduces the committed Oberon and Valley `goals/0`, `metrics/0`, `workbook_ratings/0` and last-updated date exactly.
+- **Annual-goals PDF:** `references/North Dakota - ND First Schools.pdf`. Pages were rendered with the Windows PDF API and read page by page: Drayton pp.7-11, Dunseith pp.12-15, Mandaree pp.19-21, Valley pp.25-26, Warwick pp.27-31.
+- **ND Insights:** all 17 official CSVs. Every InstitutionID below appears under its building name in every dataset. District names vary by file (e.g. "Drayton 19" and "Drayton Public School District"); the importer links by ID and reports the name difference.
+- **Payment:** "Performance-Based Payment" has one row per participant (Warwick 7, Mandaree 8, Dunseith 9, Drayton 10, Valley MS 11) with no allocations, so payment is "not configured" for all five, as for Oberon. Nothing is copied from Fort Yates.
+
+**Scope decision (source-supported).** The Drayton, Dunseith, Mandaree and Warwick sheets are written for the district: "<X> Public School(s) will…", "the district will…", and grades 3-10 spanning an elementary and a high school. The PDF, however, gives annual targets per building. ND Insights publishes the district (5-digit ID) and each building separately. So (`Seeds.Participant`):
+- **Participant record (district):** holds the workbook goals, metrics, seasonal ratings and payment row, plus the district's own published rows.
+- **Building records:** hold only that building's PDF annual targets, compared with that building's own rows. There are no workbook goals, ratings or payment terms (`payment_cap` nil).
+- **No mixing:** district goals are never copied to buildings, building results are never averaged or combined into a district value, and each published row appears only on the record of its own InstitutionID.
+- **Links:** the district dashboard links its buildings and each building links its district. Only records the user can read are linked; others are named "(no access)". The school tab opens the district.
+- **Building pages:** hide the period selector, seasonal and payment cards, goal tables, "Compare with" selector and payment section, with a scope note instead. The building PDF says "Reporting period: Not applicable" and omits the summary, goals and payment appendix.
+- Valley Middle School is a single building (its sheet says "Valley Middle School will…"), so it stays one record.
+
+| Participant | Record (InstitutionID) | Workbook | PDF annual targets (ELA / Math, 2025-26 → 2030-31) |
+|---|---|---|---|
+| Valley Middle | Valley Middle School (1800189752) | 7 goals, 26 metrics, 52 ratings | 37/31 → 55/51% (pp.25-26) |
+| Drayton | Drayton Public School District (34019) | 5 goals, 13 metrics, 26 ratings | none for the district |
+| | Drayton Elementary School (3401919281) | — | 21/31 → 45/52% (p.7) |
+| | Drayton High School (3401919283) | — | 20/19 → 44/43% (pp.9-10) |
+| Dunseith | Dunseith Public School District (40001) | 6 goals, 16 metrics, 32 ratings | none |
+| | Dunseith Elementary School (4000119681) | — | 26/24 → 48/46% (p.12) |
+| | Dunseith High School (4000119663) | — | 17/25 → 41/47% (p.14) |
+| Mandaree | Mandaree Public School District (27036) | 6 goals, 6 metrics, 12 ratings | none |
+| | Mandaree Elementary School (2703654591) | — | 20/11 → 44/37% (p.19) |
+| | Mandaree High School (2703654593) | — | 35/16 → 54/40% (pp.20-21) |
+| Warwick | Warwick Public School District (03029) | 5 goals, 25 metrics, 50 ratings | none |
+| | Warwick Elementary School (0302992191) | — | 6/10 → 33/37% (p.27) |
+| | Warwick Middle School (0302992192) | — | 12/8 → 38/35% (pp.28-29) |
+| | Warwick High School (0302992193) | — | 15/31 → 40/52% (p.30) |
+
+All annual targets include the alternate assessment (Combined), as each PDF section states.
+
+**Comparisons.** No workbook metric of the five participants is compared with an ND Insights measure (`comparison/0`, `workbook: []`). Each reason is shown on the dashboard and in the PDF:
+- **Not published by Insights:** the growth-or-proficiency metrics (per-student scale-score criteria) of all five.
+- **Disengaged metrics:** Valley G3-M1, Drayton G4-M1 and Dunseith G6-M2 don't name the survey area, and their targets are text ("< 22% or within 7% State Avg", "< 18%", "< 15%").
+- **"Engaged" isn't an Insights level:** Valley G5-M2, Drayton G4-M2.
+- **Not imported:** graduation rate (Dunseith G3-M3) and chronic absenteeism.
+- **Warwick:** its Insights-like metrics (emotionally disengaged, behaviorally committed, ELA/Math proficiency and novice, special-education novice) all have relative targets ("Inc 2-3%", "Dec 3-4%") with no baseline-year rule, and "Warwick School" doesn't say which scope is meant.
+
+Only annual targets are compared, each with its own building and year. Every target year is 2025-26 or later, so all currently read "Not yet published".
+
+**Data (dev database).**
+- **Seeds:** `Seeds.run(dev_org, schools: <the 14 modules>)` created 589 records with 0 drift. A rerun created 0, left 589 unchanged and reported 0 drift.
+- **Imports:** `mix nd_insights.import` for the 14 new IDs on all 17 files: 0 conflicts, 0 parse errors; name mismatches are the district short names only. A rerun created 0 and left 26,822 unchanged.
+- **Check A (database vs CSV):** for all 16 school and district IDs plus 99999: 62,273 / 62,273 measures match, with 0 missing, 0 extra and 0 mismatched.
+
+**Code.**
+- **Seeds and config:** `Seeds.Participant`; four district modules generated from the sheets (`drayton.ex`, `dunseith.ex`, `mandaree.ex`, `warwick.ex`) and nine building modules; Valley `plan_start_year/0` and `comparison/0`; `Seeds.available_schools/0`; `Pilot` roster and `tab_slug/1`; and `pilot_institution_ids` in `config/config.exs`.
+- **UI and PDF:** scope notes and building-page variants in `SchoolGoalsLive`, `Components` and `StateResultsComponents`; scope, guidance and source handling in `NdFirstSchoolPdf` and `nd_first_school.typ`.
+- **Bug found and fixed:** duplicate DOM ids when building links appeared twice on a district page.
+
+**Verification (November 8, 2026, Windows).**
+- **Automated tests:** new `test/emisint_web/live/improvement/expansion_schools_test.exs` (11), with fixtures in `test/fixtures/nd_insights/expansion/`: Drayton district, elementary and high school and Valley rows, copied unchanged from the official 2024-25 Performance, Participation and Growth files and the Emotional Engagement file. It covers:
+  - definitions and cited cells;
+  - building-only targets;
+  - seed reruns;
+  - no workbook matches;
+  - district versus building rows (Reading Approaching Proficiency 50%–54% district, 55%–59% elementary, 40%–49% high school);
+  - building pages without goals or payment;
+  - Valley exact values;
+  - building-membership and other-organization isolation;
+  - PDF data and real Imprintor PDFs.
+- **Updated tests:** the roster ("Coming soon" removed), the pilot filter (now a synthetic `TEST000099` non-pilot school, `non_pilot_school!/1`) and the seeded-school list.
+- **Results:** ND First, ND Insights, import and report suites 369/369. Full suite 561 tests, 157 failures: the legacy orphaned suites only, none in ND First files.
+- **Server-rendered checks** (dev server, `admin@example.com`, 2024-25 Combined):
+  - All 14 new dashboards and Fort Yates and Oberon return 200. Each shows only its own InstitutionID's rows, the right scope notes and links, building-only annual tables, district goals and "not configured" payment.
+  - The student-group select is disabled where only all students are published (Drayton High, Mandaree High, Warwick Elementary and High). The latest-year links work (Warwick Elementary growth → 2023-2024).
+  - `viewer@example.com` (Fort Yates only) and `admin@cornerstone-emo.edu` (another organization) were redirected on all 28 new dashboard and PDF URLs.
+- **PDFs:** generated through `/school-goals/:slug/report.pdf` with the Windows-built Imprintor and viewed page by page via the Windows PDF API:
+  - Valley 7 pages; districts 6–7 pages; buildings 3 pages each.
+  - Fort Yates is still 7 pages and Oberon 6.
+  - Fixed while checking: building reports showed a reporting period, a "[W]" workbook marker on the PDF source, and workbook-reference wording. These are now "Not applicable", unmarked and omitted.
+- **Real browser: not done.** Headless Chrome still hangs on authenticated pages (one 45-second attempt on Valley's dashboard returned nothing). A manual desktop-browser check of every new dashboard is pending, as is Oberon's.
+
+**Open items (not guessed).**
+1. **Valley:**
+   - The PDF's Measure 1 targets (79% / 65%, no completion date), the English Learner targets (20%–71%) and the chronic absenteeism goal (41% → 33%) are not stored.
+   - G3-M1's survey area and compound target.
+   - G5-M2's "Engaged".
+   - Text targets ("> 50%", "n/a", "Created").
+2. **Drayton:**
+   - Goal titles: the sheet gives none, so the full goal text is the title.
+   - G4-M1's survey area and whether its 25% baseline is district or building.
+   - G4-M2's "Engaged".
+   - G2-M3's "< 10%" baseline.
+   - G4-M4's "Monitored".
+   - The 75% "Related Learning Engagement Target" (PDF p.8; the PDF says category and calculation are unspecified).
+3. **Dunseith:**
+   - G1-M2/G2-M2's "50% K-6; 100% 7-12" campus-split target.
+   - G4-M1's "70% @ Level 2+ / 3+".
+   - G4-M2 has no baseline.
+   - G6-M2's survey area.
+   - Which graduation rate G3-M3 counts.
+   - Elementary Measure 2 (writing, "20% improvement", unspecified per the PDF).
+4. **Mandaree:**
+   - G3-M1's "< 2.4" baseline.
+   - G4-M1's "> 50%" / "> 80%" targets.
+   - The PDF doesn't name the district (the Insights name is used).
+5. **Warwick:**
+   - The scope of "Warwick School".
+   - A rule and baseline year for relative targets.
+   - "Proficiency rate": Proficient, or Proficient or Advanced?
+   - G2-M7's "Dec" target for a committed share.
+   - Range and text targets (G2-M1, G2-M4, G5-M1, G2-M5).
+6. **All district participants:**
+   - Graduation targets (Drayton, Dunseith, Mandaree, Warwick high schools) aren't stored: graduation isn't in the imported datasets.
+   - Several PDF sections assign years by an assumed sequence ("assume the same six-year sequence", "use the six values provided in chronological order"). The annual notes quote this.
+7. **All five:** payment allocations; the "Target Check" 18-month column headings (flagged per metric); the review-year rules (item 27).
+
+This section supersedes the earlier "Coming soon" descriptions in "Expansion: source audit and Oberon" (Shared school tabs) and the "deferred, not seeded by default" note for Valley.
+
+### Expansion gaps: restored goals, Warwick scope, annual-year audit (November 8, 2026; uncommitted, pending review)
+
+Supersedes the "not stored" items and the Warwick scope statement in "Expansion: remaining participants". Nothing was committed or pushed; there were no schema changes, migrations, database resets or Ash code generation.
+
+**Sources re-read.**
+- **PDF:** every page of `North Dakota - ND First Schools.pdf` relevant to the ten records, rendered via the Windows PDF API. Pages 1–3 (introduction) state no general year convention.
+- **Workbook:** the School Directory, Overview and Evidence Tracker sheets, and all cell comments (reviewer narratives on the Sum '26 ratings).
+- **User confirmations:** none of target years or of Warwick's scope is recorded in this plan or elsewhere in the repo.
+
+**1. Goals restored** (`plan_targets/0` in each seed module, `Improvement.PlanTargets`).
+- **Where they're kept:** in code with the other read-only definitions. There is no new table, so no migration.
+- **Display:** an "Other plan targets" section (`#plan-targets`) on the dashboard and PDF. Each target shows its measure, baseline, targets exactly as written, a status and the source page. Values stay text and are never compared.
+- **Statuses:** "Targets as stated in the source", "Year mapping unconfirmed", "Unresolved" (date or definition open) or "No numeric target in the source".
+- **Results line:** each target also says why no result is shown, for example "Actual results unavailable: graduation rates are not in the imported ND Insights datasets. No comparison is made."
+
+| Record | Restored targets (PDF location) | Status |
+|---|---|---|
+| Valley Middle | Measure 1 ELA 79% (baseline 38% in 2023–24) and Math 65% (24%), p.25 | Unresolved: no completion date |
+| | English Learner proficiency 20/30/41/51/62/71% (2025–26 → 2030–31), p.26 | Year mapping unconfirmed |
+| | Chronic absenteeism 41% (2023–24) → 33%, p.26 | Unresolved: no target year |
+| Drayton Elementary | Engagement survey goal 75%, p.8 | Unresolved: category/calculation unspecified |
+| Drayton High | Graduation four-year 82→90%, six-year 80→93%, p.10 | Year mapping unconfirmed |
+| | Engagement survey goal 75%, p.11 | Unresolved |
+| Dunseith Elementary | Writing improvement "20% improvement", p.12 | Unresolved: baseline/scale/meaning unspecified |
+| Dunseith High | Graduation four-year 80→90%, five-year 77→92%, six-year 87→93%, p.14 | Year mapping unconfirmed |
+| | English Learner Proficiency Growth 12→72%, p.15 | Unresolved: calculation undefined (and assumed years) |
+| | College, Career and Military Readiness, p.15 | No numeric target |
+| Mandaree Elementary | Kindergarten readiness (KRT), pp.19-20 | No numeric target |
+| Mandaree High | Graduation four-year 71→90%, five-year 73→92%, six-year 66→93%, p.21 | Targets as stated |
+| Warwick High | Graduation four-year 71→90%, five-year 76→92%, six-year 92→93%, pp.30-31 | Year mapping unconfirmed |
+
+- **No omitted targets** for Fort Yates (p.17), Oberon (pp.23-24), Warwick Elementary and Middle (pp.27-29), or the district records.
+- **Workbook metrics:** already stored in full; the workbook-to-seed generator round-trips the committed modules exactly.
+- **Notes updated:** the old "not stored" report notes now point to "Other plan targets".
+
+**2. Warwick scope: unresolved, labeled provisional** (`Seeds.Warwick.workbook_scope/0`, `Participant.provisional_scope?/1`).
+- **Checked, none establishes the scope:**
+  - Warwick Goals: "Warwick School will …", B2, B9, B19, B27 and B35.
+  - School Directory row 5: "Warwick" / "Warwick Goals", no folder.
+  - The Overview sheet.
+  - Evidence Tracker rows 2–10: "Warwick"; rows 4 and 9 link "Mandaree826.key" and "Mandaree1012.key".
+  - The cell comments (F3, F10, F20, F28, F36: "Warwick completed …").
+- **Baselines against 2024-25 Insights rows fit no single scope** (context only, since the baseline years aren't stated):
+  - ELA Novice 59% fits the district only.
+  - Math Novice 75% and Emotional Disengaged 25.74% fit the elementary and middle schools.
+  - Behavioral Committed 46.98% fits none.
+- **Labeling:** the district dashboard shows `#workbook-scope-provisional` with the excerpt and evidence, and says the goals are "recorded on Warwick Public School District provisionally". Warwick building pages say "recorded provisionally on … whether they cover this building is not established". The PDFs carry the same wording and an amber "Workbook scope provisional" box.
+- **Nothing scope-dependent:** no workbook comparison (`workbook: []`) and payment "Not configured".
+- **Other districts:** Drayton, Dunseith and Mandaree are recorded as `:source_supported`, each citing its sheet text (B2) naming the district, "the district will …", and grades 3–10 spanning both buildings.
+
+**3. Annual-target year audit** (`annual_years` in each comparison config; `ResultGoals.annual/3`).
+- **Rule:** "assumed" mappings keep the targets visible, but year-specific comparison is off. Annual-table cells read "Not compared: year mapping unconfirmed (‹page›)" and the state table's Proficient-or-Advanced cell is gray "year mapping unconfirmed". Each annual section shows the mapping and excerpt (`#annual-year-mapping`).
+- **Values:** every stored annual value was rechecked against the PDF; no value or year errors were found, so nothing was shifted.
+
+| Record | Status | Source excerpt (location) |
+|---|---|---|
+| Fort Yates | stated | "Annual Proficiency Targets" listed by year, "2025–2026: ELA 25%; mathematics 11%." … "2030–2031: ELA 47%; mathematics 37%." (p.17) |
+| Oberon | stated | "Displayed Long-Term Goal Period: 2018–2019 through 2023–2024"; targets listed by year (p.23) |
+| Valley Middle | assumed | "Using the assumed 2025–2026 through 2030–2031 sequence:" (p.25) |
+| Drayton Elementary | stated | "Annual Proficiency Targets – All Students", listed by year (p.7) |
+| Drayton High | assumed | "The annual targets below use the six values provided in chronological order, beginning with 2025–2026." (p.9) |
+| Dunseith Elementary | assumed | "The annual targets below assume the same six-year sequence as the previous schools." (p.12) |
+| Dunseith High | assumed | same sentence (p.13) |
+| Mandaree Elementary | stated | targets listed by year (p.19) |
+| Mandaree High | stated | targets listed by year (pp.20-21) |
+| Warwick Elementary / Middle / High | assumed | "Using the assumed 2025–2026 through 2030–2031 sequence:" (pp.27, 28, 30) |
+
+Fort Yates and Oberon are unchanged: both are "stated", and Oberon's 2021-22 to 2023-24 comparisons remain.
+
+**Verification (November 8, 2026, Windows).**
+- **Automated tests:** new `test/emisint_web/live/improvement/expansion_gaps_test.exs` (9) covers:
+  - the restored targets per school, values as written;
+  - Valley and building dashboards showing them with no verdict;
+  - Warwick provisional on the district, buildings and PDF, with no comparison or payment, and Drayton not provisional;
+  - an assumed mapping giving `:year_unconfirmed` on Valley's real 2024-25 Reading row, where the same row and target give "Meets" under a stated mapping (also in the state-table cell);
+  - each school's mapping status;
+  - dashboard and PDF labels;
+  - real Imprintor PDFs.
+- **Updated tests:** three earlier assertions now expect "year mapping unconfirmed" (Valley, Drayton High).
+- **Results:** ND First, ND Insights, import and report suites 378/378. Full suite 570 tests, 157 failures: the legacy suites only, none in ND First files.
+- **Server-rendered checks:**
+  - 13 dashboards and PDFs return 200 with the expected plan-target counts, provisional labels (Warwick only) and year-mapping status.
+  - Fort Yates is still 7 pages and Oberon 6.
+  - The server was restarted once: line-ending normalization touched `config/config.exs`.
+- **PDFs viewed:**
+  - Dunseith High, Valley and the Warwick district page by page, plus contact sheets for Warwick High, Mandaree High, Drayton High and Oberon.
+  - Fixed while checking: stale "not stored" notes in seven modules, and annual notes on assumed-year schools that still said targets "are compared".
+- **Real browser: not done** (the headless-Chrome hang is unresolved). Manual checks of all dashboards are pending.
+
+**Decisions needed (exact sources).**
+1. **Warwick scope:** "Warwick School will …" (Warwick Goals!B2, B9, B19, B27, B35). District, or which building?
+2. **Assumed year sequences:**
+   - Valley p.25 and Warwick pp.27/28/30: "Using the assumed 2025–2026 through 2030–2031 sequence:"
+   - Drayton High p.9: "use the six values provided in chronological order, beginning with 2025–2026"
+   - Dunseith pp.12/13: "assume the same six-year sequence as the previous schools"
+   
+   Confirm the years to enable comparisons.
+3. **Valley Measure 1:** "These targets are listed in the 2025–2026 strategy map; a separate target completion date is not specified." (p.25) Which year, and which assessment (the Measure 1 metric doesn't mention the alternate assessment)?
+4. **Valley chronic absenteeism:** "Baseline: 41% in 2023–2024. Target: 33%." (p.26) The target year is not given.
+5. **Drayton engagement 75%:**
+   - p.8: "without specifying the survey category or calculation"
+   - p.11: "does not specify the survey response category or calculation used for this target"
+6. **Dunseith writing:** "does not specify the baseline, rubric scoring scale, or whether “20%” means relative improvement or a percentage-point increase" (p.12).
+7. **Dunseith English Learner:** "confirm whether the graph measures students meeting their growth targets or students attaining proficiency" (p.15).
+8. **Data sources** for graduation, English Learner, attendance, writing, readiness and kindergarten-readiness results, if those comparisons are wanted. None is in the imported datasets.
+
+### User confirmation: annual target years (recorded November 8, 2026)
+
+**User confirmation.** The user stated that the graph-year mappings had already been confirmed by them, and that the seven sequences disabled above use the confirmed **2025–2026 through 2030–2031** mapping, in order. This supersedes the "assumed" status in "Expansion gaps … 3. Annual-target year audit" and decision 2 there.
+
+- **Records changed (`annual_years.status: :confirmed`, with a `confirmation` note; the source excerpt is kept):**
+  - Valley Middle (p.25);
+  - Drayton High (p.9);
+  - Dunseith Elementary (p.12) and Dunseith High (p.13);
+  - Warwick Elementary, Middle and High (pp.27, 28, 30).
+- **Comparisons restored:** each annual target is compared only with the published result of its own school year, as for stated mappings (`ResultGoals.annual/3`). A 2025-26 target is never compared with 2024-25 results. Every confirmed target year is 2025-26 or later, so all currently read "Not yet published".
+- **Labels:** the dashboard and PDF say "Year mapping confirmed by the user: the targets are 2025–2026 through 2030–2031, in order (recorded November 8, 2026)", followed by the source wording.
+- **Same-section series:** the graduation series (Drayton High, Dunseith High, Warwick High) and Valley's English Learner series use the same year sequence as their section's annual targets. They now read "Years confirmed by the user". They're still not compared, since there's no imported data.
+- **Unchanged:**
+  - Undated or undefined targets stay unresolved: Valley Measure 1 and chronic absenteeism, both Drayton engagement goals, Dunseith writing, and Dunseith English Learner (calculation undefined).
+  - Fort Yates, Oberon, Drayton Elementary and Mandaree stay "stated".
+  - The `:assumed` handling remains in code for any future unconfirmed sequence.
+- **Verification:**
+  - **Automated tests:** `expansion_gaps_test.exs` (10 tests, one added) covers the seven confirmed mappings with the source excerpt kept; a same-year comparison on Valley's real 2024-25 row ("Meets"); and no comparison of a 2025-26 target with 2024-25 results. It still covers the assumed-mapping behavior for any future unconfirmed sequence.
+  - **Results:** ND First, ND Insights, import and report suites 386/386. Full suite 578 tests, 157 failures: legacy only, none in ND First files.
+  - **Server-rendered checks:** the 7 confirmed pages show `data-year-mapping="confirmed"` and no "year mapping unconfirmed" cell. Valley's PDF page 5 was viewed.
+
+### ND FIRST navigation: one tab per participant (November 8, 2026; uncommitted, pending review)
+
+Supersedes the tab descriptions in "Expansion: source audit and Oberon" (Shared school tabs) and "Expansion: remaining participants". URLs, permissions, data, goals and PDFs are unchanged.
+
+- **Main tabs** (`Pilot.tabs/1`, `Components.school_tabs/1`):
+  - **Order:** one tab per participant: Fort Yates, Oberon, Valley Middle, Drayton, Dunseith, Mandaree, Warwick. Cannon Ball stays deferred and unlisted, and buildings never get a main tab.
+  - **Destination:** a tab opens the participant's main record (the school, or the district for district participants).
+  - **Access:** tabs show only destinations the signed-in user can read (`Pilot.readable_slugs/1`, one `Dashboard.list_schools/2` read under the school policies).
+    - A participant with nothing readable has no tab.
+    - When only a building is readable (e.g. a Drayton Elementary-only member), the tab opens that building.
+  - **Active tab:** the participant's tab stays highlighted (`aria-current="page"`) on any of its buildings (`Pilot.tab_slug/1`).
+- **Participant navigation** (`Pilot.participant_nav/2`, `Components.participant_nav/1`, `#participant-nav`):
+  - **Where:** on the district dashboard and every building dashboard of Drayton, Dunseith, Mandaree and Warwick.
+  - **Items:** "District overview", then "Elementary School", "Middle School" or "High School", in plan order. The current page is highlighted, and only readable pages are listed.
+  - **Warwick:** the navigation carries a "Workbook scope provisional" badge on the district and every building.
+  - **Single-building participants:** no participant navigation.
+- **Landing page** (`/school-goals`):
+  - Cards are grouped by participant in tab order.
+  - Each district card lists its readable buildings (the same `school-<slug>` links as before).
+  - Warwick's card shows the provisional badge.
+- **Scope notes:** links to records the user can't read are now plain names (`data-readable="false"`), with no "(no access)" text.
+- **Verification (November 8, 2026):**
+  - **Automated tests:** new `test/emisint_web/live/improvement/navigation_test.exs` (7) covers:
+    - tab order and labels, with no building tabs;
+    - landing groups;
+    - single-school active states;
+    - each district's navigation, with District overview current;
+    - a direct link to each of the 9 buildings, with the participant tab and the building current (exactly one tab and one page);
+    - Warwick's badge on all four pages;
+    - the Fort Yates-only viewer (one tab, no participant navigation, building URLs redirect);
+    - a building-only member (the tab opens the building; only that page is listed).
+  - **Updated tests:** the Oberon tab test (other participants' tabs are hidden in an organization without them) and the building-permission test (no "(no access)" text).
+  - **Results:** ND First, ND Insights, import and report suites pass. Full suite 577 tests, 157 failures: the legacy suites only, none in ND First files.
+  - **Load note:** one earlier full run, made while the dev server was also being exercised, took 648 s and had 9 extra failures, all 60-second `ExUnit.TimeoutError`s in legacy suites. Rerun alone, it took 70 s with the usual 157.
+  - **Server-rendered checks** on the dev server:
+    - **`admin@example.com`:** all 16 pages show the 7 tabs in order, the participant tab current and the right navigation item current; the Warwick badge appears on its 4 pages only.
+    - **`viewer@example.com` (Fort Yates only):** one tab; the 15 other URLs redirect.
+  - **Real browser: pending** (headless-Chrome hang unresolved).
+
+### Goal-comparison colors beyond Fort Yates (November 8, 2026; uncommitted, pending review)
+
+Audit of why only Fort Yates showed goal colors, and the fixes. Fort Yates's behavior (numeric targets, demo assumptions, grade references) is unchanged, and no Fort Yates target or assumption is applied to another school.
+
+- **Causes found:**
+  - **Text targets:** any target not stored as a number was gray (`:target_not_comparable`), including "< 18%", "> 35%" and ranges such as "55-60%" (`:target_is_range`).
+  - **Oberon achievement:** gray (`:assessment_type_unconfirmed`) because the workbook doesn't name the assessment.
+  - **Oberon engagement:** gray, from the range targets and an unverified survey population.
+  - **Valley, Drayton, Dunseith, Mandaree, Warwick:** `workbook: []`, so no comparison was even attempted.
+  - **Buildings:** annual targets only (2025-26 onward), with no matching results in the imported data; unchanged.
+- **Rules added** (`ResultGoals.target_spec/2`, `classify_bound/3`, `classify_band/4`):
+  - **Inequality:** strict, so an equal value doesn't meet "< 18%"; meets when the whole published value satisfies it, misses when none of it does, otherwise overlaps.
+  - **Range:** a **dashboard comparison convention, not a source-confirmed scoring rule**, since the sources don't define when a range target is met. Only verdicts that hold whichever end counts are given: meets beyond the far end, misses wholly short of the near end, otherwise overlaps. The cells, the section note and the methodology say so.
+  - **Compound** ("< 22% or within 7% State Avg"): meets through its inequality; otherwise gray (`:compound_target`), because the other condition isn't defined in the sources.
+  - **Empty or "n/a" target:** gray (`:no_target`). Relative ("Dec 2-3%"), qualified ("70% @ Level 2+") or split ("50% K-6; 100% 7-12") targets stay gray (`:target_not_comparable`).
+  - **Percent text:** must carry "%" (stored as 0–1).
+- **Candidates** (shown in each cell's explanation and the section note; never labeled as assumed): `candidates` (`%{code => evidence}`) marks a mapping whose survey category or population is only inferred, e.g. from a baseline match. It is a candidate to investigate, not a confirmation. Its value and target are shown gray (`:mapping_unconfirmed`, "Gray: candidate mapping, awaiting confirmation") with the evidence, never a verdict. The earlier `engagement_basis` mechanism is removed (see the Oberon engagement source check).
+- **Correction (November 8, 2026, per user review):** the first pass treated two kinds of evidence as confirmation. Both are reversed.
+  - **Valley G3-M1 and Drayton G4-M1:** the baseline matches were treated as confirming the survey category. Both are now documented candidates with their verdicts disabled.
+  - **Oberon achievement:** identical Combined and Standard values were treated as settling which assessment the workbook targets count. They don't establish the workbook's definition, so the rule (`assessment_type_rule: :identical`) is removed. Oberon's workbook achievement comparisons are gray, "awaiting assessment confirmation"; its confirmed annual comparisons are unchanged.
+  - **Label:** annual targets with no matching row now say "No matching results in the imported data" instead of "Not yet published", because publication availability wasn't independently verified.
+- **Oberon engagement source check (November 9, 2026, per user review):** the sources were checked for an explicit statement of the survey population behind G4-M1..M3.
+  - **Workbook** ("ND First School MOU Goal Overview.xlsx", sheet "Oberon Goals", rows 25–29): the metric wording names the Emotional category ("% of students reporting as Emotionally Committed / Compliant / Disengaged"). It gives no survey name, year, grades or population.
+  - **Plan** (North Dakota - ND First Schools.pdf pp.23–24, Oberon's section): achievement, annual targets, progress monitoring and initiatives only. No engagement survey or population is mentioned.
+  - **Result:** the population is inferred only from matching baselines. G4-M1/G4-M2 (45-49%, 40-44%) equal the 2024-25 published Emotional Committed and Compliant values; G4-M3's 6-10% doesn't match the published 10%–14%. So G4-M1..M3 are now candidates with no verdict, and `engagement_basis` is removed. The range convention (`classify_band/4`) is kept, unit-tested, for when the population is confirmed.
+- **Accidental formatting cleanup (November 9, 2026):** an unscoped `mix format` (run while applying the correction) reformatted tracked files outside the change.
+  - **Backups first:** in the session scratchpad `format_backup/`: the full working-tree diff, the accidental diffs (`accidental_57.diff`, `accidental_2_more.diff`), tar archives of the affected files and the prior `git status`.
+  - **Pre-format state established, per file:** the session began with a clean tree. The session transcript records no Edit/Write call, sed, script or glob command touching these files before the format run, and no other unscoped `mix format`. The Mac ZIP (`emisint.zip`) copies equal HEAD. So each file's pre-format content was HEAD's.
+  - **Reversal:** only the accidental changes were reversed, with `git apply -R` of the recorded diffs; the checkout's CRLF line endings were then restored.
+    - **Scope:** the 57 files outside ND First, plus 2 ND files I never edited (`nd_insights_import_live.ex`, `metric_history_live.ex`; whitespace-only HEEx changes).
+    - **Check:** all 59 now match HEAD's checkout byte for byte.
+    - **Kept:** formatting of files I edited for ND First.
+- **Per-school result:**
+
+  | School | Comparisons with a verdict | Shown without a verdict, or uncompared — exact decision or data needed |
+  | :-- | :-- | :-- |
+  | Fort Yates | Unchanged (G2/G3 achievement, G2-M3/G3-M3 growth percentile, G4-M2..M4 engagement; annual targets) | — |
+  | Oberon | Annual targets 2021-22 to 2023-24 (2018-19 to 2020-21: no result imported) | G1-M1/G2-M1 and G1-M2/G2-M2: gray, awaiting confirmation of which assessment (Combined, Standard or Alternate) the workbook targets count. Caveat for then: the workbook achievement baselines don't match the published values (ELA Novice 36% vs 50%–79%). The imported 2024-25 data has no achievement levels. G4-M1..M3 Emotional Committed/Compliant/Disengaged: candidates, gray. No source states the survey population; it is inferred from baselines (G4-M1/M2 match 2024-25; G4-M3 doesn't). Needs confirmation of the survey population; the range targets would then use the dashboard convention. |
+  | Valley Middle | Annual targets (2025-26+; no matching results in the imported data) | G3-M1 → Overall Disengaged: candidate, gray. Evidence: baselines 28%/24%/24% equal the published 2022-23..2024-25 Overall values. Needs confirmation of the survey category; then also the 18-month "n/a" target and the meaning of "within 7% State Avg". G5-M2 "Engaged or Committed": unmapped until "Engaged" is defined. |
+  | Drayton (district) | — | G4-M1 → district Overall Disengaged: candidate, gray. Evidence: baseline 25% lies in 25%–29% for 2023-24 and 2024-25. Needs confirmation of the survey category and whether the baseline is a district figure; the 18-month target is empty. G4-M2 "Engaged": unmapped until defined. |
+  | Dunseith (district) | None | G6-M2's survey area: baseline 20% matches no published area (2022-23..2024-25 Overall 18%, Behavioral 13%–16%, Cognitive 10%–13%, Emotional 26%–30%); its "< 15%" target is comparable once the area is confirmed. Graduation rate (G3-M3) isn't in the imported data. |
+  | Mandaree (district) | None | No workbook metric has an Insights counterpart (growth-or-proficiency criteria, Likert and rubric scores, pacing guides). |
+  | Warwick (district) | None | Relative targets ("Inc 2-3%", "Dec 2-3%") have no base year or points-versus-percent rule (G2-M6, G2-M7, G3-M1, G3-M2, G4-M1, G4-M2, G5-M3, G5-M4); workbook scope still provisional. |
+  | 9 buildings | Annual Proficient-or-Advanced targets for their own years (2025-26 onward) | No matching results in the imported data for 2025-26 onward (publication availability not independently verified). The district's workbook goals aren't copied to buildings. |
+
+- **Verification (November 9, 2026, after the Oberon engagement change and the formatting cleanup):**
+  - **Automated tests:** 398 ND First, ND Insights and report tests pass.
+    - **`text_target_comparisons_test.exs`:** parsing; strict inequality; candidate mappings (gray, evidence shown, target still parsed); unmapped "Engaged" metrics; unsupported participants; buildings; Fort Yates configuration.
+    - **Oberon unit tests:** achievement gray "awaiting assessment confirmation", even with identical Combined and Standard rows; G4-M1..M3 candidates (gray, evidence cites pp.23-24 and the baseline match); `classify_band/4` edge cases.
+    - **`oberon_live_test.exs`:** the Novice cell is gray, awaiting assessment confirmation; the Emotional cells are gray candidates at both checkpoints, with no colored engagement cell.
+    - **`expansion_schools_test.exs`:** the only listed mappings are candidates.
+    - **Label tests:** updated to "No matching results in the imported data".
+  - **Server-rendered checks:** HTTP 200 on the dev server.
+    - **Oberon 2023-24, 18-month:** workbook achievement gray ×2 ("awaiting assessment confirmation"); engagement gray ×3 ("candidate mapping, awaiting confirmation"); 2 annual overlaps.
+    - **Oberon 2024-25, 36-month:** engagement gray ×3, candidates.
+    - **Valley 2020-21 and Drayton 2024-25 (36-month):** one gray candidate cell each, "candidate mapping, awaiting confirmation".
+    - **Valley and Drayton Elementary:** annual cells read "No matching results in the imported data".
+  - **PDFs:** generated through Imprintor for Oberon, Valley, Drayton, Dunseith, Fort Yates and Drayton Elementary; Oberon page 4 was rendered and inspected. Labels match the dashboards, and no PDF contains "Not yet published".
+  - **Real browser:** pending.
+
+### ND FIRST portfolio dashboard on `/school-goals` (November 9, 2026; uncommitted, pending review)
+
+Requested for Ram: a summary of all participants before a school is selected, following the first two sheets of "ND First School MOU Goal Overview.xlsx". Individual dashboards, navigation (tabs, participant cards) and comparison rules are unchanged.
+
+- **Source sheets.** Workbook order: "School Directory" (hidden), **"Goals Dashboard"**, **"Performance-Based Payment"**, "Example School", the school sheets, "Evidence Tracker", and "Overview" (hidden). The first two visible sheets are the requirements; the hidden "School Directory" supplies only each row's "Group". All three were read in full from the sheet XML, including formulas, merges, conditional formats and hyperlinks.
+- **Implemented** (`Emisint.Improvement.Portfolio`, `EmisintWeb.Improvement.PortfolioComponents`, `Dashboard.current_ratings/2`):
+  - **Rows:** one per participant in the workbook's row order (Fort Yates, Solen, Oberon, Warwick, Mandaree, Dunseith, Drayton, Valley MS), each linked to its dashboard, as the workbook's names link to their sheets. Each row is the participant's main record (district for district participants). Building records are never rows and add nothing.
+  - **Goals Dashboard columns:**
+    - **Metric counts:** `COUNTIF` by category.
+    - **Spr '26 / Sum '26 / Fal '26:** per-category `AVERAGEIF` of the current seasonal implementation ratings.
+    - **18m Check:** the same, on the formal 18-month review ratings.
+    - **Win '27 – Spr '28:** a single `AVERAGE` per period. These columns are in an expandable "Later periods" table.
+    - **36m Check (S–V):** the workbook gives headings only. The checks use the 18m Check formula; the weighted scores use the headed 30% / 70% weights, which equal the confirmed 36-month weights.
+    - **AVERAGE row:** over the shown participants, with coverage.
+    - **Rubric key and colors:** the workbook's conditional-format bands (≤0.49, 0.50–1.49, 1.50–2.49, ≥2.5).
+  - **Performance-Based Payment columns:**
+    - **C–H by the sheet's formulas:** score, ×70%, score, ×30%, overall only when both exist, ÷3.
+    - **Payout column:** the existing payment estimate (`Payment.summary/3`): "Awaiting review" until every review rating is recorded, "Not configured" without terms.
+  - **Missing data:** shown as "—" (`data-missing`), never 0. Partial coverage is shown as e.g. "13/16".
+  - **Access:** every read runs as the user. A member sees only their participants, and the AVERAGE row covers only those. A building-only member gets the participant row without figures, linked to the readable building. Other organizations see nothing.
+  - **Solen:** superseded November 9, 2026: the "Solen" row is now the Cannon Ball participant (see "Cannon Ball participant").  _(Originally listed as "Not configured" for organization admins only.)_
+- **Deliberately different from the workbook, or not reproduced:**
+  - **AVERAGE row (C13:L13):** the workbook's includes Solen (C13 = 8.5), and E13:L13 also include the "Example School" row. Ours averages the configured participants shown (originally C = 9.00 over 7; with Cannon Ball, C = 8.50 over 8, equal to the workbook's C13).
+  - **Payout ("18-month payout (up to $70,000)" = % × $70,000, blank at 0):** the app's confirmed estimate rule uses each plan's 18-month allocation (Fort Yates $35,000, provisional; others not configured). It requires complete review ratings and never blanks $0. The sheet has no total row, so no portfolio payment total is shown.
+  - **Not shown:** the hidden "Tab Name" column. Also not shown: the School Directory's Drive Folder URL, School Spreadsheet URL, Last Synced and Sync Status (Google sync metadata, mostly errors). Also the "Example School" row, Solen's cached figures (not imported), and the 36-month payment (the payment sheet covers the 18-month review only; each school dashboard has both checkpoints).
+- **Verification (November 9, 2026):**
+  - **Workbook check:** every participant's C–H values (Spr '26 and Sum '26) match the workbook's cached "Goals Dashboard" values, checked on the dev database and in tests.
+    - Fort Yates: 8 / 10 metrics; Spr '26 1.25 / 1.6; Sum '26 1.375 / 1.6.
+    - Oberon: 9 / 12; 1 / 1.583; 1.667 / 1.917.
+    - Warwick: 14 / 11; 1.857 / 1.636; 1.929 / 2.
+    - Mandaree: 3 / 3; 1 / 3; 2 / 3.
+    - Dunseith: 7 / 9; 1.833 / 1.889; 2.167 / 1.889.
+    - Drayton: 6 / 7; 1.333 / 2.143; 1.667 / 2.143.
+    - Valley MS: 16 / 10; 1.462 / 1.4; 2.125 / 1.8.
+    - No Fal '26 or review ratings exist yet, so those columns show "—".
+  - **Automated tests:** `test/emisint/improvement/portfolio_test.exs` (10) and `test/emisint_web/live/improvement/portfolio_live_test.exs` (3) cover workbook values, AVERAGEIF exclusions, the AVERAGE row, no building rows or double counting, Solen visibility, missing data, partial and complete review ratings (2.4 weighted, 80%, $28,000.00 estimate), and access isolation (single-school member, building-only member, other organization). All 411 ND First, ND Insights and report tests pass.
+  - **Server-rendered checks:** HTTP 200 on the dev server.
+    - **`admin@example.com`:** all 8 rows; values match the workbook to two decimals.
+    - **`viewer@example.com` (Fort Yates only):** only the Fort Yates row.
+  - **Real browser:** pending.
+
+### Cannon Ball participant (November 9, 2026; uncommitted, pending review)
+
+- **User confirmation (recorded November 9, 2026):** “the workbook’s ‘Solen’ sheet represents the Cannon Ball ND FIRST participant.” The confirmation maps the workbook participant only; it does not authorize using Solen district or another building's state results.
+- **InstitutionID, verified against the sources:**
+  - **ND Insights files:** every one of the 17 imported files (2021-22 – 2024-25 Performance, Participation and Growth; the five Engagement files) publishes "Cannon Ball Elementary School" as **4300312781**, district "Solen Public School District" (**43003**), with one name per ID.
+  - **Same district, not used:** Solen High School (**4300380363**) and the district are separate rows and are never imported for Cannon Ball.
+  - **PDF:** pp.4–6 head the plan "Cannon Ball Elementary School, Solen Public School District"; p.1 lists "Cannon Ball" as an ND First school.
+- **Record:** `Seeds.CannonBall` (`lib/emisint/improvement/seeds/cannon_ball.ex`), a single-building participant: Cannon Ball Elementary School, slug `cannon-ball-elementary`, grade span not stated in the sources (nil).
+  - **How it was generated:** from the "Solen Goals" sheet, with the same generator as the other participants. Every value cites its cell.
+  - **Goals and metrics:** 7 goals; 18 metrics (5 Systems, 13 Student Outcomes, matching Goals Dashboard!C6:D6) with baselines and 18-/36-month targets.
+  - **Ratings:** 36 Spr '26 / Sum '26 ratings (`workbook_ratings/0`).
+  - **Kept as written:** G5-M1's date cells (D30, H30, P30) are flagged `:source_value_is_date`. G7-M2's "< 10%" is `:value_as_text`. G2-M1–M3 have no baseline (missing, not zero). Goals 2–7's 18-month column is headed "Target Check" (flagged).
+  - **Annual targets:** PDF p.4 "Annual Proficiency Targets – All Students", 2025–2026 (ELA 13%, Math 7%) through 2030–2031 (38%, 34%), each with its stated year (`annual_years: :stated`), ND A+ or NDAA (compared with Combined). No other plan targets.
+  - **Payment:** $70,000 cap as on the "Performance-Based Payment" sheet. Allocations are not set (no source gives them), so the estimate is "Not configured".
+- **Scope gap:** the sheet's goals are written for Solen Public School District and its schools (Cannon Ball Elementary, Solen Jr. High, Solen High School). Shown in the dashboard and PDF notes.
+- **Wiring:**
+  - **Config:** `pilot_institution_ids` + "4300312781".
+  - **Roster:** `Seeds.available_schools/0` + `CannonBall`. The main tab "Cannon Ball" is last, after the previously confirmed order.
+  - **Portfolio:** the workbook's "Solen" row is now the Cannon Ball participant row (labeled "Workbook row “Solen”"), in its workbook position, replacing the placeholder. There are still 8 rows, not 9.
+  - **Unchanged features:** dashboard, filters, data entry, history, PDF and permissions are the existing shared ones.
+- **Comparisons:**
+  - **Annual targets:** compared with Cannon Ball's own result for the same year. All targets are 2025-26 or later, so they currently read "No matching results in the imported data".
+  - **Workbook metrics: none matched**, because these definition gaps remain:
+    - **Grade bands:** the Reading and Novice metrics count grades 3-5 and 6-8. Insights publishes per grade and All Grades only, and ranges can't be combined without a rule.
+    - **Grade 10:** G1-M3, G1-M6, G2-M3 and G2-M6 cover Grade 10, which Cannon Ball Elementary doesn't have. Solen High School's results are not substituted.
+    - **Proficiency:** "demonstrate proficiency" doesn't say Proficient alone or Proficient or Advanced.
+    - **Growth:** "expected annual growth" isn't an Insights growth category.
+    - **Local measures:** G7-M1 and the Systems metrics.
+    - **Engagement:** the sheet has no engagement metric.
+- **Dev database (no reset):**
+  - **Seeds:** `Seeds.run` for `CannonBall` created 86 records (school, plan, 7 goals, 18 metrics, 11 periods, 12 annual targets, 36 ratings). The rerun created nothing (86 unchanged, 0 drift).
+  - **ND Insights import:** `mix nd_insights.import --institution-id 4300312781` on all 17 reference files created 1,694 measures, with 0 conflicts, parse errors or name mismatches. The rerun created nothing.
+  - **Independent check:** CSVs vs database for 4300312781: 1,694/1,694 match, with 0 missing, 0 extra and 0 value mismatches.
+  - **Missing data:** Cannon Ball's rows have no suppressed cells. Missing grades and years (e.g. grade 8 achievement in 2024-25, grade 7 in 2022-23) are absent rows and show "Not published", never 0.
+- **Portfolio values:** Cannon Ball counts 5 / 13; Spr '26 1.2 / 1.923; Sum '26 1.4 / 1.923, matching Goals Dashboard!C6:H6.
+  - **AVERAGE row:** now covers 8 participants. C = 8.5 equals the workbook's C13. The workbook's E13 (1.353927554) is reproduced by adding its Example School row (1.25) to our 8-participant mean.
+- **Verification (November 9, 2026):**
+  - **Automated tests:**
+    - **New:** `test/emisint_web/live/improvement/cannon_ball_test.exs` (11) covers the mapping and InstitutionID, the workbook definitions and ratings, the PDF annual targets, storage of only 4300312781 (with Solen district/high rows in the fixture), rerun safety with a manual rating kept, the dashboard, data entry and history, the PDF, the portfolio values and AVERAGE row, and access isolation.
+    - **Fixtures:** `test/fixtures/nd_insights/cannon_ball/` (rows copied unchanged).
+    - **Updated:** the portfolio tests (Solen placeholder → Cannon Ball, 8 participants), the navigation test (Cannon Ball tab last) and the seeds test (Cannon Ball ID).
+    - **Results:** all 421 ND First, ND Insights and report tests pass.
+  - **Server-rendered checks:** HTTP 200 on the restarted dev server.
+    - **`admin@example.com`:** 8 portfolio rows, Cannon Ball in the Solen position with the workbook values. The Cannon Ball dashboard shows 18 metrics and 12 annual targets.
+    - **`viewer@example.com`:** only Fort Yates; Cannon Ball's page redirects.
+    - **PDF:** `/school-goals/cannon-ball-elementary/report.pdf` (6 pages) was rendered and inspected: header ND 4300312781, Sum '26 1.4 / 1.92, workbook cells cited, payment "Not configured", and its own 2024-25 results.
+  - **Real browser:** pending.
+
 ### Phase 3: 18-month review + payment
 
 - [x] **17.** Formal review ratings: `ImplementationRating.:record_review` (review periods only; contributor policy, `RatingShape` validation and `:correct` history shared with seasonal ratings). No separate `ReviewRating` resource; the `:reviewer` membership role is still unused.
@@ -801,7 +1292,7 @@ Every school's payment row ("Performance-Based Payment" rows 3–11) uses the sa
 
 ### Phase 4: expansion (deferred until the Fort Yates experience is approved)
 
-- [ ] **20.** Decide how to model multi-building participants, resolve the open items, then add Drayton, Dunseith, Mandaree, Valley Middle School and Warwick from their own sheets and goals (Oberon done November 4, 2026, pending review; Cannon Ball deferred). See "Expansion: source audit and Oberon".
+- [x] **20.** Model multi-building participants and add Drayton, Dunseith, Mandaree, Valley Middle School and Warwick from their own sheets and goals (Oberon done November 4, 2026; the rest November 8, 2026). All pending individual review; Cannon Ball deferred. See "Expansion: remaining participants". The open items listed there remain unresolved.
 - [ ] **21.** `PortfolioLive` (`/nd-first`).
 
 ---
@@ -812,7 +1303,7 @@ Every school's payment row ("Performance-Based Payment" rows 3–11) uses the sa
 2. **Goal 4 column I is headed "Target Check"** (`I26`), while Goals 1–3 use "18-Month Review Rating" (`I3`, `I12`, `I19`). The payment sheet averages the whole of `'Ft Yates Goals'!I:I` by the category in column A (`Performance-Based Payment!C4`, `E4`), so Goal 4's rows 27–30 would count. (Correction: an earlier revision said the formula reads `I27:I30` directly; it uses whole-column `AVERAGEIF`.) The dashboard shows this as one expandable note under the Goal 4 heading; the metrics keep `:review_18m_column_heading_unconfirmed`.
 3. **Column Q "Target Check"** (36-month) has 3/2/1/0/N/A validation with an undefined meaning.
 4. **Review dates and reviewer assignments** are unknown.
-5. **Solen vs Cannon Ball:** PDF p.4 reads "Cannon Ball Elementary School, Solen Public School District". Unconfirmed; deferred to Phase 4.
+5. **Solen vs Cannon Ball:** resolved November 9, 2026 — the user confirmed that the workbook's "Solen" sheet represents the Cannon Ball participant (see "Cannon Ball participant"). Its record is Cannon Ball Elementary School (InstitutionID 4300312781); Solen district and Solen High School results are never substituted.
 6. **Weight labels, resolved October 23:** the weights differ by checkpoint. The 18-month review is Systems 70% / Outcomes 30% (the payment sheet), and the 36-month review is Systems 30% / Outcomes 70% (the "Goals Dashboard" `T2`/`V2` labels). How the $70,000 maximum applies across the checkpoints is still not confirmed. Ram authorized a best-estimate rule on November 1, 2026; the $70,000 total and equal $35,000 split are our selected provisional assumptions, not terms he specified (see Payment).
 7. The workbook hides a $0 payout as blank. We show $0.00.
 8. Payout rounding is not specified by the sources. Provisional: half up to cents, after capping.
@@ -839,7 +1330,7 @@ Every school's payment row ("Performance-Based Payment" rows 3–11) uses the sa
 18. **Open-ended range widths** (0–10%, 0–20%, 0–40%, 80–100%) vary by group with no documented rule, which makes many derived ranges wide (e.g. 0%–40%).
 19. **Why grade 5 is never published for Fort Yates** (suppressed, or no tested students) is not stated.
 20. **The test changed:** Insights says the achievement test was ND A+ in 2024-25 and NDSA in 2022-23 and 2023-24. Comparability across that change is unconfirmed, so year-over-year comparisons should be labeled before any trend charts are added.
-21. **No annual goal year has published data yet:** the PDF goals start in 2025-26 and the latest file is 2024-25, so every goal currently shows "Not yet published". The 2025-26 download needs to be imported when Insights publishes it.
+21. **No annual goal year has matching imported data:** the PDF goals start in 2025-26 and the latest imported file is 2024-25, so every goal currently shows "No matching results in the imported data". Whether Insights has published 2025-26 results hasn't been independently verified; import the 2025-26 download once it is available.
 22. ~~**Growth mapping unconfirmed:**~~ **Resolved October 31, 2026:** G2-M3 and G3-M3 are Overall Growth Percentiles (see "Growth-percentile decision"). Original note: whether the workbook's "met state growth expectations" (G2-M3, G3-M3) means Insights "Meets", or "Meets + Exceeds", for which grades and year, is unknown, so no comparison is made.
 23. **Engagement mapping unconfirmed:** the workbook's G4 disengagement metrics plausibly correspond to the Engagement Survey "Disengaged" level by area, but the baseline year and survey grades are unstated, so no comparison is made. (November 1, 2026: the targets are shown beside Disengaged as "Not compared: population unverified"; G4-M1, observed active engagement, is not matched to survey Committed.)
     - **Engagement Participation, resolved:** the file's data dictionary describes its year columns as "percent of participants that fall into this engagement level", but the data contradicts that. The Committed, Compliant and Disengaged rows are identical for all 5,656 institution-years statewide (the state row reads 0.89 for each level), and Insights' Participation tab shows it as "Overall Participation — participation of the enrolled student body in the engagement survey", one series per year.

@@ -171,7 +171,7 @@ defmodule Emisint.Improvement.ResultGoalsTest do
       goals = ResultGoals.for_filters(rows, @filters, plan(), assumptions: %{})
       gray = goals.achievement[{"Reading", "All Grades"}]["Proficient"]
       assert %{status: :gray, reasons: [:assessment_type_unconfirmed]} = gray
-      assert ResultGoals.short_label(gray) == "Gray: assessment type unconfirmed"
+      assert ResultGoals.short_label(gray) == "Gray: awaiting assessment confirmation"
 
       assert goals.achievement[{"Reading", "All Grades"}][:proficient_or_advanced].status ==
                :meets

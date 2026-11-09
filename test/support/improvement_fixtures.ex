@@ -45,6 +45,30 @@ defmodule Emisint.ImprovementFixtures do
     )
   end
 
+  @doc """
+  A registered ND school that is not an ND First pilot school: a clearly
+  synthetic record (InstitutionID `TEST000099`), for tests of the pilot filter.
+  Every real ND First participant (including Cannon Ball) is a pilot school,
+  so no real school is used.
+  """
+  def non_pilot_school!(org) do
+    Ash.create!(
+      School,
+      %{
+        name: "Synthetic Non-Pilot School",
+        short_name: "Synthetic",
+        slug: "synthetic-non-pilot-school",
+        state: "ND",
+        state_entity_id: "TEST000099",
+        district_name: "Synthetic Test District",
+        grade_span: "6-8",
+        active: true
+      },
+      tenant: org.id,
+      authorize?: false
+    )
+  end
+
   def school!(org, slug \\ "fort-yates-ms") do
     School |> Ash.Query.filter(slug == ^slug) |> Ash.read_one!(tenant: org.id, authorize?: false)
   end

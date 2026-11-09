@@ -69,7 +69,7 @@ defmodule EmisintWeb.Improvement.StateResultsComponentsTest do
         match: ResultGoals.annual(goal, [])
       )
 
-    assert html =~ "Not yet published"
+    assert html =~ "No matching results in the imported data"
     refute html =~ "nd-cell-"
   end
 end

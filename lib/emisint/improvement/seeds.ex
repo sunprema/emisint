@@ -34,17 +34,55 @@ defmodule Emisint.Improvement.Seeds do
     ReportingPeriod
   }
 
-  alias Emisint.Improvement.Seeds.{FortYates, Oberon, ValleyMiddle}
+  alias Emisint.Improvement.Seeds.{
+    CannonBall,
+    Drayton,
+    DraytonElementary,
+    DraytonHigh,
+    Dunseith,
+    DunseithElementary,
+    DunseithHigh,
+    FortYates,
+    Mandaree,
+    MandareeElementary,
+    MandareeHigh,
+    Oberon,
+    ValleyMiddle,
+    Warwick,
+    WarwickElementary,
+    WarwickHigh,
+    WarwickMiddle
+  }
 
   # Seeded by default: the current release is the Fort Yates pilot.
   @schools [FortYates]
 
-  # ND First schools whose MOU sheet, PDF targets and InstitutionID map to a
-  # single verified building. The others are kept for later expansion and are
-  # seeded only when passed explicitly as `schools:`. See PLAN_nd_first.md for
-  # the five participants whose district-level sheets do not (yet) map to one
-  # building.
-  @available_schools [FortYates, Oberon, ValleyMiddle]
+  # Every verified ND First definition module. Single-building participants
+  # (Fort Yates, Oberon, Valley Middle) are one record each. District
+  # participants (Drayton, Dunseith, Mandaree, Warwick) are a participant
+  # record with the workbook goals plus one record per building with only that
+  # building's PDF annual targets (`Seeds.Participant`). Modules other than
+  # Fort Yates are seeded only when passed explicitly as `schools:`. Cannon
+  # Ball (`CannonBall`) is the workbook's "Solen" participant (confirmed by the user).
+  @available_schools [
+    FortYates,
+    Oberon,
+    ValleyMiddle,
+    Drayton,
+    DraytonElementary,
+    DraytonHigh,
+    Dunseith,
+    DunseithElementary,
+    DunseithHigh,
+    Mandaree,
+    MandareeElementary,
+    MandareeHigh,
+    Warwick,
+    WarwickElementary,
+    WarwickMiddle,
+    WarwickHigh,
+    CannonBall
+  ]
 
   @doc "School definition modules seeded by default."
   def schools, do: @schools

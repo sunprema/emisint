@@ -103,7 +103,7 @@ defmodule Emisint.NdInsights.SchoolResults do
     year = if params["state_year"] in years, do: params["state_year"], else: List.first(years)
     types = Enum.map(@assessment_types, &elem(&1, 0))
     type = if params["state_type"] in types, do: params["state_type"], else: "Comp"
-    subgroups = subgroups(rows, year)
+    subgroups = subgroups(rows, year, type)
     subgroup = if params["state_subgroup"] in subgroups, do: params["state_subgroup"], else: "All"
 
     %{
@@ -115,17 +115,40 @@ defmodule Emisint.NdInsights.SchoolResults do
     }
   end
 
-  def subgroups(rows, year) do
-    rows
-    |> Enum.filter(
-      &(&1.academic_year == year and &1.dataset in [:assessment_performance, :growth_rate])
-    )
-    |> Enum.map(& &1.subgroup)
+  @doc """
+  The student groups offered for `year` and `assessment_type`: every group
+  published in that year's achievement or % tested rows of that assessment
+  type, or in its growth rows (which have no assessment type). "All" is
+  always offered first, since it is the default selection, even when no
+  achievement or growth row is published for the year.
+  """
+  def subgroups(rows, year, assessment_type) do
+    published =
+      rows
+      |> Enum.filter(&(&1.academic_year == year and subgroup_source?(&1, assessment_type)))
+      |> Enum.map(& &1.subgroup)
+
+    ["All" | published]
     |> Enum.uniq()
     |> Enum.sort_by(&{&1 != "All", &1})
   end
 
-  @doc "Performance rows: `[%{subject, grade, levels: %{measure => row}, tested: row}]`."
+  defp subgroup_source?(%{dataset: :growth_rate}, _type), do: true
+
+  defp subgroup_source?(%{dataset: dataset, assessment_type: type}, type)
+       when dataset in [:assessment_performance, :assessment_participation],
+       do: true
+
+  defp subgroup_source?(_row, _type), do: false
+
+  @doc """
+  Performance rows: `[%{subject, grade, levels: %{measure => row}, tested: row}]`.
+
+  A subject and grade with a published % tested but no published
+  achievement levels is still returned, with `levels: %{}`, so participation
+  stays visible when achievement is missing. Nothing is filled in for the
+  missing levels.
+  """
   def performance(rows, year, assessment_type, subgroup) do
     tested =
       rows
@@ -133,13 +156,17 @@ defmodule Emisint.NdInsights.SchoolResults do
       |> Enum.filter(&slice?(&1, year, assessment_type, subgroup))
       |> Map.new(&{{&1.subject, &1.grade}, &1})
 
-    rows
-    |> Enum.filter(
-      &(&1.dataset == :assessment_performance and slice?(&1, year, assessment_type, subgroup))
-    )
-    |> Enum.group_by(&{&1.subject, &1.grade})
-    |> Enum.map(fn {{subject, grade} = key, measures} ->
-      levels = Map.new(measures, &{&1.measure, &1})
+    levels_by_key =
+      rows
+      |> Enum.filter(
+        &(&1.dataset == :assessment_performance and slice?(&1, year, assessment_type, subgroup))
+      )
+      |> Enum.group_by(&{&1.subject, &1.grade})
+
+    (Map.keys(levels_by_key) ++ Map.keys(tested))
+    |> Enum.uniq()
+    |> Enum.map(fn {subject, grade} = key ->
+      levels = levels_by_key |> Map.get(key, []) |> Map.new(&{&1.measure, &1})
 
       %{
         subject: subject,
@@ -151,6 +178,34 @@ defmodule Emisint.NdInsights.SchoolResults do
     end)
     |> Enum.sort_by(&{subject_order(&1.subject), grade_order(&1.grade)})
   end
+
+  @doc "True when any performance row (from `performance/4`) has published achievement levels."
+  def achievement_published?(performance), do: Enum.any?(performance, &(&1.levels != %{}))
+
+  @doc """
+  The latest academic year with imported results matching the filters, or
+  `nil`. Determined from the stored rows only:
+
+    * `:achievement`: achievement levels for the same assessment type and
+      student group (all accommodations);
+    * `:growth`: growth results for the same student group.
+  """
+  def latest_year_with(rows, :achievement, %{type: type, subgroup: subgroup}) do
+    rows
+    |> Enum.filter(
+      &(&1.dataset == :assessment_performance and &1.assessment_type == type and
+          &1.subgroup == subgroup and &1.accommodations in ["All", nil])
+    )
+    |> latest_year()
+  end
+
+  def latest_year_with(rows, :growth, %{subgroup: subgroup}) do
+    rows
+    |> Enum.filter(&(&1.dataset == :growth_rate and &1.subgroup == subgroup))
+    |> latest_year()
+  end
+
+  defp latest_year(rows), do: rows |> Enum.map(& &1.academic_year) |> Enum.max(fn -> nil end)
 
   @doc """
   Growth rows: `[%{subject, grade, levels: %{measure => row}, meets_or_exceeds}]`

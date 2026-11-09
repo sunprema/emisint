@@ -66,22 +66,36 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
       config = ResultGoals.config(school)
 
       used = used_files(state.files, filters, cited_years(defs, state.rows))
+      building? = match?(%{kind: :building}, Emisint.Improvement.Seeds.Participant.scope(school))
 
       report = %{
         report: %{
           title: "ND First school report",
           generated_at: Calendar.strftime(DateTime.utc_now(), "%b %-d, %Y %H:%M UTC"),
           generated_by: to_string(scope.current_user.email),
-          period: period.label,
+          period: if(building?, do: "Not applicable", else: period.label),
           period_scope:
-            if(GrowthPercentile.review_period?(period),
-              do: "review actuals and formal review ratings",
-              else: "seasonal actuals and ratings"
-            ),
+            cond do
+              building? ->
+                "no workbook goals or seasonal ratings for this building"
+
+              GrowthPercentile.review_period?(period) ->
+                "review actuals and formal review ratings"
+
+              true ->
+                "seasonal actuals and ratings"
+            end,
           state_year: filters.year || "No state data imported",
           state_type: type_label(filters.type),
           state_subgroup: subgroup_label(filters.subgroup),
-          goal_reference: ResultGoals.reference_label(filters.reference)
+          goal_reference: ResultGoals.reference_label(filters.reference),
+          # Appended to the state results filters line; a building has no workbook goals.
+          goal_reference_text:
+            if(building?,
+              do: "",
+              else:
+                " · goals compared with the #{ResultGoals.reference_label(filters.reference)} (reference)"
+            )
         },
         school: %{
           name: school.name,
@@ -107,11 +121,26 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
             }
           ),
         goals: Enum.map(defs.goals, &goal(&1, defs, data, period, state.rows)),
-        annual: annual_rows(defs.annual_goals, state.rows),
+        annual: annual_rows(defs.annual_goals, state.rows, config),
+        annual_year_mapping: annual_year_mapping(config.annual_years),
+        plan_targets: plan_targets(school),
         state: state_section(state, filters, benchmark, plan),
         nd_comparison: nd_comparison(state, filters, nd? && benchmark),
-        guidance: guidance(Map.put(config, :payment_configured?, defs.payment.terms.configured?)),
-        appendix: appendix(compared, nd?, config),
+        scope: scope_section(school),
+        guidance:
+          config
+          |> Map.put(:payment_configured?, defs.payment.terms.configured?)
+          |> guidance()
+          |> scope_guidance(school),
+        appendix:
+          compared
+          |> appendix(nd?, config)
+          |> then(
+            &if(building?,
+              do: Enum.reject(&1, fn line -> line =~ "Reference checkpoint." end),
+              else: &1
+            )
+          ),
         sources: sources_used(defs.plan, used, compared, nd?),
         file_inventory: inventory_lines(state.files -- used),
         file_inventory_note: inventory_note(state.files, used)
@@ -298,14 +327,14 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
     "#{prefix}#{who}, #{Calendar.strftime(e.recorded_at, "%b %-d, %Y")}"
   end
 
-  defp annual_rows(goals, rows) do
+  defp annual_rows(goals, rows, config) do
     goals
     |> Enum.group_by(& &1.school_year)
     |> Enum.sort_by(&elem(&1, 0))
     |> Enum.map(fn {year, list} ->
       by = Map.new(list, &{&1.subject, &1})
-      ela = by[:ela] && ResultGoals.annual(by[:ela], rows)
-      math = by[:math] && ResultGoals.annual(by[:math], rows)
+      ela = by[:ela] && ResultGoals.annual(by[:ela], rows, config)
+      math = by[:math] && ResultGoals.annual(by[:math], rows, config)
 
       %{
         year: year,
@@ -321,12 +350,17 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
 
   # Same comparison and wording as the dashboard's Annual Targets table and
   # state tables (`ResultGoals.annual/2`).
-  defp annual_tone(%{status: :not_published}), do: "neutral"
+  defp annual_tone(%{status: status}) when status in [:not_published, :year_unconfirmed],
+    do: "neutral"
+
   defp annual_tone(%{tone: tone}), do: to_string(tone)
   defp annual_tone(nil), do: "neutral"
 
   @doc "An Annual Targets cell as text."
-  def annual_text(%{status: :not_published} = m), do: m[:missing] || "Not yet published"
+  def annual_text(%{status: :not_published} = m),
+    do: m[:missing] || "No matching results in the imported data"
+
+  def annual_text(%{status: :year_unconfirmed} = m), do: m.missing
 
   def annual_text(m),
     do: "#{m.value || "Not derivable"} derived · #{ResultGoals.short_label(m)}"
@@ -408,7 +442,8 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
       has_data: true,
       legend: %{
         intro: ResultGoals.legend_short(),
-        reference: ResultGoals.reference_note(f.reference),
+        # No workbook goals (a building record): no reference checkpoint to explain.
+        reference: if(plan.metrics == [], do: "", else: ResultGoals.reference_note(f.reference)),
         items:
           Enum.map(ResultGoals.legend_items(), fn {tone, label} ->
             %{tone: to_string(tone), label: label}
@@ -436,7 +471,11 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
         if(goal_years != [] and f.year not in goal_years,
           do:
             ResultGoals.annual_years_note(goal_years, f.year) <>
-              " Workbook goals are compared with the #{ResultGoals.reference_label(f.reference)} as a reference.",
+              if(plan.metrics == [],
+                do: "",
+                else:
+                  " Workbook goals are compared with the #{ResultGoals.reference_label(f.reference)} as a reference."
+              ),
           else: ""
         ),
       achievement:
@@ -451,7 +490,11 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
             partially: v.("Partially"),
             proficient: v.("Proficient"),
             advanced: v.("Advanced"),
-            derived: goal_cell(derived(r.proficient_or_advanced), g[:proficient_or_advanced]),
+            derived:
+              if(r.levels == %{},
+                do: goal_cell("Not published", nil),
+                else: goal_cell(derived(r.proficient_or_advanced), g[:proficient_or_advanced])
+              ),
             tested:
               participation_cell(
                 state_value(r.tested),
@@ -459,8 +502,22 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
               )
           }
         end),
+      # "" when achievement levels are published. Rows with only % tested are
+      # still listed above, so participation stays visible.
       achievement_empty:
-        "No published achievement results for #{type_label(f.type)} assessment · #{subgroup_label(f.subgroup)} · #{f.year}.",
+        if(SchoolResults.achievement_published?(perf),
+          do: "",
+          else:
+            "No published achievement results for #{type_label(f.type)} assessment · #{subgroup_label(f.subgroup)} · #{f.year}; the imported state download has no achievement rows for this combination." <>
+              if(perf != [],
+                do: " % tested is shown where the participation download publishes it.",
+                else: ""
+              ) <>
+              latest_year_text(
+                SchoolResults.latest_year_with(state.rows, :achievement, f),
+                "achievement"
+              )
+        ),
       growth:
         Enum.map(growth, fn r ->
           g = goals.growth[{r.subject, r.grade}]
@@ -478,7 +535,14 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
             percentile: v.("OverallGrowthPercentile")
           }
         end),
-      growth_empty: "No published growth results for #{subgroup_label(f.subgroup)} · #{f.year}.",
+      # "" when growth is published (the template prints it only for an empty table).
+      growth_empty:
+        if(growth == [],
+          do:
+            "No published growth results for #{subgroup_label(f.subgroup)} · #{f.year}; the imported state growth download has no rows for this combination." <>
+              latest_year_text(SchoolResults.latest_year_with(state.rows, :growth, f), "growth"),
+          else: ""
+        ),
       engagement:
         Enum.map(engagement, fn r ->
           g = goals.engagement[r.area]
@@ -562,6 +626,13 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
   defp state_value(%{value_state: :range, range_low: l, range_high: h}),
     do: "#{Percent.format(l)}–#{Percent.format(h)}"
 
+  # Same wording as the dashboard's latest-year link (the PDF names the year).
+  defp latest_year_text(nil, what),
+    do: " No imported year has #{what} results for this combination."
+
+  defp latest_year_text(year, what),
+    do: " Latest imported year with #{what} results for the same filters: #{year}."
+
   defp derived({:ok, low, high}), do: interval(%{low: low, high: high})
   defp derived({:not_derivable, _}), do: "Not derivable"
 
@@ -582,7 +653,11 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
   # participation statute.
   defp sources_used(plan, used, compared, nd?) do
     [
-      "[W] " <> plan.source_note,
+      # [W] marks the goal workbook; a building's plan cites only the PDF.
+      if(String.starts_with?(plan.source_note || "", "ND First School MOU Goal Overview"),
+        do: "[W] " <> plan.source_note,
+        else: plan.source_note
+      ),
       "Annual targets: North Dakota - ND First Schools.pdf (each school's continuous improvement plan page)."
     ] ++
       Enum.map(used, &file_line/1) ++
@@ -691,6 +766,118 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
       "[W] marks values imported from the goal workbook (cell shown); see the appendix."
     ]
     |> Enum.reject(&is_nil/1)
+  end
+
+  # Same wording as the dashboard (`Components.annual_year_mapping/1`).
+  defp annual_year_mapping(nil), do: ""
+
+  defp annual_year_mapping(%{status: :confirmed} = y),
+    do:
+      "Year mapping confirmed by the user: the targets are 2025–2026 through 2030–2031, in order (recorded November 8, 2026). Source wording: #{y.excerpt} (#{y.location})"
+
+  defp annual_year_mapping(%{status: :stated} = y),
+    do: "Year mapping as stated in the source: #{y.excerpt} (#{y.location})"
+
+  defp annual_year_mapping(%{status: :assumed} = y),
+    do:
+      "Year mapping unconfirmed: the source assumes which school year each target belongs to, so year-specific comparisons are off until the years are confirmed. Source: #{y.excerpt} (#{y.location})"
+
+  # Other plan targets (`Improvement.PlanTargets`), as strings for the
+  # template. Never compared with a result.
+  defp plan_targets(school) do
+    school
+    |> Emisint.Improvement.PlanTargets.for_school()
+    |> Enum.map(fn t ->
+      %{
+        title: t.title,
+        status: to_string(t.status),
+        status_label: Emisint.Improvement.PlanTargets.status_label(t.status),
+        measure: t.measure,
+        baseline: (t.baseline && "Baseline: " <> t.baseline) || "",
+        targets: Enum.map_join(t.targets, " · ", fn {label, value} -> "#{label}: #{value}" end),
+        long_term: t.long_term || "",
+        status_note: t.status_note,
+        results_note: t.results_note,
+        location: "Source: " <> t.location
+      }
+    end)
+  end
+
+  # Where the record sits among the ND First participants (`Seeds.Participant`):
+  # "participant" (district), "building" or "school". A building's report
+  # omits the workbook goals, seasonal averages and payment, which belong to
+  # its participant. Same wording as the dashboard.
+  defp scope_section(school) do
+    scope = Emisint.Improvement.Seeds.Participant.scope(school)
+    provisional? = Emisint.Improvement.Seeds.Participant.provisional_scope?(scope)
+
+    # Warwick: the workbook's scope is not established, so it is never stated as fact.
+    provisional =
+      if provisional?,
+        do: scope.workbook_scope.note <> " Source: " <> scope.workbook_scope.excerpt,
+        else: ""
+
+    case scope do
+      %{kind: :participant, buildings: buildings} ->
+        names = Enum.map_join(buildings, ", ", & &1.school().name)
+
+        %{
+          kind: "participant",
+          note:
+            "District participant. The ND First workbook goals, seasonal ratings and payment in this report are " <>
+              if(provisional?,
+                do: "recorded on #{school.name} provisionally (see the scope note below)",
+                else: "written for #{school.name}"
+              ) <>
+              ", and the state results are the district's own published rows (InstitutionID #{school.state_entity_id}). Annual targets are set per building and reported on each building's report: #{names}.",
+          provisional: provisional,
+          annual_empty:
+            "No annual targets are set for the district: the continuous improvement plan sets them per building (#{names}). See each building's report."
+        }
+
+      %{kind: :building, participant: participant} ->
+        %{
+          kind: "building",
+          note:
+            "Building of an ND First participant. This report shows #{school.name}'s own annual targets and published results. The ND First workbook goals, seasonal ratings and payment are " <>
+              if(provisional?,
+                do:
+                  "recorded provisionally on #{participant.school().name}; whether they cover this building is not established by the sources. They are in that report, not repeated here.",
+                else:
+                  "written for #{participant.school().name} and are in its report, not repeated here."
+              ),
+          provisional: provisional,
+          annual_empty: "No annual targets are recorded for this building."
+        }
+
+      _ ->
+        %{
+          kind: "school",
+          note: "",
+          provisional: "",
+          annual_empty: "No annual targets are recorded for this school."
+        }
+    end
+  end
+
+  # A building's report has no goal tables or payment, so their guidance is left out.
+  defp scope_guidance(items, school) do
+    case Emisint.Improvement.Seeds.Participant.scope(school) do
+      %{kind: :building} ->
+        Enum.reject(
+          items,
+          &String.starts_with?(&1, [
+            "Goal tables",
+            "Goal status",
+            "Estimated payment",
+            "Workbook goals",
+            "[W]"
+          ])
+        )
+
+      _ ->
+        items
+    end
   end
 
   defp payment_guidance(%{payment_configured?: false}),

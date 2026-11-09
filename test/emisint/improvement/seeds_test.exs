@@ -428,7 +428,7 @@ defmodule Emisint.Improvement.SeedsTest do
       assert org |> then(&read!(School, &1)) |> Enum.map(& &1.slug) == ["fort-yates-ms"]
     end
 
-    test "seeds every verified single-building school when asked", %{org: org, report: report} do
+    test "seeds every verified record when asked", %{org: org, report: report} do
       assert report.drift == []
 
       ids = org |> then(&read!(School, &1)) |> Map.new(&{&1.slug, &1.state_entity_id})
@@ -436,7 +436,21 @@ defmodule Emisint.Improvement.SeedsTest do
       assert ids == %{
                "fort-yates-ms" => "4300429212",
                "oberon-elementary" => "0301662261",
-               "valley-middle-school" => "1800189752"
+               "valley-middle-school" => "1800189752",
+               "drayton-public-school-district" => "34019",
+               "drayton-elementary" => "3401919281",
+               "drayton-high-school" => "3401919283",
+               "dunseith-public-school-district" => "40001",
+               "dunseith-elementary" => "4000119681",
+               "dunseith-high-school" => "4000119663",
+               "mandaree-public-school-district" => "27036",
+               "mandaree-elementary" => "2703654591",
+               "mandaree-high-school" => "2703654593",
+               "warwick-public-school-district" => "03029",
+               "warwick-elementary" => "0302992191",
+               "warwick-middle-school" => "0302992192",
+               "warwick-high-school" => "0302992193",
+               "cannon-ball-elementary" => "4300312781"
              }
     end
 

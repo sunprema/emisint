@@ -22,7 +22,7 @@ defmodule Emisint.Improvement.OberonResultGoalsTest do
   defp value({:range, low, high}),
     do: %{value_state: :range, range_low: Decimal.new(low), range_high: Decimal.new(high)}
 
-  defp perf(measure, v, overrides \\ %{}) do
+  defp perf(measure, v, overrides) do
     %{
       dataset: :assessment_performance,
       academic_year: @y,
@@ -107,16 +107,41 @@ defmodule Emisint.Improvement.OberonResultGoalsTest do
     end
   end
 
+  # The Standard (Reg) copies of the achievement rows.
+  defp standard(rows) do
+    for %{dataset: :assessment_performance} = r <- rows, do: Map.put(r, :assessment_type, "Reg")
+  end
+
   describe "achievement" do
-    test "workbook targets stay gray: the assessment behind them isn't confirmed" do
+    test "workbook targets stay gray, awaiting assessment confirmation" do
       ela = goals(oberon_2324()).achievement[{"Reading", "All Grades"}]
 
       assert %{status: :gray, reasons: [:assessment_type_unconfirmed], code: "G1-M2"} =
                ela["Novice"]
 
-      assert ResultGoals.short_label(ela["Novice"]) == "Gray: assessment type unconfirmed"
+      assert ResultGoals.short_label(ela["Novice"]) == "Gray: awaiting assessment confirmation"
+      assert ResultGoals.explanation(ela["Novice"]) =~ "awaiting assessment confirmation"
+      # The target and value are still shown.
+      assert ela["Novice"].target.text == "29%"
+      assert ela["Novice"].value == "50%–59%"
       # 2023-24 predates the plan.
       assert ela["Novice"].timing == :before_plan
+    end
+
+    test "identical Combined and Standard values don't establish the assessment" do
+      rows = oberon_2324() ++ standard(oberon_2324())
+
+      for type <- ["Comp", "Reg"], subject <- ["Reading", "Math"] do
+        row = goals(rows, %{filters() | type: type}).achievement[{subject, "All Grades"}]
+        assert %{status: :gray, reasons: [:assessment_type_unconfirmed]} = row["Novice"]
+      end
+
+      reg = goals(rows, %{filters() | type: "Reg"}).achievement[{"Reading", "All Grades"}]
+      assert %{kind: :workbook, status: :gray} = reg[:proficient_or_advanced]
+
+      config = ResultGoals.config(Oberon.school())
+      assert config.section_notes.achievement =~ "awaiting assessment confirmation"
+      refute Map.has_key?(config, :assessment_type_rule)
     end
 
     test "the same-year annual target takes the Proficient-or-Advanced cell" do
@@ -168,7 +193,7 @@ defmodule Emisint.Improvement.OberonResultGoalsTest do
   end
 
   describe "engagement" do
-    test "Emotional Committed, Compliant and Disengaged map to G4-M1..M3, gray for range targets" do
+    test "Emotional Committed, Compliant and Disengaged are candidate mappings: gray, no verdict" do
       emotional = goals(oberon_2324()).engagement[:engagement_emotional]
 
       for {level, code} <- [
@@ -176,13 +201,87 @@ defmodule Emisint.Improvement.OberonResultGoalsTest do
             {"Compliant", "G4-M2"},
             {"Disengaged", "G4-M3"}
           ] do
-        assert %{code: ^code, status: :gray, reasons: [:target_is_range]} = emotional[level]
-        assert ResultGoals.short_label(emotional[level]) == "Gray: target is a range"
+        match = emotional[level]
+
+        assert %{code: ^code, status: :gray, tone: :muted, reasons: [:mapping_unconfirmed]} =
+                 match
+
+        assert match.candidate?
+        # The value and the (still parsed) range target are shown.
+        assert {:band, _, _} = match.spec
+        assert is_binary(match.value)
+        assert ResultGoals.short_label(match) == "Gray: candidate mapping, awaiting confirmation"
       end
 
       assert emotional["Committed"].target.text == "55-60%"
       assert emotional["Disengaged"].direction == :lower_is_better
-      assert ResultGoals.explanation(emotional["Committed"]) =~ "written as a range"
+      assert emotional["Committed"].assumed == []
+
+      # The evidence: the source check and the baseline match, not a confirmation.
+      basis = emotional["Committed"].basis
+      assert basis =~ "pp.23-24"
+      assert basis =~ "inferred only from matching baselines"
+      assert basis =~ "45-49%, 40-44%"
+      assert ResultGoals.explanation(emotional["Committed"]) =~ "not a confirmation"
+
+      [note | _] = ResultGoals.section_notes(:engagement, goals(oberon_2324()).engagement)
+      assert note =~ "Candidate mapping, awaiting confirmation"
+
+      config = ResultGoals.config(Oberon.school())
+      assert Enum.sort(Map.keys(config.candidates)) == ~w(G4-M1 G4-M2 G4-M3)
+      assert config.section_notes.engagement =~ "no source states the survey population"
+      refute Map.has_key?(config, :engagement_basis)
+
+      e36 = goals(oberon_2324(), filters(@y, :review_36m)).engagement[:engagement_emotional]
+      assert %{status: :gray, reasons: [:mapping_unconfirmed]} = e36["Committed"]
+      assert e36["Committed"].target.text == "60-65%"
+    end
+
+    test "the range convention is kept for when a mapping is confirmed" do
+      d = &Decimal.new/1
+
+      # 60%–69% vs 55-60% (higher is better): at or above the high end, meets.
+      assert ResultGoals.classify_band(
+               :higher_is_better,
+               {d.("0.6"), d.("0.69")},
+               d.("0.55"),
+               d.("0.6")
+             ) ==
+               :meets
+
+      # 50%–54% vs 50-55%: inside the range, overlaps; 30%–39% vs 50-55%: misses.
+      assert ResultGoals.classify_band(
+               :higher_is_better,
+               {d.("0.5"), d.("0.54")},
+               d.("0.5"),
+               d.("0.55")
+             ) ==
+               :overlaps
+
+      assert ResultGoals.classify_band(
+               :higher_is_better,
+               {d.("0.3"), d.("0.39")},
+               d.("0.5"),
+               d.("0.55")
+             ) ==
+               :misses
+
+      # Lower is better: 0%–4% vs 4-8% meets; 10%–19% vs 4-8% misses.
+      assert ResultGoals.classify_band(
+               :lower_is_better,
+               {d.("0"), d.("0.04")},
+               d.("0.04"),
+               d.("0.08")
+             ) ==
+               :meets
+
+      assert ResultGoals.classify_band(
+               :lower_is_better,
+               {d.("0.1"), d.("0.19")},
+               d.("0.04"),
+               d.("0.08")
+             ) ==
+               :misses
     end
 
     test "other domains have no Oberon goal" do
@@ -217,7 +316,9 @@ defmodule Emisint.Improvement.OberonResultGoalsTest do
                ResultGoals.annual(goal, oberon_2324())
 
       future = %{goal | school_year: "2030-2031"}
-      assert %{missing: "Not yet published"} = ResultGoals.annual(future, oberon_2324())
+
+      assert %{missing: "No matching results in the imported data"} =
+               ResultGoals.annual(future, oberon_2324())
     end
   end
 end

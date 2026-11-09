@@ -48,6 +48,9 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
       if connected?(socket),
         do: Phoenix.PubSub.subscribe(Emisint.PubSub, Emisint.NdInsights.Importer.topic(session))
 
+      # Pilot records this user can read: navigation lists only these.
+      readable = Emisint.Improvement.Pilot.readable_slugs(scope)
+
       {:ok,
        assign(socket,
          page_title: school.name,
@@ -63,7 +66,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
              Emisint.Improvement.Pilot.pilot?(school),
          editing: nil,
          comparison: ResultGoals.config(school),
-         tabs: Emisint.Improvement.Pilot.roster(),
+         tabs: Emisint.Improvement.Pilot.tabs(readable),
+         tab_slug: Emisint.Improvement.Pilot.tab_slug(school),
+         participant_nav: Emisint.Improvement.Pilot.participant_nav(school, readable),
+         participant_scope: participant_scope(readable, school),
+         plan_targets: Emisint.Improvement.PlanTargets.for_school(school),
          state: load_state(scope, school)
        )}
     else
@@ -91,6 +98,34 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
       |> assign(editing: nil)
 
     {:noreply, maybe_open_from_params(socket, params["update"])}
+  end
+
+  # Where this record sits among the ND First participants
+  # (`Seeds.Participant`): a district participant links to its buildings and a
+  # building links to its participant. Only records this user can read are
+  # linked; the others are listed by name.
+  defp participant_scope(readable, school) do
+    case Emisint.Improvement.Seeds.Participant.scope(school) do
+      %{kind: :participant, buildings: buildings} = s ->
+        %{s | buildings: Enum.map(buildings, &related(readable, &1))}
+
+      %{kind: :building, participant: participant} = s ->
+        %{s | participant: related(readable, participant)}
+
+      other ->
+        other
+    end
+  end
+
+  defp related(readable, module) do
+    %{name: name, slug: slug, state_entity_id: id} = module.school()
+
+    %{
+      name: name,
+      slug: slug,
+      institution_id: id,
+      readable?: MapSet.member?(readable, slug)
+    }
   end
 
   # Official state results are annual and have their own year selector; they
@@ -211,8 +246,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
     end
   end
 
+  # A disabled student-group select (only "All" published) is not submitted;
+  # its absence clears any earlier group from the URL instead of keeping it.
   def handle_event("state_filters", params, socket) do
-    {:noreply, patch_with(socket, Map.take(params, @state_params))}
+    changes = Map.merge(%{"state_subgroup" => nil}, Map.take(params, @state_params))
+    {:noreply, patch_with(socket, changes)}
   end
 
   def handle_event("open_update", %{"metric-id" => metric_id}, socket) do
@@ -395,7 +433,8 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user}>
       <div class="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
-        <.school_tabs tabs={@tabs} current={@school.slug} />
+        <.school_tabs tabs={@tabs} current={@tab_slug} />
+        <.participant_nav nav={@participant_nav} />
         <div>
           <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
@@ -417,6 +456,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
 
             <div class="flex flex-wrap items-end gap-2 w-full md:w-auto">
               <form
+                :if={@participant_scope.kind != :building}
                 phx-change="select_period"
                 id="period-select"
                 class="form-control w-full sm:w-auto"
@@ -449,7 +489,12 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+        <.participant_scope_note scope={@participant_scope} school={@school} />
+
+        <div
+          :if={@participant_scope.kind != :building}
+          class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start"
+        >
           <div
             :for={category <- [:systems, :student_outcome]}
             class="bg-base-100 border border-base-200 rounded-xl px-4 py-3"
@@ -508,13 +553,21 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
           class="flex flex-wrap items-center gap-1 border-b border-base-200 pb-2"
         >
           <span class="text-xs uppercase tracking-wide text-base-content/50 mr-1">Jump to</span>
-          <a href="#goals" class="btn btn-xs btn-ghost">Goals</a>
+          <a :if={@participant_scope.kind != :building} href="#goals" class="btn btn-xs btn-ghost">
+            Goals
+          </a>
           <a href="#annual-goals" class="btn btn-xs btn-ghost">Annual Targets</a>
           <a href="#state-results" class="btn btn-xs btn-ghost">State Results</a>
-          <a href="#payment" class="btn btn-xs btn-ghost">Estimated Payment</a>
+          <a
+            :if={@participant_scope.kind != :building}
+            href="#payment"
+            class="btn btn-xs btn-ghost"
+          >
+            Estimated Payment
+          </a>
         </nav>
 
-        <div id="goals" class="space-y-6 scroll-mt-4">
+        <div :if={@participant_scope.kind != :building} id="goals" class="space-y-6 scroll-mt-4">
           <p class="text-xs text-base-content/70" id="status-legend">
             <span class="font-medium">Status:</span>
             <span class="nd-text-success font-medium">Meets target</span>
@@ -688,6 +741,15 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
             >
               {@comparison.annual_note}
             </p>
+            <.annual_year_mapping years={@comparison.annual_years} />
+            <p
+              :if={@participant_scope.kind == :participant}
+              class="text-xs text-base-content/60 mt-1"
+              id="annual-by-building"
+            >
+              Building dashboards:
+              <.related_links schools={@participant_scope.buildings} id_prefix="annual-building" />
+            </p>
             <p class="text-xs text-base-content/60 mt-1" id="annual-color-key">
               Compared with the same school year's published result by the same rule as the
               state results: green “Meets target” when the whole published value is at or above
@@ -713,7 +775,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
                   <td id={"annual-#{year}-ela"}>
                     <.goal_comparison
                       :if={goals[:ela]}
-                      match={ResultGoals.annual(goals[:ela], @state.rows)}
+                      match={ResultGoals.annual(goals[:ela], @state.rows, @comparison)}
                     />
                   </td>
                   <td class="border-l border-base-200">
@@ -722,7 +784,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
                   <td id={"annual-#{year}-math"}>
                     <.goal_comparison
                       :if={goals[:math]}
-                      match={ResultGoals.annual(goals[:math], @state.rows)}
+                      match={ResultGoals.annual(goals[:math], @state.rows, @comparison)}
                     />
                   </td>
                 </tr>
@@ -730,6 +792,8 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
             </table>
           </div>
         </section>
+
+        <.plan_targets_section targets={@plan_targets} />
 
         <.state_results
           school={@school}
@@ -742,9 +806,13 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
           comparison_pdf_path={
             ~p"/school-goals/#{@school.slug}/report.pdf?#{report_query(@period, @state_filters) ++ [nd_comparison: "1"]}"
           }
+          link_params={
+            Map.new(report_query(@period, @state_filters), fn {k, v} -> {to_string(k), v} end)
+          }
         />
 
         <.payment_section
+          :if={@participant_scope.kind != :building}
           payment={@defs.payment}
           estimates={@defs.payment_estimates}
           can_record?={@can_record_estimate?}

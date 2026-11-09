@@ -30,9 +30,9 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
   defp upload_fixture(view, name \\ @performance),
     do: upload(view, name, File.read!(Path.join(@fixtures, @performance)))
 
-  # The Fort Yates fixture rows copied as Valley Middle School (1800189752), a
+  # The Fort Yates fixture rows copied as a synthetic school (TEST000099), a
   # registered school that is not in the pilot.
-  defp valley_rows do
+  defp non_pilot_rows do
     @fixtures
     |> Path.join(@performance)
     |> File.read!()
@@ -42,7 +42,7 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
       &String.replace(
         &1,
         "Fort Yates Middle School,4300429212",
-        "Valley Middle School,1800189752"
+        "Synthetic Non-Pilot School,TEST000099"
       )
     )
   end
@@ -50,14 +50,14 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
   defp fixture_header,
     do: @fixtures |> Path.join(@performance) |> File.read!() |> String.split(~r/\r?\n/) |> hd()
 
-  # A statewide-style file with Fort Yates and Valley rows.
+  # A statewide-style file with Fort Yates and synthetic non-pilot rows.
   defp mixed_content do
     String.trim_trailing(File.read!(Path.join(@fixtures, @performance))) <>
-      "\n" <> Enum.join(valley_rows(), "\n") <> "\n"
+      "\n" <> Enum.join(non_pilot_rows(), "\n") <> "\n"
   end
 
   # A file with no Fort Yates rows.
-  defp valley_only_content, do: Enum.join([fixture_header() | valley_rows()], "\n") <> "\n"
+  defp non_pilot_only_content, do: Enum.join([fixture_header() | non_pilot_rows()], "\n") <> "\n"
 
   test "only system admins can open the page", %{conn: conn, org: org} do
     for role <- [:emo_admin, :school_leader] do
@@ -112,9 +112,9 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
     conn: conn,
     admin: admin
   } do
-    # Valley Middle School is registered (kept for later expansion) but is not
+    # A synthetic school is registered but is not
     # a pilot school; this file carries rows for both schools.
-    seeded_organization!(name: "Expansion Org", schools: [Emisint.Improvement.Seeds.ValleyMiddle])
+    "Expansion Org" |> organization!() |> non_pilot_school!()
     content = mixed_content()
 
     # The reusable preview sees both registered schools when not restricted.
@@ -124,17 +124,17 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
     {:ok, unrestricted} = Emisint.NdInsights.UploadPreview.build(path, @performance)
 
     assert unrestricted.schools |> Enum.map(& &1.institution_id) |> Enum.sort() ==
-             ~w(1800189752 4300429212)
+             ~w(4300429212 TEST000099)
 
     {:ok, view, _html} = live(log_in(conn, admin), @page)
     upload(view, @performance, content)
 
     assert has_element?(view, "#nd-pilot-scope", "only the ND First pilot schools")
     assert has_element?(view, "#nd-school-4300429212")
-    refute has_element?(view, "#nd-school-1800189752")
+    refute has_element?(view, "#nd-school-TEST000099")
 
     # A forged selection including the non-pilot school imports Fort Yates only.
-    render_change(view, "select", %{"institution_ids" => ["4300429212", "1800189752"]})
+    render_change(view, "select", %{"institution_ids" => ["4300429212", "TEST000099"]})
     render_submit(view, "import", %{})
     render_async(view, 10_000)
 
@@ -238,10 +238,10 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
     end
 
     test "only opens for a pilot school the admin can read", %{conn: conn, admin: admin} do
-      seeded_organization!(name: "Valley Org", schools: [Emisint.Improvement.Seeds.ValleyMiddle])
+      "Other Org" |> organization!() |> non_pilot_school!()
 
       for page <-
-            ~w(/school-goals/valley-middle-school/import /school-goals/no-such-school/import) do
+            ~w(/school-goals/synthetic-non-pilot-school/import /school-goals/no-such-school/import) do
         assert {:error, {:live_redirect, %{to: "/school-goals", flash: flash}}} =
                  live(log_in(conn, admin), page)
 
@@ -254,7 +254,7 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
       org: org,
       admin: admin
     } do
-      seeded_organization!(name: "Valley Org", schools: [Emisint.Improvement.Seeds.ValleyMiddle])
+      "Other Org" |> organization!() |> non_pilot_school!()
       viewer = user!(org, :school_leader)
       membership!(viewer, school!(org), :viewer, org)
       {:ok, dashboard, _} = live(log_in(conn, viewer), "/school-goals/fort-yates-ms")
@@ -272,16 +272,16 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
 
       upload(view, @performance, mixed_content())
 
-      # Fort Yates is selected and locked; Valley's rows are not offered.
+      # Fort Yates is selected and locked; the non-pilot school's rows are not offered.
       assert has_element?(view, "#nd-pilot-scope", "Locked to Fort Yates Middle School")
       assert has_element?(view, "#nd-school-4300429212 input[checked][disabled]")
-      refute has_element?(view, "#nd-school-1800189752")
+      refute has_element?(view, "#nd-school-TEST000099")
       refute has_element?(view, "#nd-import-button[disabled]")
 
       # Forged selections can neither drop nor swap the locked school.
-      render_change(view, "select", %{"institution_ids" => ["1800189752"]})
+      render_change(view, "select", %{"institution_ids" => ["TEST000099"]})
       assert has_element?(view, "#nd-school-4300429212 input[checked]")
-      render_submit(view, "import", %{"institution_ids" => ["1800189752"]})
+      render_submit(view, "import", %{"institution_ids" => ["TEST000099"]})
       render_async(view, 10_000)
 
       assert has_element?(view, "#nd-result", "144 new")
@@ -318,9 +318,9 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
       conn: conn,
       admin: admin
     } do
-      seeded_organization!(name: "Valley Org", schools: [Emisint.Improvement.Seeds.ValleyMiddle])
+      "Other Org" |> organization!() |> non_pilot_school!()
       {:ok, view, _html} = live(log_in(conn, admin), @school_page)
-      upload(view, @performance, valley_only_content())
+      upload(view, @performance, non_pilot_only_content())
 
       assert has_element?(
                view,
@@ -330,8 +330,8 @@ defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
 
       assert has_element?(view, "#nd-import-button[disabled]")
 
-      render_change(view, "select", %{"institution_ids" => ["1800189752", "4300429212"]})
-      render_submit(view, "import", %{"institution_ids" => ["1800189752", "4300429212"]})
+      render_change(view, "select", %{"institution_ids" => ["TEST000099", "4300429212"]})
+      render_submit(view, "import", %{"institution_ids" => ["TEST000099", "4300429212"]})
       render_async(view, 10_000)
 
       assert render(view) =~ "Select at least one school"

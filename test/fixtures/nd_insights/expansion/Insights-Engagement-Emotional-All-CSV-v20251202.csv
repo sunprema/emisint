@@ -1,0 +1,13 @@
+Institution,EntityLevel,InstitutionID,DistrictName,EngagementLevel,2017-2018,2018-2019,2019-2020,2020-2021,2021-2022,2022-2023,2023-2024,2024-2025
+Drayton 19,District,34019,Drayton Public School District,Committed,0.55-0.59,0.50-0.54,0.45-0.49,0.40-0.44,0.25-0.29,0.30-0.34,0.20-0.24,0.30-0.34
+Drayton 19,District,34019,Drayton Public School District,Compliant,0.20-0.24,0.25-0.29,0.25-0.29,0.25-0.29,0.35-0.39,0.35-0.39,0.40-0.44,0.35-0.39
+Drayton 19,District,34019,Drayton Public School District,Disengaged,0.20-0.24,0.25-0.29,0.25-0.29,0.25-0.29,0.35-0.39,0.25-0.29,0.35-0.39,0.35-0.39
+Drayton Elementary School,School,3401919281,Drayton Public School District,Committed,0.60-0.64,0.50-0.54,0.55-0.59,0.50-0.54,0.20-0.29,0.40-0.44,0.30-0.34,0.35-0.39
+Drayton Elementary School,School,3401919281,Drayton Public School District,Compliant,0.15-0.19,0.20-0.24,0.20-0.24,0.20-0.24,0.30-0.39,0.30-0.34,0.30-0.34,0.25-0.29
+Drayton Elementary School,School,3401919281,Drayton Public School District,Disengaged,0.20-0.24,0.25-0.29,0.20-0.24,0.25-0.29,0.30-0.39,0.30-0.34,0.35-0.39,0.30-0.34
+Drayton High School,School,3401919283,Drayton Public School District,Committed,0.40-0.49,0.40-0.49,0.10-0.19,0.20-0.29,0.20-0.29,0.15-0.19,0.05-0.09,0.15-0.19
+Drayton High School,School,3401919283,Drayton Public School District,Compliant,0.30-0.39,0.30-0.39,0.30-0.39,0.40-0.49,0.40-0.49,0.50-0.54,0.50-0.54,0.40-0.44
+Drayton High School,School,3401919283,Drayton Public School District,Disengaged,0.10-0.19,0.20-0.29,0.40-0.49,0.30-0.39,0.30-0.39,0.25-0.29,0.35-0.39,0.35-0.39
+Valley Middle School,School,1800189752,Grand Forks Public School District,Committed,0.49,0.43,0.40,0.30,0.23,0.25,0.25,0.26
+Valley Middle School,School,1800189752,Grand Forks Public School District,Compliant,0.49,0.43,0.40,0.30,0.23,0.25,0.25,0.26
+Valley Middle School,School,1800189752,Grand Forks Public School District,Disengaged,0.29,0.38,0.34,0.25,0.33,0.36,0.33,0.35

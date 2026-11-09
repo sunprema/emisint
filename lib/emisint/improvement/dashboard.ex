@@ -128,6 +128,19 @@ defmodule Emisint.Improvement.Dashboard do
     }
   end
 
+  @doc """
+  The school's current ratings in every period (seasonal and review), as
+  `%{reporting_period_id => %{metric_id => rating}}`, in one read.
+  """
+  def current_ratings(scope, school) do
+    ImplementationRating
+    |> Ash.Query.for_read(:current, %{}, scope: scope)
+    |> Ash.Query.filter(school_id == ^school.id)
+    |> Ash.read!()
+    |> Enum.group_by(& &1.reporting_period_id)
+    |> Map.new(fn {period_id, ratings} -> {period_id, Map.new(ratings, &{&1.metric_id, &1})} end)
+  end
+
   defp current(resource, scope, school, period) do
     resource
     |> Ash.Query.for_read(:current, %{}, scope: scope)

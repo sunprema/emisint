@@ -1,0 +1,15 @@
+AcademicYear,InstitutionName,InstitutionID,Grade,Subject,AssessmentType,Accomodations,Subgroup,PercentTestedRangeLow,PercentTestedRangeHigh
+2023-2024,Oberon Elementary School,0301662261,All Grades,Math,Comp,All,All,0.9,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Math,Comp,All,Female,0.8,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Math,Comp,All,Male,0.9,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Reading,Comp,All,All,0.9,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Reading,Comp,All,Female,0.8,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Reading,Comp,All,Male,0.9,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Science,Comp,All,All,0.8,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Math,Reg,All,All,0.9,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Math,Reg,All,Female,0.8,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Math,Reg,All,Male,0.9,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Reading,Reg,All,All,0.9,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Reading,Reg,All,Female,0.8,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Reading,Reg,All,Male,0.9,1
+2023-2024,Oberon Elementary School,0301662261,All Grades,Science,Reg,All,All,0.8,1

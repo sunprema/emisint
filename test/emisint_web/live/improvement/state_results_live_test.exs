@@ -36,7 +36,7 @@ defmodule EmisintWeb.Improvement.StateResultsLiveTest do
   test "without imported data the section says so", %{conn: conn, viewer: viewer} do
     {:ok, view, _html} = live(log_in(conn, viewer), @dashboard)
     assert has_element?(view, "#state-results-empty")
-    assert has_element?(view, "#annual-2025-2026-ela", "Not yet published")
+    assert has_element?(view, "#annual-2025-2026-ela", "No matching results in the imported data")
   end
 
   describe "with Fort Yates data imported" do
@@ -115,7 +115,11 @@ defmodule EmisintWeb.Improvement.StateResultsLiveTest do
 
       # Goals start in 2025-2026 and the latest published year is 2024-2025.
       for year <- ~w(2025-2026 2026-2027 2030-2031), subject <- ~w(ela math) do
-        assert has_element?(view, "#annual-#{year}-#{subject}", "Not yet published")
+        assert has_element?(
+                 view,
+                 "#annual-#{year}-#{subject}",
+                 "No matching results in the imported data"
+               )
       end
 
       refute has_element?(view, "#annual-goals td", "Meets target")

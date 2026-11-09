@@ -162,12 +162,27 @@
     column-gutter: 10pt,
     [*Report*], [#d.report.title — #d.school.plan],
     [*Reporting period*], [#d.report.period (#d.report.period_scope)],
-    [*State results filters*], [#d.report.state_year · #d.report.state_type assessment · #d.report.state_subgroup · goals compared with the #d.report.goal_reference (reference)],
+    [*State results filters*], [#d.report.state_year · #d.report.state_type assessment · #d.report.state_subgroup#d.report.goal_reference_text],
     [*Generated*], [#d.report.generated_at by #d.report.generated_by],
   ),
 )
 
+// Participant scope (district participant or building); empty for a single school.
+#if d.scope.note != "" [
+  #v(4pt)
+  #block(width: 100%, inset: 6pt, radius: 4pt, fill: rgb("#eef4fb"), note(d.scope.note))
+]
+#if d.scope.provisional != "" [
+  #v(3pt)
+  #block(width: 100%, inset: 6pt, radius: 4pt, fill: rgb("#fdf3e1"), stroke: 0.5pt + rgb("#d9a441"))[*Workbook scope provisional.* #note(d.scope.provisional)]
+]
+
+// A building's report omits the workbook goals, seasonal averages and
+// payment: they belong to its participant (district) report.
+#let building = d.scope.kind == "building"
+
 // ── Summary ──────────────────────────────────────────────────────────────────
+#if not building [
 #section("Summary")
 #grid(
   columns: (1fr, 1fr, 1.4fr),
@@ -231,16 +246,38 @@
     #v(6pt)
   ]
 ]
+]
 
 // ── Annual targets ───────────────────────────────────────────────────────────
 #section("Annual state assessment targets")
 #note[Percentage of tested students scoring Proficient or Advanced, including the alternate assessment. Compared only with the same school year, all grades, all students and the Combined assessment, by the same rule as the state results: “Meets target” when the whole published value is at or above the target, “Below target” when it is entirely below, “Range overlaps target” otherwise. A dashboard comparison, not an official rating.]
 #v(3pt)
-#data-table(
-  columns: (0.8fr, 0.55fr, 1.6fr, 0.55fr, 1.6fr),
-  header: ("School year", "ELA goal", "ELA published (derived)", "Math goal", "Math published (derived)"),
-  rows: d.annual.map(r => (r.year, s(r.ela_goal), toned(r.ela_tone, s(r.ela_published)), s(r.math_goal), toned(r.math_tone, s(r.math_published)))),
-)
+#if d.annual_year_mapping != "" [ #note(d.annual_year_mapping) #v(2pt) ]
+#if d.annual.len() == 0 [ #note(d.scope.annual_empty) ] else {
+  data-table(
+    columns: (0.8fr, 0.55fr, 1.6fr, 0.55fr, 1.6fr),
+    header: ("School year", "ELA goal", "ELA published (derived)", "Math goal", "Math published (derived)"),
+    rows: d.annual.map(r => (r.year, s(r.ela_goal), toned(r.ela_tone, s(r.ela_published)), s(r.math_goal), toned(r.math_tone, s(r.math_published)))),
+  )
+}
+
+// ── Other plan targets (shown as written, never compared) ────────────────────
+#if d.plan_targets.len() > 0 [
+  #section("Other plan targets")
+  #note[Further targets from the continuous improvement plan (North Dakota - ND First Schools.pdf), shown exactly as written. None is compared with a result: each says why, and targets whose year or definition the source leaves open are marked unresolved.]
+  #for t in d.plan_targets [
+    #block(breakable: false, width: 100%, inset: (y: 4pt))[
+      #text(weight: "bold", t.title) #h(4pt) #text(size: 7.5pt, fill: if t.status == "stated" or t.status == "confirmed" or t.status == "no_numeric_target" { c-muted } else { rgb("#9a6700") })[\[#t.status_label\]] \
+      #t.measure
+      #if t.baseline != "" [ \ #t.baseline]
+      #if t.targets != "" [ \ #t.targets]
+      #if t.long_term != "" [ \ #t.long_term]
+      \ #note(t.status_note)
+      \ #note[*#t.results_note*]
+      \ #note(t.location)
+    ]
+  ]
+]
 
 // ── State results ────────────────────────────────────────────────────────────
 #section("Official state results (ND Insights)")
@@ -251,7 +288,7 @@
   // legend never sits alone at the bottom of a page.
   #let state-intro = block(sticky: true, width: 100%)[
     #note[#d.report.state_year · #d.report.state_type assessment · #d.report.state_subgroup. Annual results; not assigned to a seasonal period. #d.state.legend.intro]
-    #note[*#d.state.legend.reference*]
+    #if d.state.legend.reference != "" [#note[*#d.state.legend.reference*]]
     #v(2pt)
     #block(width: 100%, breakable: false)[
       #set text(size: 7pt)
@@ -268,7 +305,10 @@
   }
 
   #let achievement-head = state-intro + lead([*Achievement*], d.state.notes.achievement + (if d.state.goal_years_note != "" { (d.state.goal_years_note,) } else { () }) + ("% tested shows the 95% participation target (ELA and math, Combined assessment, all students, All Grades) as a label; it is not a school goal.",))
-  #if d.state.achievement.len() == 0 [ #achievement-head #note(d.state.achievement_empty) ] else {
+  // achievement_empty is "" when achievement is published; otherwise the note
+  // is printed and any rows with only % tested still follow in the table.
+  #let achievement-head = if d.state.achievement_empty != "" { achievement-head + note(d.state.achievement_empty) } else { achievement-head }
+  #if d.state.achievement.len() == 0 [ #achievement-head ] else {
     kept-table(achievement-head, d.state.achievement, rows => data-table(
       columns: (0.7fr, 0.65fr, 1.1fr, 0.9fr, 1.1fr, 0.7fr, 1fr, 0.85fr),
       header: ("Subject", "Grade", "Novice", "Approaching Proficiency", "Proficient", "Advanced", "Proficient or Advanced (derived)", "Tested"),
@@ -332,6 +372,7 @@
 #section("Methodology")
 #notes-list(d.appendix)
 
+#if not building [
 #section(d.payment.label + ": calculation")
 #block(breakable: false, width: 100%)[
   #note(d.payment.terms)
@@ -347,6 +388,7 @@
   #v(2pt)
   #note[*Recorded estimates* (assumptions kept as recorded):]
   #notes-list(d.payment.estimates)
+]
 ]
 
 #section("Sources used in this report")

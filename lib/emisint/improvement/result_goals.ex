@@ -20,8 +20,16 @@ defmodule Emisint.Improvement.ResultGoals do
       Novice → G2-M2 / G3-M2; Overall growth percentile → G2-M3 / G3-M3;
       Disengaged by domain → G4-M2 / G4-M3 / G4-M4.
     * Oberon (`Seeds.Oberon`): Proficient or Advanced (derived) → G1-M1 /
-      G2-M1; Novice → G1-M2 / G2-M2; Emotional Committed, Compliant and
-      Disengaged → G4-M1 / G4-M2 / G4-M3.
+      G2-M1; Novice → G1-M2 / G2-M2 (gray, awaiting confirmation of the
+      assessment the workbook counts); Emotional Committed, Compliant and
+      Disengaged → G4-M1 / G4-M2 / G4-M3, candidates only (the survey
+      population is inferred from baselines, not stated in the sources).
+    * Valley Middle (`Seeds.ValleyMiddle`): Overall Disengaged → G3-M1, a
+      candidate only (`candidates`; gray until the category is confirmed).
+    * Drayton district (`Seeds.Drayton`): Overall Disengaged → G4-M1, a
+      candidate only.
+    * Dunseith, Mandaree, Warwick and every building: no workbook match
+      (each module's `section_notes` says why).
     * Proficient or Advanced (derived) → also the annual state-assessment
       target for the same school year (`AnnualAssessmentGoal`); never another
       year's. Where both exist, the annual comparison is shown.
@@ -56,8 +64,23 @@ defmodule Emisint.Improvement.ResultGoals do
     * lower is better: upper bound ≤ target meets; lower bound > target
       misses; otherwise the range overlaps the target.
 
-  Each match: `%{kind, code, name, direction, year, value, target, status,
-  reasons, timing, tone}` with `status` `:meets | :misses | :overlaps | :gray`.
+  **Text targets** (`target_spec/2`): an inequality ("< 18%") is compared
+  through `classify_bound/3` (strict: an equal value doesn't meet); a range
+  ("55-60%") through `classify_band/4` (a dashboard comparison convention,
+  not a source-confirmed scoring rule: only verdicts that hold for either
+  end); a compound target ("< 22% or within 7% State Avg") meets when its
+  inequality is met and is otherwise gray. Empty or "n/a" targets and any
+  other text are gray, with the reason.
+
+  **Candidates.** `candidates` (`%{code => evidence}`) mark mappings whose
+  published counterpart (survey category or population) is only inferred,
+  e.g. from a baseline match: their value and target are shown gray
+  (`:mapping_unconfirmed`) with the evidence, never a verdict. A matching
+  baseline is evidence to investigate, not a confirmation.
+
+  Each match: `%{kind, code, name, direction, year, value, target, spec,
+  status, reasons, timing, tone, basis}` with `status` `:meets | :misses |
+  :overlaps | :gray`.
   """
 
   alias Emisint.Improvement.{Display, Percent, Seeds}
@@ -77,6 +100,14 @@ defmodule Emisint.Improvement.ResultGoals do
     assumptions_short: nil,
     section_notes: %{},
     annual_note: nil,
+    # How the plan maps its annual targets to school years:
+    # `%{status: :stated | :assumed, location:, excerpt:}` (nil: none recorded).
+    # `:assumed` disables year-specific annual comparisons until confirmed.
+    annual_years: nil,
+    # Candidate mappings, `%{code => evidence}`: a workbook entry whose
+    # published counterpart is only evidenced (e.g. by a baseline match), not
+    # confirmed. Its value and target are shown, gray, with the evidence.
+    candidates: %{},
     report_notes: []
   }
 
@@ -163,14 +194,20 @@ defmodule Emisint.Improvement.ResultGoals do
       assumed_type?: established.assessment_type == nil and assumptions[:assessment_type] != nil,
       population: assumptions[:engagement_population],
       plan_start_year: config.plan_start_year,
-      grade_reference: config.grade_reference
+      grade_reference: config.grade_reference,
+      annual_years: config.annual_years
     }
 
     workbook = workbook(plan, config)
 
     %{
+      # Rows with only a % tested value (no achievement levels published) get
+      # no goal match: a missing result is never compared.
       achievement:
-        Map.new(SchoolResults.performance(rows, year, type, subgroup), fn row ->
+        rows
+        |> SchoolResults.performance(year, type, subgroup)
+        |> Enum.filter(&(&1.levels != %{}))
+        |> Map.new(fn row ->
           {{row.subject, row.grade},
            Map.merge(
              workbook_matches(workbook, :achievement, row, row.subject, ctx),
@@ -205,7 +242,14 @@ defmodule Emisint.Improvement.ResultGoals do
     for {code, expected, section, key, published, label} <- config.workbook,
         metric = by_code[code],
         metric != nil and expected?(metric, expected),
-        do: %{metric: metric, section: section, key: key, measure: published, label: label}
+        do: %{
+          metric: metric,
+          section: section,
+          key: key,
+          measure: published,
+          label: label,
+          candidate: config.candidates[code]
+        }
   end
 
   defp expected?(metric, measure) when is_atom(measure), do: metric.performance_measure == measure
@@ -276,13 +320,19 @@ defmodule Emisint.Improvement.ResultGoals do
   defp workbook_match(w, value, section, ctx) do
     {field, label} = Map.fetch!(@checkpoints, ctx.reference)
     target = Display.target(w.metric, field)
+    spec = target_spec(w.metric, field)
 
     blocked =
       cond do
-        range_target?(w.metric, field) ->
-          :target_is_range
+        # A candidate mapping (evidence only, e.g. a baseline match): the
+        # value and target are shown, but no verdict until it is confirmed.
+        w.candidate != nil ->
+          :mapping_unconfirmed
 
-        not match?({:number, _}, target) ->
+        spec == :none ->
+          :no_target
+
+        spec == :not_comparable ->
           :target_not_comparable
 
         section == :engagement and ctx.population == nil ->
@@ -299,27 +349,102 @@ defmodule Emisint.Improvement.ResultGoals do
       kind: :workbook,
       code: w.metric.code,
       percentile?: w.metric.unit == :percentile,
+      unit: w.metric.unit,
       name: "#{w.metric.code} #{w.label}",
       direction: w.metric.direction,
       year: ctx.year,
       value: value_text(value, w.metric),
       target: %{label: label, text: elem(target, 1)},
+      spec: spec,
       timing: timing(ctx.established.review_years[ctx.reference], ctx.year, ctx.plan_start_year),
-      assumed: assumed(section, ctx)
+      assumed: assumed(section, ctx),
+      candidate?: w.candidate != nil,
+      basis: w.candidate
     }
-    |> judge(blocked, interval(value), Map.get(w.metric, field))
+    |> judge(blocked, interval(value), spec)
   end
 
-  # A target written as a range (e.g. "55-60%"): the workbook doesn't say
-  # when a range target is met, so no verdict is given.
-  defp range_target?(metric, field) do
+  @doc """
+  How a workbook target can be compared, from its stored number or its
+  workbook text (the text is never rewritten; only its comparable form is
+  read):
+
+    * `{:number, t}` — a stored number (Fort Yates's targets; equal meets).
+    * `{:bound, op, t}` — an inequality such as "< 18%" or "> 35%".
+    * `{:band, low, high}` — a range such as "55-60%".
+    * `{:compound, op, t, rest}` — an inequality with another condition,
+      e.g. "< 22% or within 7% State Avg"; only the inequality is evaluated.
+    * `:none` — no target for this checkpoint (empty or "n/a").
+    * `:not_comparable` — anything else (dates, flagged cells, a percent
+      metric's text without a "%" sign, other wording).
+
+  Percent metrics store 0–1 proportions, so "18%" becomes 0.18.
+  """
+  def target_spec(metric, field) do
     case Display.target(metric, field) do
-      {:text, raw} -> Regex.match?(~r/^\s*\d+(\.\d+)?\s*%?\s*[-–]\s*\d+(\.\d+)?\s*%?\s*$/, raw)
-      _ -> false
+      {:number, _text} -> {:number, Map.get(metric, field)}
+      {:empty, _text} -> :none
+      {:text, raw} -> parse_target(metric.unit, String.trim(raw))
+      _other -> :not_comparable
     end
   end
 
+  @num "(\\d+(?:\\.\\d+)?)"
+  @band_re Regex.compile!("^#{@num}\\s*(%?)\\s*[-–]\\s*#{@num}\\s*(%?)$", "u")
+  @bound_re Regex.compile!("^(<=|>=|<|>|≤|≥)\\s*#{@num}\\s*(%?)$", "u")
+  @compound_re Regex.compile!("^(<=|>=|<|>|≤|≥)\\s*#{@num}\\s*(%?)\\s+or\\s+(.+)$", "iu")
+
+  defp parse_target(_unit, raw) when raw in ["", "n/a", "N/A", "NA"], do: :none
+
+  defp parse_target(unit, raw) do
+    cond do
+      m = Regex.run(@band_re, raw, capture: :all_but_first) ->
+        [low, p1, high, p2] = m
+
+        with {:ok, l} <- scaled(unit, low, p1 <> p2),
+             {:ok, h} <- scaled(unit, high, p1 <> p2),
+             true <- Decimal.compare(l, h) != :gt do
+          {:band, l, h}
+        else
+          _ -> :not_comparable
+        end
+
+      m = Regex.run(@bound_re, raw, capture: :all_but_first) ->
+        [op, n, pct] = m
+
+        case scaled(unit, n, pct) do
+          {:ok, t} -> {:bound, op(op), t}
+          :error -> :not_comparable
+        end
+
+      m = Regex.run(@compound_re, raw, capture: :all_but_first) ->
+        [op, n, pct, rest] = m
+
+        case scaled(unit, n, pct) do
+          {:ok, t} -> {:compound, op(op), t, String.trim(rest)}
+          :error -> :not_comparable
+        end
+
+      true ->
+        :not_comparable
+    end
+  end
+
+  defp op("≤"), do: "<="
+  defp op("≥"), do: ">="
+  defp op(op), do: op
+
+  # A percent metric's text must carry a "%" sign (stored as a 0–1
+  # proportion); other units must not.
+  defp scaled(:percent, n, pct) when pct != "",
+    do: {:ok, n |> Decimal.new() |> Decimal.div(100) |> Decimal.normalize()}
+
+  defp scaled(:percent, _n, _pct), do: :error
+  defp scaled(_unit, n, ""), do: {:ok, Decimal.new(n)}
+  defp scaled(_unit, _n, _pct), do: :error
+
   defp assumed(:achievement, %{assumed_type?: true}), do: [:combined_assessment]
+
   defp assumed(:engagement, %{population: :schoolwide}), do: [:schoolwide_survey]
   defp assumed(_section, _ctx), do: []
 
@@ -340,9 +465,81 @@ defmodule Emisint.Improvement.ResultGoals do
   defp judge(match, blocked, _interval, _target) when blocked != nil, do: gray(match, blocked)
   defp judge(match, _blocked, {:missing, reason}, _target), do: gray(match, reason)
 
-  defp judge(match, nil, interval, target) do
-    status = classify(match.direction, interval, target)
-    Map.merge(match, %{status: status, reasons: [], tone: tone(status)})
+  defp judge(match, nil, interval, {:number, target}), do: judge(match, nil, interval, target)
+
+  defp judge(match, nil, interval, {:bound, op, target}) do
+    if bound_direction(op) == match.direction,
+      do: verdict_status(match, classify_bound(op, interval, target)),
+      else: gray(match, :target_direction_conflict)
+  end
+
+  defp judge(match, nil, interval, {:band, low, high}),
+    do: verdict_status(match, classify_band(match.direction, interval, low, high))
+
+  # Only the inequality of a compound target can be evaluated: meeting it
+  # meets the target; otherwise the other condition decides, which isn't
+  # evaluated, so the comparison is gray.
+  defp judge(match, nil, interval, {:compound, op, target, _rest}) do
+    if bound_direction(op) == match.direction and
+         classify_bound(op, interval, target) == :meets,
+       do: verdict_status(match, :meets),
+       else: gray(match, :compound_target)
+  end
+
+  defp judge(match, nil, interval, %Decimal{} = target),
+    do: verdict_status(match, classify(match.direction, interval, target))
+
+  defp verdict_status(match, status),
+    do: Map.merge(match, %{status: status, reasons: [], tone: tone(status)})
+
+  defp bound_direction(op) when op in ["<", "<="], do: :lower_is_better
+  defp bound_direction(_op), do: :higher_is_better
+
+  @doc """
+  An inequality target ("< 18%", "> 35%", "<= …", ">= …") against published
+  bounds `{low, high}`: `:meets` when the whole published value satisfies it,
+  `:misses` when none of it does, otherwise `:overlaps`. A strict inequality
+  isn't met by an equal value.
+  """
+  def classify_bound("<", {low, high}, t),
+    do: bound_status(Decimal.compare(high, t) == :lt, Decimal.compare(low, t) != :lt)
+
+  def classify_bound("<=", {low, high}, t),
+    do: bound_status(Decimal.compare(high, t) != :gt, Decimal.compare(low, t) == :gt)
+
+  def classify_bound(">", {low, high}, t),
+    do: bound_status(Decimal.compare(low, t) == :gt, Decimal.compare(high, t) != :gt)
+
+  def classify_bound(">=", {low, high}, t),
+    do: bound_status(Decimal.compare(low, t) != :lt, Decimal.compare(high, t) == :lt)
+
+  defp bound_status(true, _misses?), do: :meets
+  defp bound_status(_meets?, true), do: :misses
+  defp bound_status(_meets?, _misses?), do: :overlaps
+
+  @doc """
+  A range target ("55-60%") against published bounds, by a **dashboard
+  comparison convention**, not a source-confirmed scoring rule: the sources
+  don't define when a range target is met, so the dashboard gives only a
+  verdict that holds whichever end counts: higher is better, the
+  whole published value at or above the range's high end meets and wholly
+  below its low end misses; lower is better, at or below its low end meets
+  and wholly above its high end misses. Anything else overlaps.
+  """
+  def classify_band(:lower_is_better, {low, high}, band_low, band_high) do
+    cond do
+      Decimal.compare(high, band_low) != :gt -> :meets
+      Decimal.compare(low, band_high) == :gt -> :misses
+      true -> :overlaps
+    end
+  end
+
+  def classify_band(_higher_is_better, {low, high}, band_low, band_high) do
+    cond do
+      Decimal.compare(low, band_high) != :lt -> :meets
+      Decimal.compare(high, band_low) == :lt -> :misses
+      true -> :overlaps
+    end
   end
 
   @doc """
@@ -395,7 +592,7 @@ defmodule Emisint.Improvement.ResultGoals do
         schoolwide?(row, ctx),
         ctx.type == if(goal.includes_alternate, do: "Comp", else: "Reg"),
         into: %{},
-        do: {:proficient_or_advanced, annual(goal, rows)}
+        do: {:proficient_or_advanced, annual(goal, rows, %{annual_years: ctx[:annual_years]})}
   end
 
   @doc """
@@ -403,26 +600,28 @@ defmodule Emisint.Improvement.ResultGoals do
   result of its own school year (derived by `SchoolResults.compare_goal/2`)
   under the dashboard rule. Used by the state tables and the Annual Targets
   table, so they always agree. `status` is `:not_published` when no matching
-  result has been imported; `missing` then says "Not yet published" or "No
+  result has been imported; `missing` then says "No matching results in the imported data" or "No
   result imported".
   """
-  def annual(goal, rows) do
-    comparison = SchoolResults.compare_goal(goal, rows)
+  def annual(goal, rows, config \\ %{})
 
-    match = %{
-      kind: :annual,
-      code: nil,
-      name: "#{if goal.subject == :ela, do: "ELA", else: "Math"} Proficient or Advanced",
-      direction: :higher_is_better,
-      year: goal.school_year,
-      value: annual_value(comparison),
-      target: %{
-        label: "#{goal.school_year} annual target",
-        text: Percent.format(goal.target_value)
-      },
-      timing: :same_year,
-      assumed: []
-    }
+  # The plan's year mapping is assumed (e.g. "Using the assumed 2025–2026
+  # through 2030–2031 sequence"): the target stays visible, but no published
+  # result is looked up or judged for it until the years are confirmed.
+  def annual(goal, _rows, %{annual_years: %{status: :assumed} = years}) do
+    goal
+    |> annual_match(nil)
+    |> Map.merge(%{
+      status: :year_unconfirmed,
+      reasons: [:year_unconfirmed],
+      tone: :muted,
+      missing: "Not compared: year mapping unconfirmed (#{years.location})"
+    })
+  end
+
+  def annual(goal, rows, _config) do
+    comparison = SchoolResults.compare_goal(goal, rows)
+    match = annual_match(goal, annual_value(comparison))
 
     case comparison do
       %{low: low, high: high} ->
@@ -441,7 +640,24 @@ defmodule Emisint.Improvement.ResultGoals do
     end
   end
 
-  # An annual target with no matching result: "Not yet published" when no
+  defp annual_match(goal, value) do
+    %{
+      kind: :annual,
+      code: nil,
+      name: "#{if goal.subject == :ela, do: "ELA", else: "Math"} Proficient or Advanced",
+      direction: :higher_is_better,
+      year: goal.school_year,
+      value: value,
+      target: %{
+        label: "#{goal.school_year} annual target",
+        text: Percent.format(goal.target_value)
+      },
+      timing: :same_year,
+      assumed: []
+    }
+  end
+
+  # An annual target with no matching result: "No matching results in the imported data" when no
   # achievement results from that year or later have been imported, otherwise
   # "No result imported" (an earlier year whose download isn't on file, e.g.
   # Oberon's 2018-19 target).
@@ -449,7 +665,7 @@ defmodule Emisint.Improvement.ResultGoals do
     later? =
       Enum.any?(rows, &(&1.dataset == :assessment_performance and &1.academic_year >= year))
 
-    if later?, do: "No result imported", else: "Not yet published"
+    if later?, do: "No result imported", else: "No matching results in the imported data"
   end
 
   defp annual_value(%{low: low, high: high}) do
@@ -496,11 +712,15 @@ defmodule Emisint.Improvement.ResultGoals do
   def short_label(%{reasons: [reason | _]}), do: reason_label(reason)
 
   defp reason_label(:population_unverified), do: "Gray: survey population unverified"
-  defp reason_label(:assessment_type_unconfirmed), do: "Gray: assessment type unconfirmed"
+  defp reason_label(:assessment_type_unconfirmed), do: "Gray: awaiting assessment confirmation"
+  defp reason_label(:mapping_unconfirmed), do: "Gray: candidate mapping, awaiting confirmation"
   defp reason_label(:target_not_comparable), do: "Gray: target needs confirmation"
-  defp reason_label(:target_is_range), do: "Gray: target is a range"
   defp reason_label(:suppressed), do: "Gray: suppressed"
   defp reason_label(:not_derivable), do: "Gray: not derivable"
+  defp reason_label(:year_unconfirmed), do: "Gray: year mapping unconfirmed"
+  defp reason_label(:no_target), do: "Gray: no target at this checkpoint"
+  defp reason_label(:compound_target), do: "Gray: other target condition not evaluated"
+  defp reason_label(:target_direction_conflict), do: "Gray: target direction unclear"
   defp reason_label(_missing), do: "Gray: not published"
 
   @doc "The timing caveat shown with a workbook comparison, or nil (none for gray)."
@@ -540,7 +760,7 @@ defmodule Emisint.Improvement.ResultGoals do
 
   @doc "Why the value has its color, with the caveats."
   def explanation(match) do
-    [grade_text(match), verdict(match), timing_text(match), @not_official]
+    [grade_text(match), verdict(match), match[:basis], timing_text(match), @not_official]
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" ")
   end
@@ -553,6 +773,36 @@ defmodule Emisint.Improvement.ResultGoals do
 
   defp verdict(%{status: :gray, reasons: [reason]} = m),
     do: "Not compared with the #{target_label(m)} (#{m.target.text}): " <> reason_text(reason)
+
+  defp verdict(%{spec: {:bound, op, t}} = m) do
+    how =
+      case m.status do
+        :meets -> "the whole published value satisfies"
+        :misses -> "no part of the published value satisfies"
+        :overlaps -> "the published range includes values that meet and miss"
+      end
+
+    "#{m.year} published value #{m.value}: #{how} the #{target_label(m)} “#{m.target.text}” (#{bound_rule(op, t, m)})."
+  end
+
+  defp verdict(%{spec: {:compound, op, t, rest}} = m),
+    do:
+      "#{m.year} published value #{m.value}: the whole published value satisfies “#{op} #{number_text(m, t)}”, part of the #{target_label(m)} “#{m.target.text}”, so it meets the target whatever “#{rest}” means."
+
+  defp verdict(%{spec: {:band, l, h}} = m) do
+    {low, high} = {number_text(m, l), number_text(m, h)}
+
+    how =
+      case {m.status, m.direction} do
+        {:meets, :lower_is_better} -> "the whole published value is at or below #{low}"
+        {:meets, _} -> "the whole published value is at or above #{high}"
+        {:misses, :lower_is_better} -> "the whole published value is above #{high}"
+        {:misses, _} -> "the whole published value is below #{low}"
+        {:overlaps, _} -> "the published value isn't wholly beyond either end of the range"
+      end
+
+    "#{m.year} published value #{m.value}: #{how}. The #{target_label(m)} is written as a range (#{m.target.text}), and the sources don't define when a range target is met. This color follows a dashboard comparison convention, not a source-confirmed scoring rule: only a verdict that holds whichever end of the range counts is given; otherwise the range overlaps."
+  end
 
   defp verdict(%{status: status} = m) do
     how =
@@ -568,6 +818,21 @@ defmodule Emisint.Improvement.ResultGoals do
 
     "#{m.year} published value #{m.value}: #{how} the #{target_label(m)} #{m.target.text} (#{better} is better; equal meets)."
   end
+
+  defp bound_rule("<", t, m),
+    do: "below #{number_text(m, t)} meets; #{number_text(m, t)} or more misses"
+
+  defp bound_rule("<=", t, m),
+    do: "#{number_text(m, t)} or less meets; above #{number_text(m, t)} misses"
+
+  defp bound_rule(">", t, m),
+    do: "above #{number_text(m, t)} meets; #{number_text(m, t)} or less misses"
+
+  defp bound_rule(">=", t, m),
+    do: "#{number_text(m, t)} or more meets; below #{number_text(m, t)} misses"
+
+  defp number_text(%{unit: :percent}, t), do: Percent.format(t)
+  defp number_text(_m, t), do: Decimal.to_string(t, :normal)
 
   defp target_label(%{percentile?: true} = m), do: "#{checkpoint(m)} growth percentile target"
   defp target_label(m), do: m.target.label
@@ -594,16 +859,30 @@ defmodule Emisint.Improvement.ResultGoals do
 
   defp reason_text(:assessment_type_unconfirmed),
     do:
-      "the workbook doesn't say whether this target counts the Combined, Standard or Alternate assessment."
+      "awaiting assessment confirmation: the workbook doesn't say whether this target counts the Combined, Standard or Alternate assessment."
+
+  defp reason_text(:mapping_unconfirmed),
+    do:
+      "this is a candidate mapping awaiting confirmation: the sources don't establish that this published measure (survey category and population) is the one the goal counts, and the evidence below is to investigate, not a confirmation."
 
   defp reason_text(:target_not_comparable), do: "the target isn't a confirmed number."
 
-  defp reason_text(:target_is_range),
-    do:
-      "the target is written as a range, and the workbook doesn't define when a range target is met."
-
   defp reason_text(:not_derivable),
     do: "a component of Proficient or Advanced is suppressed or not published."
+
+  defp reason_text(:year_unconfirmed),
+    do:
+      "the plan assumes which school year each annual target belongs to, so no year-specific comparison is made until the years are confirmed."
+
+  defp reason_text(:no_target),
+    do: "the workbook sets no target for this checkpoint (the cell is empty or “n/a”)."
+
+  defp reason_text(:compound_target),
+    do:
+      "the published value doesn't satisfy the target's inequality, and the target's other condition isn't evaluated here (its reference value or meaning isn't defined in the sources)."
+
+  defp reason_text(:target_direction_conflict),
+    do: "the target's inequality points the opposite way from the metric's direction."
 
   defp reason_text(:suppressed), do: "the published value is suppressed."
   defp reason_text(:not_published), do: "no value is published."
@@ -678,6 +957,14 @@ defmodule Emisint.Improvement.ResultGoals do
   defp section_note(:engagement, %{assumed: [:schoolwide_survey]}),
     do: "Reference comparison; schoolwide survey population match assumed."
 
+  defp section_note(_section, %{candidate?: true, basis: basis}),
+    do:
+      "Candidate mapping, awaiting confirmation (gray, no verdict). Evidence to investigate: " <>
+        basis
+
+  defp section_note(_section, %{basis: basis}) when is_binary(basis),
+    do: "Reference comparison against workbook targets. " <> basis
+
   defp section_note(_section, _match), do: "Reference comparison against workbook targets."
 
   @doc "The reference note shown with the legend, for the selected checkpoint."
@@ -716,7 +1003,7 @@ defmodule Emisint.Improvement.ResultGoals do
 
   defp generic_methodology,
     do: [
-      "Rule. A dashboard comparison rule, not an official ND FIRST scoring method. Published values are compared through their published low and high values (an exact value has equal bounds; ranges as published at insights.nd.gov/Data, never midpoints or tolerances). Higher is better: lower bound at or above the target meets, upper bound below it misses, otherwise the range overlaps the target. Lower is better: upper bound at or below the target meets, lower bound above it misses, otherwise it overlaps. Equal meets.",
+      "Rule. A dashboard comparison rule, not an official ND FIRST scoring method. Published values are compared through their published low and high values (an exact value has equal bounds; ranges as published at insights.nd.gov/Data, never midpoints or tolerances). Higher is better: lower bound at or above the target meets, upper bound below it misses, otherwise the range overlaps the target. Lower is better: upper bound at or below the target meets, lower bound above it misses, otherwise it overlaps. Equal meets. Targets written as text: an inequality such as “< 18%” meets only when the whole published value satisfies it (an equal value doesn't satisfy a strict inequality) and misses when none of it does; a range such as “55-60%” is colored by a dashboard comparison convention, not a source-confirmed scoring rule (the sources don't define when a range target is met): it meets only when the whole published value is beyond its far end and misses only when it is wholly short of its near end; a compound target such as “< 22% or within 7% State Avg” meets through its inequality and is otherwise gray. Empty, “n/a” and other text targets are gray.",
       "Reference checkpoint. Workbook goals are compared with the selected 18- or 36-month target. Which assessment year counts for each review isn't confirmed, so these are reference comparisons: “against future target” for a result from before the plan began, otherwise “review year unconfirmed”. They never record a review result, set a rating or feed the payment estimate.",
       "Gray. Missing or suppressed values, missing or unconfirmed targets, and comparisons known to be incompatible are gray, with the reason."
     ]

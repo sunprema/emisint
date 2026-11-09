@@ -80,7 +80,31 @@ config :emisint,
 # ND First schools included in this release, by verified ND InstitutionID.
 # Other participants may be seeded for later expansion, but only these are
 # listed on the ND First landing page and offered by the ND Insights import UI.
-config :emisint, :nd_first, pilot_institution_ids: ["4300429212", "0301662261"]
+# ND First records enabled in this release, by verified ND Insights
+# InstitutionID: Fort Yates, Oberon, Valley Middle; Drayton, Dunseith,
+# Mandaree and Warwick districts (participant records) and their buildings;
+# Cannon Ball Elementary (the workbook's "Solen" participant, confirmed by the
+# user November 9, 2026).
+config :emisint, :nd_first,
+  pilot_institution_ids: [
+    "4300429212",
+    "0301662261",
+    "1800189752",
+    "34019",
+    "3401919281",
+    "3401919283",
+    "40001",
+    "4000119681",
+    "4000119663",
+    "27036",
+    "2703654591",
+    "2703654593",
+    "03029",
+    "0302992191",
+    "0302992192",
+    "0302992193",
+    "4300312781"
+  ]
 
 # Configure the endpoint
 config :emisint, EmisintWeb.Endpoint,

@@ -1,0 +1,413 @@
+AcademicYear,InstitutionName,InstitutionID,Grade,Subject,AssessmentType,Accomodations,Subgroup,NoviceRangeLow,NoviceRangeHigh,PartiallyRangeLow,PartiallyRangeHigh,ProficientRangeLow,ProficientRangeHigh,AdvancedRangeLow,AdvancedRangeHigh
+2024-2025,Drayton Elementary School,3401919281,3,Math,Comp,All,All,0.5,0.59,0.2,0.29,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,3,Reading,Comp,All,All,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,3,Math,Reg,All,All,0.5,0.59,0.2,0.29,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,3,Reading,Reg,All,All,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,4,Math,Comp,All,All,0.4,0.49,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,4,Reading,Comp,All,All,0.2,0.29,0.7,0.79,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,4,Science,Comp,All,All,0.3,0.39,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,4,Math,Reg,All,All,0.4,0.49,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,4,Reading,Reg,All,All,0.2,0.29,0.7,0.79,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,4,Science,Reg,All,All,0.3,0.39,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,5,Math,Comp,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,5,Reading,Comp,All,All,0,0.2,0.5,0.59,0.3,0.39,0,0.2
+2024-2025,Drayton Elementary School,3401919281,5,Math,Reg,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,5,Reading,Reg,All,All,0,0.2,0.5,0.59,0.3,0.39,0,0.2
+2024-2025,Drayton Elementary School,3401919281,6,Math,Comp,All,All,0.5,0.59,0,0.2,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,6,Reading,Comp,All,All,0.2,0.29,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,6,Math,Reg,All,All,0.5,0.59,0,0.2,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,6,Reading,Reg,All,All,0.2,0.29,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,7,Math,Comp,All,All,0.2,0.29,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,7,Reading,Comp,All,All,0.2,0.29,0.6,0.69,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,8,Math,Comp,All,All,0.2,0.29,0.2,0.29,0.4,0.49,0,0.2
+2024-2025,Drayton Elementary School,3401919281,8,Reading,Comp,All,All,0.3,0.39,0.7,0.79,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,8,Science,Comp,All,All,0.3,0.39,0.3,0.39,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,8,Math,Reg,All,All,0.2,0.29,0.2,0.29,0.4,0.49,0,0.2
+2024-2025,Drayton Elementary School,3401919281,8,Reading,Reg,All,All,0.3,0.39,0.7,0.79,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,8,Science,Reg,All,All,0.3,0.39,0.3,0.39,0.2,0.29,0,0.2
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Comp,All,All,0.4,0.44,0.3,0.34,0.2,0.24,0.05,0.09
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Comp,All,Female,0.5,0.59,0.2,0.29,0.2,0.29,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Comp,All,IEP (student with disabilities),0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Comp,All,Low Income,0.4,0.49,0.4,0.49,0,0.1,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Comp,All,Male,0.2,0.29,0.3,0.39,0.2,0.29,0.1,0.19
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Comp,All,Non-IEP,0.3,0.34,0.35,0.39,0.25,0.29,0.05,0.09
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Comp,All,Non-Low Income,0.35,0.39,0.25,0.29,0.3,0.34,0,0.04
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Comp,All,All,0.25,0.29,0.55,0.59,0.15,0.19,0,0.04
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Comp,All,Female,0.3,0.39,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Comp,All,IEP (student with disabilities),0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Comp,All,Low Income,0.2,0.29,0.5,0.59,0.2,0.29,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Comp,All,Male,0.2,0.29,0.6,0.69,0.1,0.19,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Comp,All,Non-IEP,0.15,0.19,0.6,0.64,0.15,0.19,0,0.04
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Comp,All,Non-Low Income,0.3,0.34,0.55,0.59,0.1,0.14,0,0.04
+2024-2025,Drayton Elementary School,3401919281,All Grades,Science,Comp,All,All,0.3,0.39,0.4,0.49,0.2,0.29,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Reg,All,All,0.4,0.44,0.3,0.34,0.2,0.24,0.05,0.09
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Reg,All,Female,0.5,0.59,0.2,0.29,0.2,0.29,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Reg,All,IEP (student with disabilities),0.6,0.69,0,0.2,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Reg,All,Low Income,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Reg,All,Male,0.2,0.29,0.3,0.39,0.2,0.29,0.1,0.19
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Reg,All,Non-IEP,0.3,0.34,0.35,0.39,0.25,0.29,0.05,0.09
+2024-2025,Drayton Elementary School,3401919281,All Grades,Math,Reg,All,Non-Low Income,0.35,0.39,0.25,0.29,0.3,0.34,0,0.04
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Reg,All,All,0.25,0.29,0.55,0.59,0.15,0.19,0,0.04
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Reg,All,Female,0.3,0.39,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Reg,All,IEP (student with disabilities),0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Reg,All,Low Income,0.2,0.29,0.5,0.59,0.2,0.29,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Reg,All,Male,0.2,0.29,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Reg,All,Non-IEP,0.15,0.19,0.6,0.64,0.15,0.19,0,0.04
+2024-2025,Drayton Elementary School,3401919281,All Grades,Reading,Reg,All,Non-Low Income,0.3,0.34,0.55,0.59,0.1,0.14,0,0.04
+2024-2025,Drayton Elementary School,3401919281,All Grades,Science,Reg,All,All,0.3,0.39,0.4,0.49,0.2,0.29,0,0.1
+2024-2025,Drayton High School,3401919283,10,Math,Comp,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,10,Reading,Comp,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,10,Science,Comp,All,All,0.3,0.39,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,10,Math,Reg,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,10,Reading,Reg,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,10,Science,Reg,All,All,0.3,0.39,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,All Grades,Math,Comp,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,All Grades,Reading,Comp,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,All Grades,Science,Comp,All,All,0.3,0.39,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,All Grades,Math,Reg,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,All Grades,Reading,Reg,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton High School,3401919283,All Grades,Science,Reg,All,All,0.3,0.39,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,10,Math,Comp,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,10,Reading,Comp,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,10,Science,Comp,All,All,0.3,0.39,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,10,Math,Reg,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,10,Reading,Reg,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,10,Science,Reg,All,All,0.3,0.39,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,3,Math,Comp,All,All,0.5,0.59,0.2,0.29,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,3,Reading,Comp,All,All,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,3,Math,Reg,All,All,0.5,0.59,0.2,0.29,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,3,Reading,Reg,All,All,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,4,Math,Comp,All,All,0.4,0.49,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,4,Reading,Comp,All,All,0.2,0.29,0.7,0.79,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,4,Science,Comp,All,All,0.3,0.39,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,4,Math,Reg,All,All,0.4,0.49,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,4,Reading,Reg,All,All,0.2,0.29,0.7,0.79,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,4,Science,Reg,All,All,0.3,0.39,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,5,Math,Comp,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,5,Reading,Comp,All,All,0,0.2,0.5,0.59,0.3,0.39,0,0.2
+2024-2025,Drayton Public School District,34019,5,Math,Reg,All,All,0.3,0.39,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,5,Reading,Reg,All,All,0,0.2,0.5,0.59,0.3,0.39,0,0.2
+2024-2025,Drayton Public School District,34019,6,Math,Comp,All,All,0.5,0.59,0,0.2,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,6,Reading,Comp,All,All,0.2,0.29,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,6,Math,Reg,All,All,0.5,0.59,0,0.2,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,6,Reading,Reg,All,All,0.2,0.29,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,7,Math,Comp,All,All,0.2,0.29,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,7,Reading,Comp,All,All,0.2,0.29,0.6,0.69,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,8,Math,Comp,All,All,0.2,0.29,0.2,0.29,0.4,0.49,0,0.2
+2024-2025,Drayton Public School District,34019,8,Reading,Comp,All,All,0.3,0.39,0.7,0.79,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,8,Science,Comp,All,All,0.3,0.39,0.3,0.39,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,8,Math,Reg,All,All,0.2,0.29,0.2,0.29,0.4,0.49,0,0.2
+2024-2025,Drayton Public School District,34019,8,Reading,Reg,All,All,0.3,0.39,0.7,0.79,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,8,Science,Reg,All,All,0.3,0.39,0.3,0.39,0.2,0.29,0,0.2
+2024-2025,Drayton Public School District,34019,All Grades,Math,Comp,All,All,0.4,0.44,0.3,0.34,0.2,0.24,0.05,0.09
+2024-2025,Drayton Public School District,34019,All Grades,Math,Comp,All,Female,0.5,0.54,0.3,0.34,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Math,Comp,All,IEP (student with disabilities),0.6,0.69,0.1,0.19,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Math,Comp,All,Low Income,0.5,0.59,0.4,0.49,0,0.1,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Math,Comp,All,Male,0.3,0.34,0.35,0.39,0.2,0.24,0.05,0.09
+2024-2025,Drayton Public School District,34019,All Grades,Math,Comp,All,Non-IEP,0.3,0.34,0.35,0.39,0.2,0.24,0.05,0.09
+2024-2025,Drayton Public School District,34019,All Grades,Math,Comp,All,Non-Low Income,0.35,0.39,0.3,0.34,0.3,0.34,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Comp,All,All,0.25,0.29,0.5,0.54,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Comp,All,Female,0.3,0.34,0.55,0.59,0.1,0.14,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Comp,All,IEP (student with disabilities),0.5,0.59,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Comp,All,Low Income,0.2,0.29,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Comp,All,Male,0.25,0.29,0.5,0.54,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Comp,All,Non-IEP,0.2,0.24,0.55,0.59,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Comp,All,Non-Low Income,0.3,0.34,0.5,0.54,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Science,Comp,All,All,0.3,0.39,0.4,0.49,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Science,Comp,All,Female,0.2,0.29,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,All Grades,Science,Comp,All,IEP (student with disabilities),0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,All Grades,Science,Comp,All,Low Income,0.3,0.39,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,All Grades,Science,Comp,All,Male,0.3,0.39,0.4,0.49,0.2,0.29,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Science,Comp,All,Non-IEP,0.2,0.29,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Science,Comp,All,Non-Low Income,0.2,0.29,0.4,0.49,0.2,0.29,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Math,Reg,All,All,0.4,0.44,0.3,0.34,0.2,0.24,0.05,0.09
+2024-2025,Drayton Public School District,34019,All Grades,Math,Reg,All,Female,0.5,0.54,0.3,0.34,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Math,Reg,All,IEP (student with disabilities),0.7,0.79,0.1,0.19,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Math,Reg,All,Low Income,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Math,Reg,All,Male,0.3,0.34,0.35,0.39,0.2,0.24,0.05,0.09
+2024-2025,Drayton Public School District,34019,All Grades,Math,Reg,All,Non-IEP,0.3,0.34,0.35,0.39,0.2,0.24,0.05,0.09
+2024-2025,Drayton Public School District,34019,All Grades,Math,Reg,All,Non-Low Income,0.35,0.39,0.3,0.34,0.3,0.34,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Reg,All,All,0.3,0.34,0.5,0.54,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Reg,All,Female,0.3,0.34,0.55,0.59,0.1,0.14,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Reg,All,IEP (student with disabilities),0.5,0.59,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Reg,All,Low Income,0.2,0.29,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Reg,All,Male,0.25,0.29,0.5,0.54,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Reg,All,Non-IEP,0.2,0.24,0.55,0.59,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Reading,Reg,All,Non-Low Income,0.3,0.34,0.5,0.54,0.15,0.19,0,0.04
+2024-2025,Drayton Public School District,34019,All Grades,Science,Reg,All,All,0.3,0.39,0.4,0.49,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Science,Reg,All,Female,0.2,0.29,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,All Grades,Science,Reg,All,IEP (student with disabilities),0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,All Grades,Science,Reg,All,Low Income,0.3,0.39,0.5,0.59,0,0.2,0,0.2
+2024-2025,Drayton Public School District,34019,All Grades,Science,Reg,All,Male,0.3,0.39,0.4,0.49,0.2,0.29,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Science,Reg,All,Non-IEP,0.2,0.29,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Drayton Public School District,34019,All Grades,Science,Reg,All,Non-Low Income,0.2,0.29,0.4,0.49,0.2,0.29,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,All,0.4,0.44,0.3,0.34,0.15,0.19,0.1,0.14
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,All Others,0.3,0.39,0,0.2,0,0.2,0.2,0.29
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,Black,0.6,0.69,0.2,0.29,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,Female,0.35,0.39,0.3,0.34,0.2,0.24,0.1,0.14
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,Hispanic,0.3,0.39,0,0.2,0.3,0.39,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,IEP (student with disabilities),0.5,0.59,0.2,0.29,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,Low Income,0.5,0.54,0.25,0.29,0.1,0.14,0.05,0.09
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,Male,0.4,0.44,0.3,0.34,0.1,0.14,0.1,0.14
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,Native American,0.5,0.59,0,0.2,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,Non-IEP,0.35,0.39,0.3,0.34,0.15,0.19,0.1,0.14
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,Non-Low Income,0.25,0.29,0.35,0.39,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,6,Math,Comp,All,White,0.3,0.34,0.4,0.44,0.1,0.14,0.1,0.14
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,All,0.25,0.29,0.35,0.39,0.35,0.39,0,0.02
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,All Others,0,0.2,0.4,0.49,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,Black,0.3,0.39,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,Female,0.2,0.24,0.35,0.39,0.35,0.39,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,Hispanic,0.2,0.29,0.4,0.49,0.3,0.39,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,IEP (student with disabilities),0.4,0.49,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,Low Income,0.3,0.34,0.35,0.39,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,Male,0.3,0.34,0.35,0.39,0.3,0.34,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,Native American,0.4,0.49,0,0.2,0.3,0.39,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,Non-IEP,0.2,0.24,0.35,0.39,0.35,0.39,0,0.02
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,Non-Low Income,0.15,0.19,0.4,0.44,0.4,0.44,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Reading,Comp,All,White,0.2,0.24,0.35,0.39,0.35,0.39,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,All,0.4,0.44,0.3,0.34,0.15,0.19,0.1,0.14
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,All Others,0.3,0.39,0,0.2,0,0.2,0.2,0.29
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,Black,0.6,0.69,0.2,0.29,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,Female,0.4,0.44,0.3,0.34,0.2,0.24,0.05,0.09
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,Hispanic,0.4,0.49,0,0.2,0.3,0.39,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,IEP (student with disabilities),0.6,0.69,0.1,0.19,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,Low Income,0.5,0.54,0.25,0.29,0.1,0.14,0.05,0.09
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,Male,0.45,0.49,0.25,0.29,0.1,0.14,0.15,0.19
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,Native American,0.5,0.59,0,0.2,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,Non-IEP,0.35,0.39,0.3,0.34,0.15,0.19,0.1,0.14
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,Non-Low Income,0.3,0.34,0.35,0.39,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,6,Math,Reg,All,White,0.3,0.34,0.35,0.39,0.1,0.14,0.1,0.14
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,All,0.25,0.29,0.35,0.39,0.3,0.34,0,0.02
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,All Others,0,0.2,0.4,0.49,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,Black,0.3,0.39,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,Female,0.2,0.24,0.35,0.39,0.35,0.39,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,Hispanic,0.3,0.39,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,IEP (student with disabilities),0.5,0.59,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,Low Income,0.35,0.39,0.35,0.39,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,Male,0.3,0.34,0.35,0.39,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,Native American,0.4,0.49,0,0.2,0.3,0.39,0,0.2
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,Non-IEP,0.2,0.24,0.35,0.39,0.35,0.39,0,0.02
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,Non-Low Income,0.15,0.19,0.35,0.39,0.4,0.44,0,0.04
+2024-2025,Valley Middle School,1800189752,6,Reading,Reg,All,White,0.2,0.24,0.4,0.44,0.35,0.39,0,0.04
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,All,0.5,0.54,0.2,0.24,0.1,0.14,0.1,0.14
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,All Others,0,0.2,0.3,0.39,0,0.2,0.4,0.49
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,Black,0.4,0.49,0.3,0.39,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,Female,0.55,0.59,0.15,0.19,0.1,0.14,0.15,0.19
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,Hispanic,0.7,0.79,0,0.2,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,IEP (student with disabilities),0.7,0.79,0.2,0.29,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,Low Income,0.6,0.64,0.15,0.19,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,Male,0.45,0.49,0.25,0.29,0.15,0.19,0.1,0.14
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,Native American,0.6,0.69,0,0.2,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,Non-IEP,0.4,0.44,0.2,0.24,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,Non-Low Income,0.4,0.44,0.25,0.29,0.1,0.14,0.15,0.19
+2024-2025,Valley Middle School,1800189752,7,Math,Comp,All,White,0.45,0.49,0.25,0.29,0.1,0.14,0.1,0.14
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,All,0.2,0.24,0.4,0.44,0.25,0.29,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,All Others,0,0.2,0.2,0.29,0.4,0.49,0.2,0.29
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,Black,0,0.2,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,Female,0.2,0.24,0.35,0.39,0.3,0.34,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,Hispanic,0.5,0.59,0.2,0.29,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,IEP (student with disabilities),0.4,0.49,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,Low Income,0.3,0.34,0.4,0.44,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,Male,0.2,0.24,0.45,0.49,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,Native American,0.3,0.39,0.4,0.49,0.3,0.39,0,0.1
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,Non-IEP,0.15,0.19,0.45,0.49,0.3,0.34,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,Non-Low Income,0.1,0.14,0.45,0.49,0.3,0.34,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Reading,Comp,All,White,0.15,0.19,0.45,0.49,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,All,0.5,0.54,0.2,0.24,0.1,0.14,0.1,0.14
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,All Others,0,0.2,0.3,0.39,0,0.2,0.4,0.49
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,Black,0.4,0.49,0.3,0.39,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,Female,0.55,0.59,0.15,0.19,0.1,0.14,0.15,0.19
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,Hispanic,0.7,0.79,0,0.2,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,IEP (student with disabilities),0.7,0.79,0.2,0.29,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,Low Income,0.6,0.64,0.15,0.19,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,Male,0.45,0.49,0.25,0.29,0.15,0.19,0.1,0.14
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,Native American,0.6,0.69,0,0.2,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,Non-IEP,0.4,0.44,0.2,0.24,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,Non-Low Income,0.4,0.44,0.25,0.29,0.1,0.14,0.15,0.19
+2024-2025,Valley Middle School,1800189752,7,Math,Reg,All,White,0.45,0.49,0.25,0.29,0.1,0.14,0.1,0.14
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,All,0.2,0.24,0.4,0.44,0.25,0.29,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,All Others,0,0.2,0.2,0.29,0.4,0.49,0.2,0.29
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,Black,0,0.2,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,Female,0.2,0.24,0.35,0.39,0.3,0.34,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,Hispanic,0.5,0.59,0.2,0.29,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,IEP (student with disabilities),0.4,0.49,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,Low Income,0.3,0.34,0.35,0.39,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,Male,0.2,0.24,0.45,0.49,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,Native American,0.3,0.39,0.4,0.49,0.3,0.39,0,0.1
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,Non-IEP,0.15,0.19,0.45,0.49,0.3,0.34,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,Non-Low Income,0.1,0.14,0.45,0.49,0.3,0.34,0.05,0.09
+2024-2025,Valley Middle School,1800189752,7,Reading,Reg,All,White,0.15,0.19,0.45,0.49,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,All,0.4,0.44,0.3,0.34,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,All Others,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,Black,0.3,0.39,0.4,0.49,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,Female,0.35,0.39,0.35,0.39,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,Hispanic,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,IEP (student with disabilities),0.5,0.59,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,Low Income,0.45,0.49,0.35,0.39,0.1,0.14,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,Male,0.45,0.49,0.3,0.34,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,Native American,0.3,0.39,0.6,0.69,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,Non-IEP,0.35,0.39,0.35,0.39,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,Non-Low Income,0.35,0.39,0.25,0.29,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,8,Math,Comp,All,White,0.35,0.39,0.2,0.24,0.25,0.29,0.1,0.14
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,All,0.25,0.29,0.45,0.49,0.25,0.29,0.03,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,All Others,0,0.2,0.5,0.59,0.3,0.39,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,Black,0.3,0.39,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,Female,0.2,0.24,0.45,0.49,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,Hispanic,0.2,0.29,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,IEP (student with disabilities),0.5,0.59,0.2,0.29,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,Low Income,0.3,0.34,0.45,0.49,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,Male,0.25,0.29,0.45,0.49,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,Native American,0.2,0.29,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,Non-IEP,0.15,0.19,0.5,0.54,0.25,0.29,0.03,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,Non-Low Income,0.1,0.14,0.45,0.49,0.35,0.39,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Reading,Comp,All,White,0.2,0.24,0.4,0.44,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,All,0.35,0.39,0.3,0.34,0.2,0.24,0.1,0.14
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,All Others,0.2,0.29,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,Black,0.4,0.49,0.2,0.29,0.2,0.29,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,Female,0.3,0.34,0.35,0.39,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,Hispanic,0.4,0.49,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,IEP (student with disabilities),0.5,0.59,0.2,0.29,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,Low Income,0.45,0.49,0.3,0.34,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,Male,0.4,0.44,0.25,0.29,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,Native American,0.2,0.29,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,Non-IEP,0.3,0.34,0.3,0.34,0.25,0.29,0.1,0.14
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,Non-Low Income,0.2,0.24,0.3,0.34,0.3,0.34,0.1,0.14
+2024-2025,Valley Middle School,1800189752,8,Science,Comp,All,White,0.3,0.34,0.25,0.29,0.2,0.24,0.15,0.19
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,All,0.4,0.44,0.35,0.39,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,All Others,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,Black,0.3,0.39,0.4,0.49,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,Female,0.35,0.39,0.35,0.39,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,Hispanic,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,IEP (student with disabilities),0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,Low Income,0.45,0.49,0.4,0.44,0.1,0.14,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,Male,0.45,0.49,0.3,0.34,0.1,0.14,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,Native American,0.3,0.39,0.6,0.69,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,Non-IEP,0.35,0.39,0.35,0.39,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,Non-Low Income,0.35,0.39,0.25,0.29,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,8,Math,Reg,All,White,0.35,0.39,0.25,0.29,0.2,0.24,0.1,0.14
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,All,0.25,0.29,0.45,0.49,0.25,0.29,0,0.02
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,All Others,0,0.2,0.5,0.59,0.3,0.39,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,Black,0.4,0.49,0.3,0.39,0.2,0.29,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,Female,0.2,0.24,0.45,0.49,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,Hispanic,0.2,0.29,0.5,0.59,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,IEP (student with disabilities),0.5,0.59,0.2,0.29,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,Low Income,0.35,0.39,0.45,0.49,0.15,0.19,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,Male,0.3,0.34,0.45,0.49,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,Native American,0.2,0.29,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,Non-IEP,0.15,0.19,0.5,0.54,0.25,0.29,0.03,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,Non-Low Income,0.15,0.19,0.45,0.49,0.35,0.39,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Reading,Reg,All,White,0.25,0.29,0.4,0.44,0.25,0.29,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,All,0.35,0.39,0.3,0.34,0.2,0.24,0.1,0.14
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,All Others,0.2,0.29,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,Black,0.4,0.49,0.2,0.29,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,Female,0.3,0.34,0.35,0.39,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,Hispanic,0.4,0.49,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,IEP (student with disabilities),0.6,0.69,0.3,0.39,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,Low Income,0.45,0.49,0.3,0.34,0.1,0.14,0.05,0.09
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,Male,0.4,0.44,0.25,0.29,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,Native American,0.2,0.29,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,Non-IEP,0.3,0.34,0.3,0.34,0.25,0.29,0.1,0.14
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,Non-Low Income,0.2,0.24,0.3,0.34,0.3,0.34,0.1,0.14
+2024-2025,Valley Middle School,1800189752,8,Science,Reg,All,White,0.35,0.39,0.3,0.34,0.2,0.24,0.15,0.19
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Alt,All,All,0,0.2,0.3,0.39,0.3,0.39,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Alt,All,All,0,0.2,0.2,0.29,0.5,0.59,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,All,0.44,0.44,0.29,0.29,0.16,0.16,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Asian American,0.2,0.29,0.2,0.29,0.1,0.19,0.3,0.39
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Black,0.5,0.54,0.35,0.39,0.1,0.14,0.05,0.09
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,English Learner,0.8,1,0,0.2,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Female,0.43,0.43,0.29,0.29,0.17,0.17,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Former English Learner,0.3,0.39,0.2,0.29,0.3,0.39,0.2,0.29
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Hispanic,0.55,0.59,0.2,0.24,0.15,0.19,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,IEP (student with disabilities),0.6,0.64,0.25,0.29,0.1,0.14,0,0.02
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,IEP - Emotional Disturbance,0.6,0.69,0,0.2,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Low Income,0.52,0.52,0.28,0.28,0.14,0.14,0.06,0.06
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Male,0.45,0.45,0.3,0.3,0.14,0.14,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Native American,0.5,0.54,0.2,0.24,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Native Hawaiian or Pacific Islander,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Non-English Learner,0.43,0.43,0.3,0.3,0.16,0.16,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Non-Former English Learner,0.44,0.44,0.3,0.3,0.15,0.15,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Non-IEP,0.39,0.39,0.3,0.3,0.17,0.17,0.13,0.13
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Non-IEP - Emotional Disturbance,0.44,0.44,0.3,0.3,0.16,0.16,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,Non-Low Income,0.35,0.35,0.31,0.31,0.17,0.17,0.17,0.17
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Comp,All,White,0.4,0.4,0.31,0.31,0.16,0.16,0.13,0.13
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,All,0.25,0.25,0.42,0.42,0.3,0.3,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Asian American,0,0.1,0.3,0.39,0.3,0.39,0.2,0.29
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Black,0.3,0.34,0.4,0.44,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,English Learner,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Female,0.23,0.23,0.4,0.4,0.34,0.34,0.04,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Former English Learner,0,0.2,0.4,0.49,0.3,0.39,0.3,0.39
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Hispanic,0.3,0.34,0.4,0.44,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,IEP (student with disabilities),0.45,0.49,0.3,0.34,0.15,0.19,0,0.02
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,IEP - Emotional Disturbance,0.4,0.49,0,0.2,0.4,0.49,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Low Income,0.33,0.33,0.4,0.4,0.25,0.25,0,0.02
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Male,0.27,0.27,0.44,0.44,0.26,0.26,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Native American,0.3,0.34,0.35,0.39,0.3,0.34,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Native Hawaiian or Pacific Islander,0,0.2,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Non-English Learner,0.24,0.24,0.43,0.43,0.31,0.31,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Non-Former English Learner,0.26,0.26,0.42,0.42,0.3,0.3,0.02,0.02
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Non-IEP,0.19,0.19,0.45,0.45,0.33,0.33,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Non-IEP - Emotional Disturbance,0.24,0.24,0.43,0.43,0.29,0.29,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,Non-Low Income,0.15,0.15,0.44,0.44,0.37,0.37,0.04,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Comp,All,White,0.21,0.21,0.43,0.43,0.33,0.33,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,All,0.35,0.39,0.3,0.34,0.2,0.24,0.1,0.14
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,All Others,0.2,0.29,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,Black,0.4,0.49,0.2,0.29,0.2,0.29,0,0.1
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,Female,0.3,0.34,0.35,0.39,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,Hispanic,0.4,0.49,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,IEP (student with disabilities),0.5,0.59,0.2,0.29,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,Low Income,0.45,0.49,0.3,0.34,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,Male,0.4,0.44,0.25,0.29,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,Native American,0.2,0.29,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,Non-IEP,0.3,0.34,0.3,0.34,0.25,0.29,0.1,0.14
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,Non-Low Income,0.2,0.24,0.3,0.34,0.3,0.34,0.1,0.14
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Comp,All,White,0.3,0.34,0.25,0.29,0.2,0.24,0.15,0.19
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,All,0.45,0.45,0.29,0.29,0.15,0.15,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Asian American,0.2,0.29,0.2,0.29,0.1,0.19,0.3,0.39
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Black,0.5,0.54,0.35,0.39,0.05,0.09,0.05,0.09
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,English Learner,0.8,1,0,0.2,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Female,0.44,0.44,0.3,0.3,0.16,0.16,0.1,0.1
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Former English Learner,0.3,0.39,0.2,0.29,0.3,0.39,0.2,0.29
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Hispanic,0.6,0.64,0.2,0.24,0.15,0.19,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,IEP (student with disabilities),0.65,0.69,0.25,0.29,0.05,0.09,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,IEP - Emotional Disturbance,0.7,0.79,0,0.2,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Low Income,0.53,0.53,0.28,0.28,0.14,0.14,0.05,0.05
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Male,0.46,0.46,0.29,0.29,0.14,0.14,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Native American,0.5,0.54,0.2,0.24,0.15,0.19,0.05,0.09
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Native Hawaiian or Pacific Islander,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Non-English Learner,0.44,0.44,0.3,0.3,0.15,0.15,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Non-Former English Learner,0.45,0.45,0.3,0.3,0.15,0.15,0.1,0.1
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Non-IEP,0.39,0.39,0.3,0.3,0.17,0.17,0.13,0.13
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Non-IEP - Emotional Disturbance,0.44,0.44,0.3,0.3,0.15,0.15,0.11,0.11
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,Non-Low Income,0.36,0.36,0.31,0.31,0.17,0.17,0.17,0.17
+2024-2025,Valley Middle School,1800189752,All Grades,Math,Reg,All,White,0.4,0.4,0.31,0.31,0.16,0.16,0.14,0.14
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,All,0.26,0.26,0.42,0.42,0.29,0.29,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Asian American,0,0.1,0.3,0.39,0.3,0.39,0.2,0.29
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Black,0.3,0.34,0.4,0.44,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,English Learner,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Female,0.23,0.23,0.41,0.41,0.33,0.33,0.04,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Former English Learner,0,0.2,0.4,0.49,0.3,0.39,0.3,0.39
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Hispanic,0.35,0.39,0.4,0.44,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,IEP (student with disabilities),0.5,0.54,0.3,0.34,0.1,0.14,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,IEP - Emotional Disturbance,0.4,0.49,0,0.2,0.4,0.49,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Low Income,0.35,0.35,0.41,0.41,0.23,0.23,0,0.02
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Male,0.28,0.28,0.44,0.44,0.26,0.26,0,0.02
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Native American,0.3,0.34,0.35,0.39,0.3,0.34,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Native Hawaiian or Pacific Islander,0,0.2,0.5,0.59,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Non-English Learner,0.24,0.24,0.43,0.43,0.3,0.3,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Non-Former English Learner,0.26,0.26,0.42,0.42,0.29,0.29,0.02,0.02
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Non-IEP,0.19,0.19,0.45,0.45,0.33,0.33,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Non-IEP - Emotional Disturbance,0.25,0.25,0.43,0.43,0.29,0.29,0.03,0.03
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,Non-Low Income,0.15,0.15,0.44,0.44,0.37,0.37,0.04,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Reading,Reg,All,White,0.21,0.21,0.44,0.44,0.32,0.32,0,0.02
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,All,0.35,0.39,0.3,0.34,0.2,0.24,0.1,0.14
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,All Others,0.2,0.29,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,Black,0.4,0.49,0.2,0.29,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,Female,0.3,0.34,0.35,0.39,0.2,0.24,0,0.04
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,Hispanic,0.4,0.49,0.3,0.39,0.1,0.19,0,0.1
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,IEP (student with disabilities),0.6,0.69,0.3,0.39,0,0.1,0,0.1
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,Low Income,0.45,0.49,0.3,0.34,0.1,0.14,0.05,0.09
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,Male,0.4,0.44,0.25,0.29,0.15,0.19,0.15,0.19
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,Native American,0.2,0.29,0.4,0.49,0.2,0.29,0,0.2
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,Non-IEP,0.3,0.34,0.3,0.34,0.25,0.29,0.1,0.14
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,Non-Low Income,0.2,0.24,0.3,0.34,0.3,0.34,0.1,0.14
+2024-2025,Valley Middle School,1800189752,All Grades,Science,Reg,All,White,0.35,0.39,0.3,0.34,0.2,0.24,0.15,0.19

@@ -90,6 +90,12 @@ defmodule Emisint.Improvement.Seeds.FortYates do
         engagement:
           "Disengaged is compared with the workbook's survey disengagement targets (G4-M2 Emotional, G4-M3 Behavioral, G4-M4 Cognitive); lower is better. G4-M1 counts actively engaged students from classroom observations, a different measure from the survey's Committed, so it isn't matched."
       },
+      annual_years: %{
+        status: :stated,
+        location: "North Dakota - ND First Schools.pdf p.17",
+        excerpt:
+          "“Annual Proficiency Targets”, listed by year: “2025–2026: ELA 25%; mathematics 11%.” through “2030–2031: ELA 47%; mathematics 37%.” (Long-Term Academic Goals: 2025–2026 through 2030–2031)"
+      },
       annual_note:
         "Annual goals start in 2025-26: earlier results have no annual goal, and another year's target is never substituted.",
       report_notes: [

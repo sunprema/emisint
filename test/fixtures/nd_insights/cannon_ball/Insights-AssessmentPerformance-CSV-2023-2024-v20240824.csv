@@ -1,0 +1,119 @@
+AcademicYear,InstitutionName,InstitutionID,Grade,Subject,AssessmentType,Accomodations,Subgroup,NoviceRangeLow,NoviceRangeHigh,PartiallyRangeLow,PartiallyRangeHigh,ProficientRangeLow,ProficientRangeHigh,AdvancedRangeLow,AdvancedRangeHigh
+2023-2024,Cannon Ball Elementary School,4300312781,3,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,3,Reading,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,3,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,3,Reading,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,4,Math,Comp,All,All,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,4,Reading,Comp,All,All,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,4,Science,Comp,All,All,0.6,0.69,0.3,0.39,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,4,Math,Reg,All,All,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,4,Reading,Reg,All,All,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,4,Science,Reg,All,All,0.6,0.69,0.3,0.39,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,5,Math,Comp,All,All,0.7,0.79,0.2,0.29,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,5,Reading,Comp,All,All,0.7,0.79,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,5,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,5,Reading,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,7,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,7,Reading,Comp,All,All,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,7,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,7,Reading,Reg,All,All,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,8,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,8,Reading,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,8,Science,Comp,All,All,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,8,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,8,Reading,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,8,Science,Reg,All,All,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Comp,All,All,0.8,0.84,0.15,0.19,0,0.04,0,0.04
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Comp,All,Female,0.8,0.89,0.1,0.19,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Comp,All,Homeless,0.8,0.89,0.1,0.19,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Comp,All,Male,0.8,0.89,0.1,0.19,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Comp,All,Non-Homeless,0.75,0.79,0.15,0.19,0,0.04,0,0.04
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Comp,All,All,0.7,0.74,0.15,0.19,0.1,0.14,0,0.04
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Comp,All,Female,0.5,0.59,0.3,0.39,0.1,0.19,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Comp,All,Homeless,0.7,0.79,0.1,0.19,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Comp,All,Male,0.8,0.89,0,0.1,0.1,0.19,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Comp,All,Non-Homeless,0.65,0.69,0.2,0.24,0.1,0.14,0,0.04
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Science,Comp,All,All,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Science,Comp,All,Female,0.6,0.69,0.4,0.49,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Science,Comp,All,Male,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Reg,All,All,0.8,0.84,0.15,0.19,0,0.04,0,0.04
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Reg,All,Female,0.8,0.89,0.1,0.19,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Reg,All,Homeless,0.9,1,0,0.1,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Reg,All,Male,0.8,0.89,0.1,0.19,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Math,Reg,All,Non-Homeless,0.75,0.79,0.15,0.19,0,0.04,0,0.04
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Reg,All,All,0.7,0.74,0.15,0.19,0.1,0.14,0,0.04
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Reg,All,Female,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Reg,All,Homeless,0.8,0.89,0.1,0.19,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Reg,All,Male,0.8,0.89,0,0.1,0.1,0.19,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Reading,Reg,All,Non-Homeless,0.65,0.69,0.2,0.24,0.1,0.14,0,0.04
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Science,Reg,All,All,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Science,Reg,All,Female,0.6,0.69,0.4,0.49,0,0.2,0,0.2
+2023-2024,Cannon Ball Elementary School,4300312781,All Grades,Science,Reg,All,Male,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen 3,43003,10,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,10,Reading,Comp,All,All,0.7,0.79,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,10,Science,Comp,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen 3,43003,10,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,10,Reading,Reg,All,All,0.7,0.79,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,10,Science,Reg,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen 3,43003,3,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,3,Reading,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,3,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,3,Reading,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,4,Math,Comp,All,All,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2023-2024,Solen 3,43003,4,Reading,Comp,All,All,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2023-2024,Solen 3,43003,4,Science,Comp,All,All,0.6,0.69,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen 3,43003,4,Math,Reg,All,All,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2023-2024,Solen 3,43003,4,Reading,Reg,All,All,0.4,0.49,0.4,0.49,0,0.2,0,0.2
+2023-2024,Solen 3,43003,4,Science,Reg,All,All,0.6,0.69,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen 3,43003,5,Math,Comp,All,All,0.7,0.79,0.2,0.29,0,0.2,0,0.2
+2023-2024,Solen 3,43003,5,Reading,Comp,All,All,0.7,0.79,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,5,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,5,Reading,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,7,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,7,Reading,Comp,All,All,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2023-2024,Solen 3,43003,7,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,7,Reading,Reg,All,All,0.6,0.69,0.2,0.29,0,0.2,0,0.2
+2023-2024,Solen 3,43003,8,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,8,Reading,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,8,Science,Comp,All,All,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2023-2024,Solen 3,43003,8,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,8,Reading,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen 3,43003,8,Science,Reg,All,All,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2023-2024,Solen 3,43003,All Grades,Math,Comp,All,All,0.8,0.84,0.15,0.19,0,0.04,0,0.04
+2023-2024,Solen 3,43003,All Grades,Math,Comp,All,Female,0.8,0.84,0.15,0.19,0,0.04,0,0.04
+2023-2024,Solen 3,43003,All Grades,Math,Comp,All,Homeless,0.8,0.89,0.1,0.19,0,0.1,0,0.1
+2023-2024,Solen 3,43003,All Grades,Math,Comp,All,Male,0.8,0.84,0.1,0.14,0,0.04,0,0.04
+2023-2024,Solen 3,43003,All Grades,Math,Comp,All,Non-Homeless,0.8,0.84,0.15,0.19,0,0.04,0,0.04
+2023-2024,Solen 3,43003,All Grades,Reading,Comp,All,All,0.7,0.74,0.15,0.19,0.05,0.09,0,0.04
+2023-2024,Solen 3,43003,All Grades,Reading,Comp,All,Female,0.6,0.64,0.25,0.29,0.1,0.14,0,0.04
+2023-2024,Solen 3,43003,All Grades,Reading,Comp,All,Homeless,0.7,0.79,0.1,0.19,0,0.1,0,0.1
+2023-2024,Solen 3,43003,All Grades,Reading,Comp,All,Male,0.8,0.84,0.05,0.09,0.05,0.09,0,0.04
+2023-2024,Solen 3,43003,All Grades,Reading,Comp,All,Non-Homeless,0.65,0.69,0.2,0.24,0.1,0.14,0,0.04
+2023-2024,Solen 3,43003,All Grades,Science,Comp,All,All,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2023-2024,Solen 3,43003,All Grades,Science,Comp,All,Female,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2023-2024,Solen 3,43003,All Grades,Science,Comp,All,Male,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen 3,43003,All Grades,Math,Reg,All,All,0.8,0.84,0.1,0.14,0,0.04,0,0.04
+2023-2024,Solen 3,43003,All Grades,Math,Reg,All,Female,0.8,0.84,0.15,0.19,0,0.04,0,0.04
+2023-2024,Solen 3,43003,All Grades,Math,Reg,All,Homeless,0.8,0.89,0,0.1,0,0.1,0,0.1
+2023-2024,Solen 3,43003,All Grades,Math,Reg,All,Male,0.8,0.84,0.1,0.14,0,0.04,0,0.04
+2023-2024,Solen 3,43003,All Grades,Math,Reg,All,Non-Homeless,0.8,0.84,0.15,0.19,0,0.04,0,0.04
+2023-2024,Solen 3,43003,All Grades,Reading,Reg,All,All,0.7,0.74,0.15,0.19,0.05,0.09,0,0.04
+2023-2024,Solen 3,43003,All Grades,Reading,Reg,All,Female,0.6,0.64,0.25,0.29,0.05,0.09,0,0.04
+2023-2024,Solen 3,43003,All Grades,Reading,Reg,All,Homeless,0.7,0.79,0.1,0.19,0,0.1,0,0.1
+2023-2024,Solen 3,43003,All Grades,Reading,Reg,All,Male,0.8,0.84,0.05,0.09,0.05,0.09,0,0.04
+2023-2024,Solen 3,43003,All Grades,Reading,Reg,All,Non-Homeless,0.65,0.69,0.2,0.24,0.1,0.14,0,0.04
+2023-2024,Solen 3,43003,All Grades,Science,Reg,All,All,0.5,0.59,0.3,0.39,0,0.1,0,0.1
+2023-2024,Solen 3,43003,All Grades,Science,Reg,All,Female,0.5,0.59,0.4,0.49,0,0.2,0,0.2
+2023-2024,Solen 3,43003,All Grades,Science,Reg,All,Male,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,10,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,10,Reading,Comp,All,All,0.7,0.79,0,0.2,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,10,Science,Comp,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,10,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,10,Reading,Reg,All,All,0.7,0.79,0,0.2,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,10,Science,Reg,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,All Grades,Math,Comp,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,All Grades,Reading,Comp,All,All,0.7,0.79,0,0.2,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,All Grades,Science,Comp,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,All Grades,Math,Reg,All,All,0.8,1,0,0.2,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,All Grades,Reading,Reg,All,All,0.7,0.79,0,0.2,0,0.2,0,0.2
+2023-2024,Solen High School,4300380363,All Grades,Science,Reg,All,All,0.5,0.59,0.3,0.39,0,0.2,0,0.2

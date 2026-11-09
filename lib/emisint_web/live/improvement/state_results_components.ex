@@ -24,9 +24,17 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
   attr :match, :map, required: true, doc: "`ResultGoals.annual/2`"
 
   # An Annual Targets cell: the same comparison as the state tables.
+  def goal_comparison(%{match: %{status: :year_unconfirmed}} = assigns) do
+    ~H"""
+    <span class="text-base-content/60 italic" data-status="year_unconfirmed">{@match.missing}</span>
+    """
+  end
+
   def goal_comparison(%{match: %{status: :not_published}} = assigns) do
     ~H"""
-    <span class="text-base-content/50 italic">{@match[:missing] || "Not yet published"}</span>
+    <span class="text-base-content/50 italic">
+      {@match[:missing] || "No matching results in the imported data"}
+    </span>
     """
   end
 
@@ -54,6 +62,11 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
   attr :import_path, :string, default: nil, doc: "ND Insights import link; shown only when set"
 
   attr :comparison_pdf_path, :string, default: nil, doc: "PDF export including the comparison"
+
+  attr :link_params, :map,
+    default: %{},
+    doc:
+      "the dashboard's current query params; kept by the latest-year links (only the year changes)"
 
   attr :benchmark_rows, :list,
     default: [],
@@ -87,10 +100,21 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
           if(assigns.compared.benchmark?, do: StateComparison.rows(assigns.compared), else: [])
       )
 
+    performance = SchoolResults.performance(rows, year, type, subgroup)
+    growth = SchoolResults.growth(rows, year, subgroup)
+    achievement_published? = SchoolResults.achievement_published?(performance)
+
     assigns =
       assign(assigns,
-        performance: SchoolResults.performance(rows, year, type, subgroup),
-        growth: SchoolResults.growth(rows, year, subgroup),
+        performance: performance,
+        growth: growth,
+        achievement_published?: achievement_published?,
+        achievement_latest:
+          if(not achievement_published?,
+            do: SchoolResults.latest_year_with(rows, :achievement, assigns.filters)
+          ),
+        growth_latest:
+          if(growth == [], do: SchoolResults.latest_year_with(rows, :growth, assigns.filters)),
         engagement: SchoolResults.engagement(rows, year),
         survey_participation: SchoolResults.survey_participation(rows, year),
         type_label: type_label(type),
@@ -177,13 +201,22 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
               name="state_subgroup"
               id="state_subgroup"
               class="select select-bordered select-sm mt-1 w-48"
+              disabled={length(@filters.subgroups) < 2}
+              aria-describedby={if length(@filters.subgroups) < 2, do: "state-subgroup-only"}
             >
               <option :for={s <- @filters.subgroups} value={s} selected={s == @filters.subgroup}>
                 {subgroup_label(s)}
               </option>
             </select>
+            <span
+              :if={length(@filters.subgroups) < 2}
+              class="text-xs text-base-content/50 mt-1"
+              id="state-subgroup-only"
+            >
+              Only all students published for this year and assessment
+            </span>
           </label>
-          <label class="form-control">
+          <label :if={@metrics != []} class="form-control">
             <span class="label-text text-xs uppercase tracking-wide">Compare with</span>
             <span class="text-xs text-base-content/50">Workbook goals (reference)</span>
             <select
@@ -216,7 +249,7 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
       </div>
 
       <div :if={@state.years != []} class="divide-y divide-base-200">
-        <.goal_legend reference={@filters.reference} config={@config} />
+        <.goal_legend reference={@filters.reference} config={@config} workbook?={@metrics != []} />
 
         <div class="p-4 space-y-2" id="state-achievement">
           <h3 class="font-medium">Achievement · {@filters.year}</h3>
@@ -249,7 +282,9 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
             class="text-xs text-base-content/60"
             id="achievement-goal-years"
           >
-            {ResultGoals.annual_years_note(@annual_goal_years, @filters.year)} Workbook goals are compared with the selected reference target.
+            {ResultGoals.annual_years_note(@annual_goal_years, @filters.year)}<span :if={
+              @metrics != []
+            }> Workbook goals are compared with the selected reference target.</span>
           </p>
           <.scroll_hint />
           <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Achievement table">
@@ -275,21 +310,28 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
                 </tr>
               </thead>
               <tbody>
-                <tr :if={@performance == []}>
+                <tr :if={not @achievement_published?}>
                   <td colspan="8" class="text-center text-base-content/50 italic">
                     <div class="font-medium not-italic text-base-content/70" id="achievement-empty">
                       No published achievement results for {@type_label} assessment · {@subgroup_label} · {@filters.year}.
                     </div>
                     <div class="text-xs">
-                      The state's download has no rows for this combination.
-                      <span :if={@filters.type == "Alt"}>
+                      The imported state download has no achievement rows for this combination.
+                      <span :if={@performance != []} id="achievement-tested-only">
+                        % tested is shown below where the participation download publishes it.
+                      </span>
+                      <span :if={@filters.type == "Alt" and is_nil(@achievement_latest)}>
                         Try Combined or Standard; Alternate-assessment results are published only for
                         groups the state reports.
                       </span>
-                      <span :if={@filters.type != "Alt"}>
-                        Try another academic year or student group.
-                      </span>
                     </div>
+                    <.latest_year_link
+                      id="achievement-latest-year"
+                      what="achievement"
+                      year={@achievement_latest}
+                      school={@school}
+                      link_params={@link_params}
+                    />
                   </td>
                 </tr>
                 <tr
@@ -299,16 +341,28 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
                   <td class="font-medium">{subject_label(row.subject)}</td>
                   <td>{row.grade}</td>
                   <td
+                    :if={row.levels == %{}}
+                    colspan="5"
+                    class="text-center text-base-content/40 italic"
+                    data-achievement="not-published"
+                  >
+                    Achievement not published
+                  </td>
+                  <td
                     :for={{measure, _} <- SchoolResults.performance_levels()}
+                    :if={row.levels != %{}}
                     class={goal_class(goal(@goals, :achievement, row, measure))}
                   >
                     <.state_value result={row.levels[measure]} />
                     <.goal_mark m={goal(@goals, :achievement, row, measure)} />
                   </td>
-                  <td class={[
-                    "border-l border-base-200",
-                    goal_class(goal(@goals, :achievement, row, :proficient_or_advanced))
-                  ]}>
+                  <td
+                    :if={row.levels != %{}}
+                    class={[
+                      "border-l border-base-200",
+                      goal_class(goal(@goals, :achievement, row, :proficient_or_advanced))
+                    ]}
+                  >
                     <.derived value={row.proficient_or_advanced} />
                     <.goal_mark m={goal(@goals, :achievement, row, :proficient_or_advanced)} />
                   </td>
@@ -367,8 +421,15 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
                       No published growth results for {@subgroup_label} · {@filters.year}.
                     </div>
                     <div class="text-xs">
-                      The state's growth download has no rows for this combination.
+                      The imported state growth download has no rows for this combination.
                     </div>
+                    <.latest_year_link
+                      id="growth-latest-year"
+                      what="growth"
+                      year={@growth_latest}
+                      school={@school}
+                      link_params={@link_params}
+                    />
                   </td>
                 </tr>
                 <tr :for={row <- @growth} id={"growth-#{slug(row.subject)}-#{slug(row.grade)}"}>
@@ -623,6 +684,41 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
     end
   end
 
+  attr :id, :string, required: true
+  attr :what, :string, required: true
+  attr :year, :string, default: nil
+  attr :school, :map, required: true
+  attr :link_params, :map, required: true
+
+  # A link to the latest academic year with matching imported results. It
+  # changes only `state_year` (on click); the period, assessment type, student
+  # group and reference checkpoint in the current URL are kept.
+  defp latest_year_link(%{year: nil} = assigns) do
+    ~H"""
+    <div class="text-xs mt-1" id={@id} data-latest-year="none">
+      No imported year has {@what} results for this combination.
+    </div>
+    """
+  end
+
+  defp latest_year_link(assigns) do
+    query =
+      assigns.link_params
+      |> Map.put("state_year", assigns.year)
+      |> Enum.reject(fn {_, v} -> v in [nil, ""] end)
+
+    assigns = assign(assigns, path: ~p"/school-goals/#{assigns.school.slug}?#{query}")
+
+    ~H"""
+    <div class="text-xs not-italic mt-1" id={@id} data-latest-year={@year}>
+      <.link patch={@path} class="link link-primary">
+        View {@year}, the latest imported year with {@what} results
+      </.link>
+      for the same filters.
+    </div>
+    """
+  end
+
   defp subgroup_label("All"), do: "All students"
   defp subgroup_label(subgroup), do: subgroup
 
@@ -698,12 +794,13 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
 
   attr :reference, :atom, required: true
   attr :config, :map, required: true, doc: "`ResultGoals.config/1`"
+  attr :workbook?, :boolean, default: true, doc: "false for a record with no workbook goals"
 
   defp goal_legend(assigns) do
     ~H"""
     <div class="px-4 pt-3 text-xs text-base-content/70 space-y-1.5" id="goal-legend">
       <p>{ResultGoals.legend_short()} Tap a status for its reason.</p>
-      <p class="font-medium text-base-content/80" id="goal-reference-note">
+      <p :if={@workbook?} class="font-medium text-base-content/80" id="goal-reference-note">
         {ResultGoals.reference_note(@reference)}
       </p>
       <ul class="flex flex-wrap gap-x-4 gap-y-1" aria-label="Goal status colors">

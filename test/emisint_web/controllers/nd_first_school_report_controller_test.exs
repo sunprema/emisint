@@ -121,7 +121,7 @@ defmodule EmisintWeb.NdFirstSchoolReportControllerTest do
       assert m4.target_36m == "Needs confirmation (Ft Yates Goals!P7 lists 90)"
 
       [row | _] = data.annual
-      assert row.ela_published == "Not yet published"
+      assert row.ela_published == "No matching results in the imported data"
 
       [reading | _] = data.state.achievement
       assert reading.subject == "ELA (Reading)"
