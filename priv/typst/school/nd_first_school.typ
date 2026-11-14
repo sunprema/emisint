@@ -199,14 +199,32 @@
     radius: 4pt,
     stroke: 0.5pt + c-border,
     width: 100%,
-    [#th(d.payment.label) \ #text(size: 11pt, weight: "bold", d.payment.combined) \
-      #note(d.payment.card_note)],
+    [#th("Current-ratings preview" + if d.payment.preview.terms_label != "" { " · " + d.payment.preview.terms_label } else { "" }) \
+      #text(size: 11pt, weight: "bold", d.payment.preview.headline) \
+      #note(d.payment.preview.basis) \
+      #note(d.payment.preview.note)],
   ),
 )
 
 #v(4pt)
-#subhead[*#d.payment.label*]
-#note[#d.payment.terms_summary Only formal 18- and 36-month review ratings count. The calculation and averages are in the appendix.]
+#subhead[*#d.payment.preview.title*]
+#note[#d.payment.preview.note It applies the payment formula and completeness rule to this report's reporting period's current implementation ratings, as if they were review ratings. It is not a formal-review estimate; nothing is recorded, and no other period is used when ratings are missing.]
+#if d.payment.preview.reason != "" [
+  #v(2pt)
+  #note(d.payment.preview.reason)
+]
+#if d.payment.preview.rows.len() > 0 [
+  #v(2pt)
+  #data-table(
+    columns: (0.9fr, 1.3fr, 1.3fr, 0.8fr, 0.8fr, 0.8fr, 2fr),
+    header: ("Checkpoint", "Systems average", "Student Outcome average", "Weights", "Weighted score", "Allocation", "Preview payment"),
+    rows: d.payment.preview.rows.map(r => (r.label, r.systems, r.outcomes, r.weights, r.weighted, r.allocation, r.payment)),
+  )
+]
+
+#v(4pt)
+#subhead[*Formal review estimates · #d.payment.label*]
+#note[#d.payment.terms_summary Only formal 18- and 36-month review ratings count; this is separate from the current-ratings preview above. The calculation and averages are in the appendix.]
 #v(2pt)
 #data-table(
   columns: (1fr, 1.2fr, 0.8fr, 2.4fr),
@@ -373,7 +391,7 @@
 #notes-list(d.appendix)
 
 #if not building [
-#section(d.payment.label + ": calculation")
+#section("Formal review estimates: calculation")
 #block(breakable: false, width: 100%)[
   #note(d.payment.terms)
   #v(2pt)

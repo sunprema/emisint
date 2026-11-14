@@ -38,6 +38,17 @@ topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
+// A link that opens a collapsed section (e.g. the payment card's "Details")
+// asks the server to open it, then scrolls to it here once it is shown.
+window.addEventListener("phx:scroll-to", ({detail}) => {
+  requestAnimationFrame(() => {
+    const el = document.getElementById(detail.id)
+    if (!el) return
+    el.scrollIntoView({behavior: "smooth", block: "start"})
+    document.getElementById(`${detail.id}-toggle`)?.focus({preventScroll: true})
+  })
+})
+
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 

@@ -13,9 +13,13 @@ defmodule EmisintWeb.Admin.NdInsightsImportLive do
 
     * `/admin/import/nd-insights` offers every ND First pilot school
       (`Emisint.Improvement.Pilot`).
-    * `/school-goals/:slug/import`, opened from a pilot school's dashboard, is
-      locked to that school: only its records are previewed, it is selected
-      automatically, and the server ignores any other submitted InstitutionID.
+    * `/school-goals/:slug/import`, opened from the "Import ND Insights data"
+      button on any supported ND First dashboard (every participant, district
+      and building record), is locked to that record: only rows published
+      under its own InstitutionID are previewed, it is selected
+      automatically, and the server ignores any other submitted
+      InstitutionID. District and building records have different
+      InstitutionIDs, so importing one never imports or changes the other.
 
   Either way the import is limited to pilot schools on the server; the
   underlying preview and importer accept any verified InstitutionID. A file's
@@ -25,7 +29,7 @@ defmodule EmisintWeb.Admin.NdInsightsImportLive do
   """
   use EmisintWeb, :live_view
 
-  alias Emisint.Improvement.{Dashboard, Pilot}
+  alias Emisint.Improvement.{Access, Dashboard, Pilot}
   alias Emisint.NdInsights.{Benchmark, Importer, UploadPreview}
 
   @max_bytes 40_000_000
@@ -45,7 +49,12 @@ defmodule EmisintWeb.Admin.NdInsightsImportLive do
   def mount(params, session, socket) do
     with true <- system_admin?(socket),
          {:ok, school} <- locked_school(socket, params) do
-      socket = assign(socket, school: school, topic: Importer.topic(session))
+      socket =
+        assign(socket,
+          school: school,
+          institution: school && Pilot.import_scope(school),
+          topic: Importer.topic(session)
+        )
 
       {:ok,
        socket
@@ -74,12 +83,13 @@ defmodule EmisintWeb.Admin.NdInsightsImportLive do
     end
   end
 
-  # A school's import page is locked to that school, which must be readable
-  # and a pilot school.
+  # A school's import page is locked to that record, which must be readable
+  # and pass the same check as the dashboard's import button.
   defp locked_school(socket, %{"slug" => slug}) do
-    case Dashboard.fetch_school(socket.assigns.scope, slug) do
-      {:ok, school} -> if Pilot.pilot?(school), do: {:ok, school}, else: {:error, :not_pilot}
-      error -> error
+    with {:ok, school} <- Dashboard.fetch_school(socket.assigns.scope, slug) do
+      if Access.can_import_state_results?(socket.assigns.current_user, school),
+        do: {:ok, school},
+        else: {:error, :not_supported}
     end
   end
 
@@ -99,14 +109,13 @@ defmodule EmisintWeb.Admin.NdInsightsImportLive do
 
   defp system_admin?(socket), do: match?(%{role: :system_admin}, socket.assigns[:current_user])
 
-  defp load_runs(socket) do
-    runs = Emisint.NdInsights.list_recent_import_runs!(actor: socket.assigns.current_user)
+  # On a school's page, the query keeps only that InstitutionID's runs before
+  # taking the 25 most recent, so other schools' newer runs can't crowd them out.
+  defp load_runs(%{assigns: %{school: nil, current_user: user}}),
+    do: Emisint.NdInsights.list_recent_import_runs!(actor: user)
 
-    case socket.assigns.school do
-      nil -> runs
-      school -> Enum.filter(runs, &(school.state_entity_id in &1.institution_ids))
-    end
-  end
+  defp load_runs(%{assigns: %{school: school, current_user: user}}),
+    do: Emisint.NdInsights.list_recent_import_runs_for!(school.state_entity_id, actor: user)
 
   # Copy the finished upload to a staging file and build the preview.
   defp handle_progress(:csv, entry, socket) do
@@ -320,10 +329,26 @@ defmodule EmisintWeb.Admin.NdInsightsImportLive do
             <.icon name="hero-arrow-left" class="size-4" /> ND First
           </.link>
           <h1 class="text-2xl font-bold">ND Insights data import</h1>
-          <p :if={@school} class="text-sm font-medium mt-1" id="nd-locked-school">
-            For {@school.name}
-            <span class="font-mono text-xs text-base-content/60">({@school.state_entity_id})</span>
-          </p>
+          <div
+            :if={@school}
+            class="mt-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+            id="nd-locked-school"
+          >
+            <div class="text-xs uppercase tracking-wide text-base-content/60">Importing for</div>
+            <div class="text-lg font-semibold leading-snug" id="nd-locked-school-name">
+              {@school.name}
+            </div>
+            <div class="text-sm text-base-content/70">
+              <span id="nd-locked-school-kind">{@institution.kind_label}</span><span :if={
+                @institution.participant
+              }> of {@institution.participant.name}</span>
+              · InstitutionID
+              <span class="font-mono" id="nd-locked-school-id">{@school.state_entity_id}</span>
+            </div>
+            <p class="text-xs text-base-content/60 mt-2" id="nd-locked-scope-note">
+              {scope_note(@school, @institution)}
+            </p>
+          </div>
           <p class="text-sm text-base-content/60 mt-1">
             Upload an official CSV from
             <a
@@ -336,7 +361,7 @@ defmodule EmisintWeb.Admin.NdInsightsImportLive do
             </a>
             — Assessment Performance, Assessment Participation, Growth Rate or an Engagement Survey
             file — with its original name and headers. Statewide files are fine; {if @school,
-              do: "only this school's records are previewed and imported.",
+              do: "only #{@school.name}'s own rows are previewed and imported.",
               else: "only the schools you select are imported."} Nothing is saved until you confirm.
           </p>
         </div>
@@ -714,6 +739,19 @@ defmodule EmisintWeb.Admin.NdInsightsImportLive do
       </.link>
     </div>
     """
+  end
+
+  # The locked page's scope sentence: built here so the punctuation stays
+  # attached to the text (no template whitespace before the periods).
+  defp scope_note(school, %{separate: []}),
+    do: "Only rows published under InstitutionID #{school.state_entity_id} are imported."
+
+  defp scope_note(school, %{separate: separate}) do
+    related = Enum.map_join(separate, "; ", &"#{&1.name} (#{&1.state_entity_id})")
+
+    "Only rows published under InstitutionID #{school.state_entity_id} are imported. " <>
+      "These related records have their own InstitutionIDs and are imported only from " <>
+      "their own pages: #{related}."
   end
 
   defp institution_label(id) do

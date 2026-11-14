@@ -110,7 +110,14 @@ defmodule Emisint.Improvement.Pilot do
       function_exported?(module, :buildings, 0) ->
         %{name: name, short_name: short} = module.school()
 
-        [%{name: name, label: "District overview", slug: participant_slug}] ++
+        # A district's own record is its overview; a school participant's
+        # (Cannon Ball) is the school itself, by name.
+        main_label =
+          if Emisint.Improvement.Seeds.Participant.record_kind(module) == :school,
+            do: name,
+            else: "District overview"
+
+        [%{name: name, label: main_label, slug: participant_slug}] ++
           Enum.map(module.buildings(), fn b ->
             %{name: bname, slug: bslug} = b.school()
             %{name: bname, label: String.replace_prefix(bname, short <> " ", ""), slug: bslug}
@@ -129,6 +136,47 @@ defmodule Emisint.Improvement.Pilot do
       _ -> school.slug
     end
   end
+
+  @doc """
+  What an ND Insights import for `school` covers, for the import page:
+  `%{kind_label, participant, separate}`.
+
+    * `kind_label`: "District" (a district participant's own record),
+      "Building" (a building of a district participant) or "School" (a
+      single-building participant).
+    * `participant`: the district's `%{name, state_entity_id}` for a
+      building, otherwise nil.
+    * `separate`: the related district and building records
+      (`%{name, slug, state_entity_id}`), each published under its own
+      InstitutionID and imported only from its own page.
+  """
+  def import_scope(school) do
+    alias Emisint.Improvement.Seeds.Participant
+
+    case Participant.scope(school) do
+      %{kind: :participant, buildings: buildings, record_kind: kind} ->
+        %{
+          kind_label: if(kind == :school, do: "School", else: "District"),
+          participant: nil,
+          separate: Enum.map(buildings, &record/1)
+        }
+
+      %{kind: :building, participant: participant} ->
+        others =
+          for b <- participant.buildings(), b.school().slug != school.slug, do: record(b)
+
+        %{
+          kind_label: "Building",
+          participant: record(participant),
+          separate: [record(participant) | others]
+        }
+
+      _ ->
+        %{kind_label: "School", participant: nil, separate: []}
+    end
+  end
+
+  defp record(module), do: Map.take(module.school(), [:name, :slug, :state_entity_id])
 
   @doc "Verified ND InstitutionIDs of the pilot schools."
   @spec institution_ids() :: [String.t()]

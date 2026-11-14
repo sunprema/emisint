@@ -84,7 +84,8 @@ config :emisint,
 # InstitutionID: Fort Yates, Oberon, Valley Middle; Drayton, Dunseith,
 # Mandaree and Warwick districts (participant records) and their buildings;
 # Cannon Ball Elementary (the workbook's "Solen" participant, confirmed by the
-# user November 9, 2026).
+# user November 9, 2026) and its building, Solen High School (user decision,
+# November 12, 2026).
 config :emisint, :nd_first,
   pilot_institution_ids: [
     "4300429212",
@@ -103,7 +104,8 @@ config :emisint, :nd_first,
     "0302992191",
     "0302992192",
     "0302992193",
-    "4300312781"
+    "4300312781",
+    "4300380363"
   ]
 
 # Configure the endpoint

@@ -47,6 +47,7 @@ defmodule Emisint.Improvement.Seeds do
     MandareeElementary,
     MandareeHigh,
     Oberon,
+    SolenHigh,
     ValleyMiddle,
     Warwick,
     WarwickElementary,
@@ -63,7 +64,8 @@ defmodule Emisint.Improvement.Seeds do
   # record with the workbook goals plus one record per building with only that
   # building's PDF annual targets (`Seeds.Participant`). Modules other than
   # Fort Yates are seeded only when passed explicitly as `schools:`. Cannon
-  # Ball (`CannonBall`) is the workbook's "Solen" participant (confirmed by the user).
+  # Ball (`CannonBall`) is the workbook's "Solen" participant (confirmed by the user);
+  # Solen High School (`SolenHigh`) is its building (user decision, November 12, 2026).
   @available_schools [
     FortYates,
     Oberon,
@@ -81,7 +83,8 @@ defmodule Emisint.Improvement.Seeds do
     WarwickElementary,
     WarwickMiddle,
     WarwickHigh,
-    CannonBall
+    CannonBall,
+    SolenHigh
   ]
 
   @doc "School definition modules seeded by default."

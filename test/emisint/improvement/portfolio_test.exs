@@ -151,19 +151,29 @@ defmodule Emisint.Improvement.PortfolioTest do
   end
 
   describe "missing data and review ratings" do
-    test "no review ratings: checks and payment stay missing; unconfigured terms say so", ctx do
+    test "no review ratings: checks and payment stay missing for every participant", ctx do
       s = Portfolio.summary(scope(ctx.admin, ctx.org))
       fy = row(s, "fort-yates-ms")
 
       assert fy.columns.fal_26.systems.value == nil
-      assert fy.columns.check_18m.systems == %{value: nil, rated: 0, total: 8}
+
+      assert fy.columns.check_18m.systems == %{
+               value: nil,
+               rated: 0,
+               total: 8,
+               na: 0,
+               applicable: 8
+             }
+
       assert fy.payment.overall == nil and fy.payment.performance == nil
       assert fy.payment.estimate.status == :awaiting_review
       assert Payment.status_text(fy.payment.estimate) =~ "Awaiting review"
 
+      # Every participant has the workbook's 18-month terms (November 13, 2026).
       oberon = row(s, "oberon-elementary")
-      assert oberon.payment.estimate.status == :no_terms
-      assert Payment.status_text(oberon.payment.estimate) == "Not configured"
+      assert oberon.payment.estimate.status == :awaiting_review
+      assert Payment.status_text(oberon.payment.estimate) =~ "Awaiting review: 21 review ratings"
+      assert Decimal.equal?(oberon.payment.estimate.allocation, "70000")
     end
 
     test "partial review ratings give a partial check and no estimate; complete ones an estimate",
@@ -184,13 +194,20 @@ defmodule Emisint.Improvement.PortfolioTest do
       assert fy_row.payment.overall == nil
       assert fy_row.payment.estimate.status == :awaiting_review
 
-      # Every metric rated: 3 × 70% + 1 × 30% = 2.4; 2.4 ÷ 3 = 80%; $35,000 × 2.4 ÷ 3.
+      # Every metric rated: 3 × 70% + 1 × 30% = 2.4; 2.4 ÷ 3 = 80%; the workbook's
+      # I column: 80% × $70,000 = $56,000.
       Enum.each(outcomes, &record.(&1, 1))
       fy_row = row(Portfolio.summary(scope(ctx.admin, ctx.org)), "fort-yates-ms")
       assert Decimal.equal?(fy_row.payment.overall, "2.4")
       assert Portfolio.percent(fy_row.payment.performance) == "80%"
       assert fy_row.payment.estimate.status == :estimated
-      assert Decimal.equal?(fy_row.payment.estimate.estimate, "28000.00")
+      assert Decimal.equal?(fy_row.payment.estimate.estimate, "56000.00")
+
+      assert Decimal.equal?(
+               fy_row.payment.estimate.estimate,
+               Decimal.mult(fy_row.payment.performance, 70000)
+             )
+
       # Seasonal columns are unaffected by review ratings.
       assert_close(fy_row.columns.spr_26.systems.value, "1.25")
     end

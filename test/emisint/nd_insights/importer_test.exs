@@ -1,5 +1,6 @@
 defmodule Emisint.NdInsights.ImporterTest do
-  use Emisint.DataCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use Emisint.DataCase, async: true, group: :nd_insights_import
 
   import Emisint.ImprovementFixtures
   import Emisint.NdInsightsFixtures
@@ -74,6 +75,43 @@ defmodule Emisint.NdInsights.ImporterTest do
                Emisint.NdInsights.list_recent_import_runs!(actor: admin)
 
       assert error =~ "unrecognized columns"
+    end
+
+    test "recent runs for an InstitutionID are filtered before the limit of 25" do
+      admin = user!(nil, :system_admin)
+
+      log = fn ids, name ->
+        Emisint.NdInsights.ImportRun
+        |> Ash.Changeset.for_create(
+          :log,
+          %{outcome: :no_changes, file_name: name, institution_ids: ids},
+          authorize?: false
+        )
+        |> Ash.create!(authorize?: false)
+      end
+
+      own = log.(["3401919283", "99999"], "drayton-high.csv")
+      shared = log.(["34019", "3401919283"], "district-and-high.csv")
+      for n <- 1..30, do: log.(["34019"], "other-#{n}.csv")
+      for n <- 1..5, do: log.(["3401919281"], "elementary-#{n}.csv")
+
+      assert length(Emisint.NdInsights.list_recent_import_runs!(actor: admin)) == 25
+
+      drayton_high = Emisint.NdInsights.list_recent_import_runs_for!("3401919283", actor: admin)
+      assert Enum.map(drayton_high, & &1.id) == [shared.id, own.id]
+
+      district = Emisint.NdInsights.list_recent_import_runs_for!("34019", actor: admin)
+      assert length(district) == 25
+      assert Enum.all?(district, &("34019" in &1.institution_ids))
+
+      assert Emisint.NdInsights.list_recent_import_runs_for!("NOPE", actor: admin) == []
+
+      org = organization!()
+
+      for actor <- [user!(org, :emo_admin), user!(org, :school_leader)] do
+        result = Emisint.NdInsights.list_recent_import_runs_for("3401919283", actor: actor)
+        assert match?({:ok, []}, result) or match?({:error, %Ash.Error.Forbidden{}}, result)
+      end
     end
 
     test "only system admins can read the run log" do

@@ -74,6 +74,8 @@ All tenant resources use `multitenancy strategy :attribute, attribute :organizat
 
 ### Payment (`Improvement.Payment`)
 
+> **Superseded November 13, 2026** for the cap and split: see "Payment terms reconciled with the workbook (November 13, 2026)". Every participant's 18-month allocation is now the workbook's $70,000; the 36-month allocation is unset (needs confirmation); the $35,000 / $35,000 split below is withdrawn. Weights, formula, inputs, completeness and recorded-estimate rules below still apply.
+
 **Provisional rule (November 1, 2026).** Ram authorized using a best-estimate payment rule until the actual terms are confirmed. He did **not** specify the cap or split: the $70,000 total and the equal $35,000 split below are **our selected provisional assumptions**, and they are **not confirmed contract terms**. Every amount is labeled "Estimated payment — provisional cap and split" and the terms sentence says so.
 
 - **Cap and split (our selected assumptions):** $70,000 total per school across both checkpoints; $35,000 to the 18-month review and $35,000 to the 36-month review. Stored on `GoalPlan` (`payment_cap`, `allocation_18m`, `allocation_36m`, `payment_terms_status: :provisional`, `payment_terms_note`, `payment_terms_version`), set only through the system-only `:set_payment_terms` action, which validates that the allocations sum to the cap and bumps the version on any change. Fort Yates only; Oberon and Valley Middle stay "Payment terms are not set".
@@ -82,7 +84,7 @@ All tenant resources use `multitenancy strategy :attribute, attribute :organizat
   `estimated payment = checkpoint allocation × (Systems average × Systems weight + Student Outcome average × Student Outcome weight) ÷ 3`.
   Category averages are exact and taken separately before weighting; the result is capped at the allocation and rounded half up to cents.
 - **Inputs:** current formal review ratings in the checkpoint's review period only. Seasonal ratings, target values and actual results are never inputs.
-- **Completeness:** every plan metric needs a scored review rating; an explicit 0 counts. A missing, N/A or unavailable rating leaves the checkpoint "Awaiting review" (never $0). Nothing is excluded and the weights are never renormalized. (This deliberately differs from the workbook's `AVERAGEIF`, which skips blanks and hides $0.)
+- **Completeness:** *(revised November 13, 2026; see "N/A ratings in payment calculations")* a metric explicitly rated N/A is excluded from its category average and from the required count. Every other metric needs a numeric review rating; an explicit 0 counts. A missing or unavailable rating leaves the checkpoint "Awaiting review" (never $0). A category with no numeric rating makes the estimate unavailable. Weights are never renormalized.
 - **Display:** per checkpoint, category averages, weights, weighted score, allocation and estimate. The combined total appears only when both checkpoints are complete; otherwise a "Subtotal … (18-month review only)" line. Same wording on the dashboard and in the PDF.
 - **Recorded estimates:** org admins can record an estimate for a complete checkpoint (`PaymentEstimate`). It stores the amount, cap, allocation, weights, maximum rating, averages, weighted score, terms status/version/note, label, formula and each rating (id, score), so a later terms change never rewrites it. Estimates are separate from actual payments; Emisint records no actual payment.
 - **Goal 4 (item 2) is not resolved by this:** the formula averages every metric in the category, so a complete checkpoint still needs review ratings for G4-M1–G4-M4.
@@ -1284,6 +1286,517 @@ Requested for Ram: a summary of all participants before a school is selected, fo
     - **PDF:** `/school-goals/cannon-ball-elementary/report.pdf` (6 pages) was rendered and inspected: header ND 4300312781, Sum '26 1.4 / 1.92, workbook cells cited, payment "Not configured", and its own 2024-25 results.
   - **Real browser:** pending.
 
+### ND Insights import on every participant and building page (November 10, 2026; uncommitted, pending review)
+
+Request: the import was reported as available for Fort Yates only. Make it reachable from every supported school and district dashboard through the existing import workflow.
+
+- **Audit (what restricted it):**
+  - **Button** (`SchoolGoalsLive`, `#state-results #nd-import-link`): shown when the user is a `system_admin` **and** `Pilot.pilot?(school)`. The import page (`/school-goals/:slug/import`, `NdInsightsImportLive`) checks the same two things on mount, and on every upload and import event.
+  - **Only Fort Yates-specific gate:** the `pilot_institution_ids` setting. Until commit `7667c66` it held only Fort Yates (later Fort Yates + Oberon), so every other dashboard hid the button and its import URL redirected. That commit lists all 17 records (8 participants + 9 district buildings), so the gate now passes for all of them. A running dev server only reads the setting at startup, so it needs a restart after pulling.
+  - **No other school-specific code:** the route, `UploadPreview`, `Parser` and `Importer` take any configured InstitutionID. The parser matches `InstitutionID` **exactly** (no prefix), so district ID `34019` never matches building IDs `3401919281` / `3401919283`.
+- **Changes (reusing the one importer; no new importers, routes, resources or migrations):**
+  - **One permission check:** `Improvement.Access.can_import_state_results?/2` (system admin + supported record). Both the dashboard button and the import page use it. Organization admins, contributors and viewers still get no button and are redirected from the page ("Only system admins…").
+  - **Clear target on the import page:** `#nd-locked-school` card: "Importing for", the record's name (`#nd-locked-school-name`), District / Building (of its district) / School (`#nd-locked-school-kind`), and the InstitutionID (`#nd-locked-school-id`).
+  - **Scope note** (`#nd-locked-scope-note`, from `Pilot.import_scope/1`): only rows under that InstitutionID are imported. For a district or building, the related records and their own IDs are listed, each imported only from its own page.
+  - **Unchanged:** validation and preview, the revision confirmation, duplicate and conflict reporting, the run log, the state benchmark rows (99999) imported alongside, the forged-ID filtering, and the PubSub dashboard refresh.
+- **Tests:** new `test/emisint_web/live/improvement/import_all_participants_test.exs`:
+  - **Roster:** the 17 seeded records equal the configured IDs, and all 8 roster tabs are enabled.
+  - **All 17 dashboards** (system admin): the button sits in `#state-results` and links to that record's import page, which shows its name, ID and kind.
+  - **District/building notes:** Drayton district lists its buildings; Drayton High names its district and sibling; Cannon Ball (single building) lists none.
+  - **No access:** an organization admin on all 17 pages, a district contributor, and a Cannon Ball / Warwick High viewer get no button and are redirected from the import page.
+  - **Isolation:**
+    - **District import** of the statewide-style expansion file offers only 34019 and ignores forged building IDs. Previously imported Drayton Elementary rows stay identical (every field, including id and `imported_at`). A re-import creates nothing.
+    - **Building import** (Drayton High) leaves the district and Drayton Elementary rows identical.
+    - **Cannon Ball** imports only 4300312781, never the Solen district (43003) or Solen High (4300380363) rows in the same file.
+  - Expected counts come from the parser, not hardcoded.
+  - The scope note is built in `scope_note/2` (not inline HEEx), so no template whitespace lands before its periods. Its exact sentence is asserted.
+- **Also fixed:** `cannon_ball_test.exs` "the PDF has Cannon Ball's own goals…" was seed-dependent. It searched a default `inspect/1`, which cuts lists at 50 items, and row order isn't fixed. It failed with 3 of 4 seeds before the fix and passes with 6 of 6 after. The fix uses `inspect(data, limit: :infinity, printable_limit: :infinity)`; the assertion is unchanged.
+- **Mac setup (November 12, 2026):**
+  - **Database login:** the only Postgres here is EDB PostgreSQL 18 on 5432 (nothing on 5433). It rejects the default `postgres` password. The password is now kept in `~/.config/emisint/pg.env` (mode 600, outside the repo), shell-quoted and checked against the server before saving. Load it per command with `set -a; . ~/.config/emisint/pg.env; set +a`. Postgrex doesn't read `~/.pgpass`.
+  - **iCloud:** the repo lives on the iCloud-synced Desktop. 1,182 files had been evicted to iCloud ("dataless"): `_build` output, `priv/static/assets` and `.git` objects; no source files. Reading them stalled `mix test` (0% CPU, no DB connection) and `git status` for 10+ minutes. Fix: `find . -flags +dataless -print0 | xargs -0 -n 1 -P 8 brctl download` brought all of them back in about 10 minutes. Consider excluding the repo from iCloud or moving it off the Desktop.
+- **Checked before running tests:**
+  - **`mix test` alias:** `ash.setup --quiet` then `test`. `ash.setup` calls `setup/1` on extensions that define it, and only `AshPostgres.DataLayer` does. Its setup runs `ash_postgres.create` + `ash_postgres.migrate` (forward only) against `emisint_test`: no codegen, no rollback, no `remove_dev_migrations` (see item 13).
+  - **Dev server:** starting it runs no migrations (`Phoenix.Ecto.CheckRepoStatus` only reports pending ones).
+  - **`_dev` hazard files:** `20260701032125_migrate_resources1_dev.exs` and its 3 snapshots are still present.
+- **Verification (November 12, 2026, Mac):**
+  - **New tests:** `import_all_participants_test.exs` 7/7.
+  - **Suites:** ND First, ND Insights, import and report suites (`test/emisint/improvement`, `test/emisint/nd_insights`, `test/emisint_web/live/improvement`, `nd_insights_import_live_test.exs`, `nd_first_school_report_controller_test.exs`) 428/428 with seeds 430278 and 777, and again after the final edits.
+  - **Full suite:** 620 tests, 157 failures, all in the legacy orphaned suites (`integration`, `compliance`, `workers`, `analytics`, `registry`, `accounts/school_test.exs`, `assessments/*` non-ND). This is the same 157 as the baseline, with none in ND First, ND Insights or import files.
+  - **Mac `emisint_dev` has only Fort Yates, Oberon and Valley Middle seeded.** The other 5 participants and 9 buildings were seeded on Windows only, so their dashboards don't exist on this Mac until they're seeded (not done; reseeding was out of scope).
+  - **Server-rendered checks on a throwaway database:** `emisint_verify` was created, migrated and dev-seeded with all 17 records (850 created; a rerun was 0 created / 850 unchanged). The app ran on 127.0.0.1:4100 with the repo database overridden at startup, so no config file changed; the script refuses to migrate or seed anything but `emisint_verify`.
+    - **`sysadmin@example.com`:** all 17 dashboards 200 with `#nd-import-link` pointing at their own `/import`; all 17 import pages 200.
+    - **District and building headers:** Drayton district: "District · InstitutionID 34019", listing Drayton Elementary (3401919281) and Drayton High (3401919283). Drayton High: "Building of Drayton Public School District · InstitutionID 3401919283". Warwick Middle lists its district and two siblings. Cannon Ball: "School · InstitutionID 4300312781", with no related records.
+    - **`admin@example.com` (org admin):** 17 dashboards 200, 0 buttons; every import URL redirects to `/school-goals`.
+    - **`viewer@example.com`:** Fort Yates dashboard only (the other 16 redirect), 0 buttons; every import URL redirects.
+  - **Actual imports:** exercised through the same LiveView in the tests (upload, preview, forged IDs, import, re-import) against `emisint_test`. No CSV was uploaded on the throwaway server: a LiveView file upload needs a browser.
+  - **Mac `emisint_dev` unchanged** after all of this: 3 ND schools; rows 0301662261 280, 1800189752 1,080, 4300429212 1,156, 99999 34,015 (36,531 total); 17 source files; 58 import runs; latest migration `20261101180000` (38 applied).
+  - No reset, reseed or migration of `emisint_dev`, no Ash code generation, nothing committed or pushed.
+- **Open:**
+  - **Throwaway database:** drop `emisint_verify` when no longer needed.
+  - **Mac dev data:** seed the other participants into `emisint_dev` if their dashboards are wanted on this Mac (`Seeds.run` is idempotent and non-destructive; reports drift rather than overwriting).
+  - **Browser check:** an in-browser upload on a district and a building page is still pending. _(Done November 12, 2026; see below.)_
+
+### Mac `emisint_dev` brought up to all 17 records (November 12, 2026; uncommitted)
+
+No reset, no Ash code generation, no migrations (still `20261101180000`), nothing committed or pushed.
+
+- **Backup first:** `~/emisint_backups/emisint_dev-before-17-records-20261112-143711.dump` (`pg_dump -Fc`, 2.1 MB, mode 600, outside the iCloud Desktop; SHA-256 `298943e4…2bb22bf2`). It was restored into a temporary database, every row count matched, and the temporary database was dropped. To roll back: `pg_restore --clean --if-exists -d emisint_dev <dump>` (not run).
+- **Fingerprint:** an md5 over every pre-existing row of the school, user, goal, metric, period, rating, annual-target, payment-estimate and ND Insights tables, keyed by id, was taken before any write.
+- **Seeds** (`Seeds.run` on the dev organization, `workbook_ratings?: true`, no actor, matching the existing ratings):
+  - **Dry run first** (all 17 modules in a transaction, always rolled back; the fingerprint confirmed nothing was written): the existing Fort Yates, Oberon and Valley Middle had 0 created / 285 unchanged / 0 drift / 0 conversions. The 14 missing records would create 565 rows with 0 drift.
+  - **Applied** to the 14 missing modules only: 565 created, 0 drift, 0 conflicts. A full rerun (dry) gave 0 created / 850 unchanged / 0 drift.
+- **ND Insights** (`mix nd_insights.import`, all 17 reference CSVs, same SHA-256 as the files already stored, `--actor-email sysadmin@example.com`):
+  - **Preview first** (`UploadPreview`, read-only): 20,984 new for the 13 district/building IDs + Cannon Ball; 0 parse errors, no revisions; the state benchmark (99999) was already complete.
+  - **Import:** 20,984 created, 0 conflicts / duplicates / parse errors. The only name mismatches are the four district short names ("Drayton 19" etc.), linked by ID. Rerun: 0 created / 20,984 unchanged.
+  - **Valley Middle gap found and filled:** the Mac had only its 2024-25 Assessment Performance rows (1,080, from before expansion), against 7,532 in the CSVs. Importing it added 6,452 with 1,080 unchanged; the rerun gave 0 created / 7,532 unchanged. This also explains the Windows "26,822" (19,290 + Valley's 7,532).
+  - **Independent check** (Python re-parse of the CSVs, the verifier with the ID parameterized): all 17 records + 99999 match the database exactly (0 missing, 0 extra, 0 value-state/bound differences). Suppressed cells are stored as `suppressed`; unpublished groups and years are absent (never zero-filled).
+- **Existing rows preserved:** after seeding and importing, every pre-existing row is byte-identical except the 17 `nd_insights_source_files` rows. Compared with the backup, those differ only in `import_count` (92 → 160), `last_imported_at` and `last_report` (the importer's bookkeeping); id, file, version, SHA-256, first import and importer are unchanged.
+- **Final counts (`emisint_dev`):**
+  - **Records:** 17 ND school records (8 participants + 9 buildings): 44 goals, 143 metrics, 286 ratings, 156 annual targets, 0 actual results. Users 7 and memberships 2, both unchanged.
+  - **State results:** 63,967 (exact 27,358, range 36,478, suppressed 131), of which 34,015 are the state benchmark.
+  - **Other:** 17 source files; 128 import runs; database 76 MB.
+- **Pages (dev app on 127.0.0.1:4100 against `emisint_dev`, server-rendered):**
+  - **`sysadmin@example.com`:** all 17 dashboards and import pages 200, 17/17 import buttons. On every page, the 8 tabs are in order with the right participant current; district and building participant navigation is correct; each dashboard shows its results (default 2024-2025).
+  - **`admin@example.com`:** 17 pages, 8 tabs, 0 buttons, import URLs redirect.
+  - **`viewer@example.com`:** Fort Yates only, 0 buttons.
+- **Real browser** (headless Google Chrome over the DevTools protocol, Node's built-in WebSocket; signed in through the real form; file chosen in the real `<input type=file>`): the statewide 2024-25 Assessment Performance CSV (583 institutions) was uploaded on the Drayton district page and the Drayton High page.
+  - **Each preview offered only its locked record** (34019, then 3401919283), pre-selected and disabled, with the duplicate notice.
+  - **Import results:** "No changes": 0 new · 296 already stored (district) and 0 new · 48 (High), plus 5,388 benchmark rows already stored. State results stayed at 63,967.
+- **Remaining gaps:**
+  - **Recent imports list:** the per-school "Recent imports" table loads the 25 most recent runs across all schools and then filters, so a school can show "No imports yet" after newer runs for other schools (seen on Drayton High). This predates this work; the fix is to filter by InstitutionID in `ImportRun :recent` before the limit. **Fixed November 12; see below.**
+  - **No actual results:** none exist in the dev data; the workbook carries none.
+  - **Disk:** free space fell to about 300 MB during this work, then recovered to 6.1 GB after macOS reclaimed purgeable space. The repo is still on the iCloud Desktop.
+  - **Throwaway database:** `emisint_verify` still exists (12 MB).
+
+### Recent imports filtered by InstitutionID before the limit (November 12, 2026; uncommitted)
+
+- **Bug:** on a record's import page, "Recent imports" loaded the 25 newest runs for *all* institutions and filtered them in the LiveView. Newer runs for other records pushed a school's own history out. In `emisint_dev`, Drayton High has 35 runs, but only 1 was among the global newest 25.
+- **Fix:**
+  - **Filter before the limit:** `ImportRun :recent` takes an optional `institution_id` argument and filters `^arg(:institution_id) in institution_ids` in the query, before `sort: ran_at desc, limit: 25`. Without the argument it still returns the 25 newest runs overall, which the unlocked `/admin/nd-insights` page uses.
+  - **New code interface:** `Emisint.NdInsights.list_recent_import_runs_for/2` (ID required). It is separate from `list_recent_import_runs/1` because an optional positional argument would swallow the `actor:` keyword list.
+  - **LiveView:** `NdInsightsImportLive.load_runs/1` uses the new interface on a locked page; the filter in the LiveView is gone.
+  - **Authorization unchanged:** system admins bypass; every other read is forbidden; the import page still redirects non-admins.
+  - **No schema change:** no migration or Ash codegen needed.
+- **Tests:**
+  - `importer_test.exs` "recent runs for an InstitutionID are filtered before the limit of 25": 2 Drayton High runs, then 35 newer runs for other IDs.
+    - Drayton High gets exactly its 2 runs, newest first.
+    - The district gets 25 runs, all its own.
+    - An unknown ID gets none.
+    - Org admins and school leaders get nothing.
+  - `import_all_participants_test.exs` "Drayton High keeps its history…": 1 Drayton High run, then 31 newer runs for other records. The Drayton High page shows its run and none of the others; the district page shows its own runs and neither the High nor Elementary run.
+  - **Old code check:** this LiveView test fails against the old filter-after-limit code and passes with the fix.
+  - **Suites:** `test/emisint/nd_insights`, `test/emisint/improvement`, `test/emisint_web/live/improvement` and `test/emisint_web/live/admin` all pass, 417/417.
+- **`emisint_dev` check** (local server on port 4100, stopped afterwards; no data written):
+  - **Signed in as `sysadmin@example.com`:**
+    - Drayton High's import page lists 25 runs (no "No imports yet"). They exactly match, in order, the 25 newest runs whose `institution_ids` include 3401919283.
+    - The Drayton district (34019) and Drayton Elementary (3401919281) pages likewise match their own newest 25.
+  - **Other users:** `admin@example.com` (EMO admin) and `viewer@example.com` are redirected from the page and see no runs; signed-out users go to sign-in.
+
+### Goal-comparison decisions, Solen High School subtab (November 12, 2026; uncommitted)
+
+Implements the user's goal-comparison decisions of November 12, 2026. They supersede the "candidate" and "not compared" rows of "Goal-comparison colors beyond Fort Yates" (November 8) and the Cannon Ball comparison gaps (November 9). The comparison rules, browser components and PDF are the existing shared ones. Reference comparisons still never record a review result, set a rating or feed the payment estimate. No workbook target was changed.
+
+- **Confirmed by the user** (labeled "Confirmed by the user (November 12, 2026)" in each cell explanation and section note, never as an assumption):
+  - **Oberon:**
+    - **Achievement:** the workbook targets count the Combined assessment (G1-M1/G2-M1 Proficient or Advanced, G1-M2/G2-M2 Novice), so the Standard and Alternate views get no workbook verdict ("compared only in the Combined assessment view (confirmed)"). The baseline-mismatch caveat stays in the explanation.
+    - **Engagement:** Emotional engagement (G4-M1..M3) counts the schoolwide, all-student Emotional survey results. Its range targets use the existing dashboard range convention.
+  - **Valley Middle:** G3-M1 "Disengaged" → Overall Disengaged; G5-M2 "Engaged or Committed" → Overall Committed.
+  - **Drayton (district rows, 34019):** G4-M1 "Disengaged" → Overall Disengaged; G4-M2 "Engaged" → Overall Committed.
+  - **Dunseith (district rows, 40001):** G6-M2 "Disengaged" → Overall Disengaged. Its baseline (20%) doesn't equal the published 18%; recorded in the confirmation text as written.
+  - **Cannon Ball / Solen:** "demonstrate proficiency" → Proficient or Advanced (derived), and the "Solen Goals" achievement goals count the Combined assessment. The assessment was confirmed in the same session, in answer to a direct question.
+- **Provisional, for dashboard reference** (labeled "· provisional" on every goal line, with the assumption in each explanation and section note):
+  - **Cannon Ball / Solen math growth:** "expected annual growth" (G2-M1..M3) → Meets or Exceeds growth expectations (derived from the published Meets and Exceeds ranges).
+  - **Warwick** (user's answer of November 12, 2026):
+    - **Scope and assessment:** the district's own rows (03029), Combined assessment, and Proficient or Advanced for "proficiency rate", recorded as provisional dashboard reference assumptions (`assumption_kind: "provisional assumption"`).
+    - **Relative targets:** read as percentage-point changes from the workbook baseline.
+      - **18-month targets:** ELA Novice 59%, "Dec 2-3%" → 56%–57%. ELA P+A 5%, "Inc 2-3%" → 7%–8%. Math Novice 75% → 72%–73%. Math P+A 4% → 6%–7%. Emotional Disengaged 25.74%, "Dec 2-3%" → 22.74%–23.74%.
+      - **Display:** the band is shown with the workbook text, e.g. "Dec 2-3% (56%–57%)", and colored by the existing range convention.
+    - **Compared:** G2-M6, G3-M1, G3-M2, G4-M1, G4-M2.
+- **Grade-group references** (Cannon Ball): Cannon Ball Elementary publishes grades 3–8 (2021-22..2024-25; some grades unpublished in some years). There is no separate Solen Jr. High InstitutionID in the files, so the grade 3–5 and 6–8 goals are compared on its dashboard.
+  - **What is compared:** each published grade against its band's target, as a reference only.
+  - **Labels:** "Above grades 3–5 target" and "Grades 3–5 target: 39% · 18-month · G1-M4 · Grade-group reference". The explanation says the grade isn't the band's result, and the section note says grades are never averaged into one.
+  - **All Grades row:** compared only with the plan's annual targets, never presented as a band result.
+- **Solen High School as Cannon Ball's building subtab** (not a ninth participant; 8 tabs and 8 portfolio rows are unchanged):
+  - **InstitutionID 4300380363, verified against the CSVs:** "Solen High School" publishes Grade 10 and All Grades in the 2021-22..2023-24 Performance files and in the Participation and Engagement files. It has no 2024-25 Performance rows and no Growth Rate rows.
+  - **Record:** `Seeds.SolenHigh`, slug `solen-high-school`, a building plan with no annual targets (the PDF, pp.4-6, sets none) and no workbook goals of its own.
+  - **Wiring:**
+    - **Seeds and config:** `Seeds.available_schools/0` and `pilot_institution_ids` (now 18 records).
+    - **Cannon Ball side:** `CannonBall.buildings/0` and `record_kind/0` (`:school`). Cannon Ball is labeled "School participant with a separate building" rather than "District", and its import page says "School".
+    - **Navigation:** the subtabs read "Cannon Ball Elementary School | Solen High School"; on Solen High's page the Cannon Ball tab stays current.
+  - **Grade-10 goals:** they stay on Cannon Ball's plan, so ratings and payment aren't duplicated. Solen High's dashboard and PDF compare them with its own Grade 10 rows:
+    - **Mappings:** `ResultGoals` `workbook_from`, `Dashboard.comparison_metrics/3`, read as the user.
+    - **Goals:** G1-M3 Proficient or Advanced, G1-M6 Reading Novice, G2-M6 Math Novice. Each is labeled "Grade 10", e.g. "G1-M3 Grade 10 Reading Proficient or Advanced".
+    - **All Grades row:** the same students, not compared.
+    - **G2-M3:** no published counterpart (no growth rows).
+    - **Without access to Cannon Ball:** a user who can't read Cannon Ball sees why no goal is compared ("recorded on Cannon Ball Elementary School, which you don't have access to").
+  - **Cannon Ball's own data:** unchanged and separate. Each record imports only its own InstitutionID, and Cannon Ball's rows are byte-identical after Solen High's import (tested).
+- **Engine changes** (`ResultGoals`):
+  - **New config keys:** `confirmed`, `confirmations`, `provisional`, `assumption_kind`, `relative_targets`, `workbook_from`.
+  - **Workbook entries:** may name grades (one grade = that grade's own result; several = a grade-group reference).
+  - **Meets or Exceeds:** derived growth can carry a goal, shown in the dashboard and PDF growth tables.
+  - **Shared notes:** `assessment_view_note/3` ("demo assumption", "provisional assumption" or "confirmed") and `participant_goals_unavailable/2`, used by both the browser and the PDF.
+  - **Percent display:** the explanations show two decimals (e.g. 22.74%).
+  - **Fort Yates:** unchanged.
+- **Verification:**
+  - **Fort Yates regression:** the committed (HEAD) `ResultGoals` was compiled under another name and compared with the new one on every Fort Yates filter combination in `emisint_dev`. All 336 (years × assessment types × groups × checkpoints) are identical, including the section notes. Mandaree and Drayton Elementary are also identical.
+  - **Tests:**
+    - **New:** `test/emisint/improvement/goal_comparison_decisions_test.exs` (14) and `test/emisint_web/live/improvement/solen_high_test.exs` (8).
+    - **Updated to the decisions** (these encoded the superseded "candidate/not compared" behavior): Oberon unit and live tests, text-target, expansion schools and gaps (Warwick), import-all-participants (18 records; the Cannon Ball and Solen High scope notes), Cannon Ball definitions, seeds IDs, and the portfolio (Solen High under the Cannon Ball card, never a row).
+    - **Results:** all 449 ND First, ND Insights, import and report tests pass under seeds 0 and 4242.
+  - **`emisint_dev`** (no reset, no codegen):
+    - **Backup first:** `~/emisint_backups/emisint_dev-before-solen-high-20261112-192314.dump` (3.5 MB, mode 600, SHA-256 81ad027d…797c6b).
+    - **Seed dry run** (transaction, rolled back): all 17 existing records unchanged, 0 drift, 0 conflicts.
+    - **Seed applied** for `SolenHigh` only: 13 created (school, plan, 11 periods); the rerun created 0.
+    - **ND Insights import:** `mix nd_insights.import --institution-id 4300380363` on the 17 reference files created 312 measures, with 0 conflicts, parse errors or name mismatches. Two reruns created 0.
+    - **Independent check:** the CSVs and the database match exactly for 4300380363: 312/312, 0 missing, 0 extra, 0 value differences. All are published ranges, none suppressed.
+    - **Preserved:** every pre-existing row in 15 tables is byte-identical, except the importer's bookkeeping on the 17 source-file rows (import count 162 → 213; identifying columns identical to the backup).
+    - **Totals:** 18 school records, 18 plans, 44 goals, 143 metrics, 286 ratings, 156 annual targets, 198 periods, 0 actual results, 7 users, 2 memberships. State results: 64,279 (131 suppressed). Import runs: 179.
+  - **Pages** (local server on port 4100, stopped afterwards):
+    - **Marks per page:**
+
+      | Page | Marks |
+      | :-- | :-- |
+      | Solen High 2023-24 | G1-M3 overlaps, G1-M6 and G2-M6 above target |
+      | Cannon Ball 2023-24 | 19 grade-group marks (G1-M1/M2/M4/M5, G2-M1/M2/M4/M5) |
+      | Oberon 2023-24 | G1-M2 above, G2-M2 meets, G4-M1 overlaps, G4-M2/M3 misses |
+      | Valley 2024-25 | G5-M2 misses; G3-M1 gray (24% isn't "< 22%", and "within 7% State Avg" isn't defined) |
+      | Drayton | G4-M1 and G4-M2 misses |
+      | Dunseith | G6-M2 misses |
+      | Warwick | 5 provisional marks with "Dec 2-3% (56%–57%)"-style targets |
+      | Fort Yates | unchanged |
+
+    - **Access:** the system admin gets the import button and page. The EMO admin sees the results with no button and is redirected from the import page; the Fort Yates viewer can't open Solen High.
+    - **PDFs:** Solen High (3 pages), Cannon Ball (9), Warwick (8), Oberon (6), Drayton (7) and Fort Yates (7) were downloaded and their text extracted. They carry the same labels and goal lines as the dashboards (Solen High building note, "Grade-group reference", "Dec 2-3% (56%–57%)", "(provisional)", "Confirmed by the user (November 12, 2026)"). Fort Yates has no new wording.
+    - **Real browser:** headless Chrome showed the current tab and subtab on Solen High and Cannon Ball, and the opened cell explanations; the screenshots were inspected.
+- **Remaining gaps:**
+  - **Warwick:**
+    - **Still provisional:** the "Warwick School" scope (district rows used provisionally), the Combined assessment and Proficient or Advanced.
+    - **Pending Ram:** G2-M7's direction ("Dec" for behaviorally committed students), uncompared.
+    - **Uncompared:** G5-M3/G5-M4 (special-education Novice: the baselines are ranges, 80-89% and 90-100%, and student groups aren't matched).
+  - **Cannon Ball / Solen:**
+    - **Math growth:** the Meets or Exceeds reading is provisional.
+    - **G2-M3:** grade 10 growth has no published data.
+    - **Solen High data:** no 2024-25 Performance rows, and no annual targets in the plan.
+    - **Grade bands:** their combined results aren't published, so grades are references only.
+  - **Targets without a verdict:**
+    - **Valley G3-M1:** the 18-month target is "n/a", and "within 7% State Avg" is undefined.
+    - **Empty 18-month targets:** Valley G5-M2, Drayton G4-M1/G4-M2.
+    - **Oberon 2024-25:** no achievement levels are published, so there is no workbook achievement comparison for that year.
+  - **Unchanged:** Mandaree (no Insights counterpart); the Oberon/Dunseith baseline mismatches are recorded, not reconciled.
+  - **Building-only members:** a Solen High School-only member can't read Cannon Ball's metrics, so sees the explanation instead of colors.
+  - **Environment (from earlier):** no actual results in the dev data; free disk is down to about 2.4 GB; `emisint_verify` still exists; the repo is still on the iCloud Desktop.
+
+### Current-ratings payment preview on `/school-goals` (November 12, 2026; uncommitted)
+
+The portfolio's payment area now has two clearly separated views, switched by tabs (`?pay=preview|formal`):
+
+- **"Current ratings preview"** (default) — "Estimated payment based on current ratings." with "Preview only. Final payment depends on formal review."
+  - **Period:** one seasonal period for every participant (`pay_period`), defaulting to the latest seasonal period in which any shown participant has a recorded rating (Sum '26 with the workbook ratings).
+    - **No fallback:** a participant without ratings in that period shows "No ratings recorded for Fal '26" and is never given another period's ratings.
+    - **Missing period:** a plan without the period says so.
+    - **Selector:** periods without any ratings are listed as "(no ratings yet)".
+  - **Checkpoint** (`pay_ref`): 18-month (Systems 70% / Outcomes 30%) or 36-month (30% / 70%), from `Payment.checkpoints/1`.
+  - **Columns:** Systems and Outcomes averages, rating coverage ("15 of 16 scored", N/A or unavailable counted separately), weighted score and estimated payment.
+    - **Averages:** `Portfolio.average/3` (`AVERAGEIF`): an explicit 0 counts; missing, not applicable and unavailable are left out, never zero. Partial averages show "6/7".
+    - **Weighted score:** shown when both averages exist, marked "partial" when ratings are missing.
+    - **Payment:** the existing `Payment.summary/3` formula and completeness rule on that period's ratings for the selected checkpoint, using each plan's own allocation.
+      - **Withheld:** "Withheld: 3 of 18 ratings not recorded" / "… marked not applicable or unavailable" until every metric has a scored rating.
+      - **No terms:** "Payment terms not configured" where the plan has none (every participant but Fort Yates), with the scores still shown.
+      - **Provisional terms:** Fort Yates's provisional terms are labeled "Provisional payment terms"; no allocation is invented or copied.
+  - **Rows:** one per participant (the 8 `Portfolio.summary/1` rows from each main record). Buildings, including Solen High School, add no row or rating.
+  - **Missing values:** each has a short reason instead of a dash ("No scored ratings (0 of 8)", "Needs both averages").
+  - **Read-only:** `Emisint.Improvement.PaymentPreview` is pure, over data `Portfolio.summary/1` already reads as the user. It creates no review rating, payment record or saved estimate, and uses no ND Insights colors.
+- **"Formal review"** — the existing "Performance Based Payments (18-month review)" table, unchanged (formal 18-month review ratings only).
+- **Access:** unchanged. Every read is as the user: a single-school viewer sees only that participant's row, and another organization sees none.
+- **Verification:**
+  - **Tests:**
+    - **New:** `test/emisint/improvement/payment_preview_test.exs` (13) covers period default and no fallback, a plan without the period, both weightings (and equality with the formal formula), explicit 0 versus missing, N/A and unavailable, partial coverage, missing and confirmed terms, and rows without figures.
+    - **New:** `test/emisint_web/live/improvement/payment_preview_live_test.exs` (5) covers the default view and values, the 36-month selector, Fal '26 with no fallback, read-only (rating and estimate counts unchanged) with the formal view unchanged, and access across viewer and organization.
+    - **Updated:** `portfolio_live_test.exs` opens the formal view explicitly (`?pay=formal`).
+    - **Results:** all 467 ND First, ND Insights, import and report tests pass.
+  - **Real browser** (headless Chrome on `emisint_dev`, as the EMO admin; local server stopped afterwards). The defaults were "Current ratings preview" and Sum '26 with 18-month weights:
+    - **Fort Yates:** 1.38 / 1.60, 18 of 18 scored, weighted 1.44, **$16,829.17** (= $35,000 × (1.375 × 0.7 + 1.6 × 0.3) ÷ 3), "Provisional payment terms".
+    - **Dunseith:** 2.17 (6/7) / 1.89, 15 of 16, weighted 2.08 partial.
+    - **Other six:** scores shown with "Payment terms not configured".
+    - **36-month selector:** set to 36-month in the real select, the URL patched; Fort Yates weighted 1.53, **$17,879.17**.
+    - **Fal '26:** every row says "No ratings recorded for Fal '26"; Fort Yates shows "Withheld: 18 of 18 ratings not recorded".
+    - **Formal review:** the existing table, with Fort Yates "Awaiting review: 18 review ratings not recorded".
+    - **Screenshots inspected:** the payment header was shortened after the first one so the table fits at 1280 px.
+    - **Database unchanged:** 286 implementation ratings, 0 payment estimates, 0 actual results before and after.
+- **Remaining:**
+  - **Payment terms:** only Fort Yates has payment terms (provisional), so the other seven show scores without amounts until terms are configured.
+  - **Ratings:** none exist for Fal '26 or later.
+
+### `/school-goals` portfolio: collapsible detail sections (November 12, 2026; uncommitted)
+
+Scoped to the main portfolio dashboard (`SchoolGoalsIndexLive`, `PortfolioComponents`). No calculation, permission or data changed.
+
+- **Always visible:**
+  - **Heading and tabs:** the page heading and the school tabs.
+  - **Scope line:** shortened to "One row per participant; buildings add no rows. Showing 8 of 8 participants you can view."
+  - **Summary strip:** participants shown, the latest seasonal period with ratings, and the Systems and Student Outcomes averages, which are the AVERAGE row's own values with their participant count.
+  - **Navigation:** the "Participants and schools" cards.
+- **Collapsible, closed by default:**
+  - **"Overall Goal Progress — Average Rubric Score":** the season and check table, later periods, rubric key and how-calculated details.
+  - **"Performance-based payment":** the Current ratings preview / Formal review tabs, with the preview's period and checkpoint controls inside.
+  - **Headers:** each header is one full-width `<button>` (Enter and Space work natively) with a chevron, `aria-expanded` and `aria-controls`, and a summary from existing data. Examples: "Seasonal ratings through Sum '26, …"; "Current ratings preview, Sum '26, 18-month checkpoint: 1 estimated · 7 payment terms not configured. Preview only."; "Formal review: …".
+  - **Hidden bodies:** collapsed bodies stay in the page as `hidden` regions, so `aria-controls` always resolves.
+- **State:**
+  - **URL:** the open sections live in the URL (`open=progress,payment`, replace-patched).
+  - **Filters:** every payment filter or view change merges into the same query, so expanded sections stay open. Reloads and shared links keep them.
+  - **Expand all / Collapse all:** each is disabled when there's nothing to change.
+- **Less repeated text:**
+  - **Source sentences:** the workbook-sheet sentences moved into the existing "How these are calculated" disclosures, as did "No portfolio payment total is shown".
+  - **Preview disclosure:** renamed "How these are calculated" to match.
+  - **Kept beside the values:** "Preview only. Final payment depends on formal review.", "Provisional payment terms", "Payment terms not configured", "Withheld: …", coverage, and the rubric key's missing-data note.
+- **Verification:**
+  - **Tests:** new `portfolio_sections_live_test.exs` (5) covers the default closed state with visible summary and navigation, toggle and URL state, controls inside the payment section with state kept across filter and view changes, Expand and Collapse all, and essential labels. All 472 ND First, ND Insights, import and report tests pass.
+  - **Real browser** (headless Chrome on `emisint_dev`, 1280 px and 390 px):
+    - **Defaults:** both sections closed (`aria-expanded="false"`, body hidden).
+    - **Keyboard:** Enter on the payment header and Space on the progress header opened them, and focus stayed on the header.
+    - **Filters:** changing the checkpoint kept both open (`?open=progress,payment&…&pay_ref=36m`).
+    - **Expand and Collapse all:** both work.
+    - **Layout:** no horizontal page scroll at either width; the tables scroll within their own containers. Screenshots inspected.
+
+### School and district pages: collapsible detail sections (November 12, 2026; uncommitted)
+
+Applies the portfolio's collapsible layout to `/school-goals/:slug`. The shared component is `EmisintWeb.Improvement.SectionComponents` (`collapsible/1`, `section_controls/1`, `open_sections/2`, `open_param/2`, `toggle/2`), now also used by the portfolio. No goal mapping, color comparison, payment calculation, permission, missing-data text or PDF content changed.
+
+- **Always visible:**
+  - **Navigation and actions:** the school tabs and participant subtabs, school name and IDs, reporting-period selector and "Export PDF".
+  - **Key summary:** the seasonal or review averages and the estimated-payment card.
+  - **Scope notes:** the participant and building scope note.
+  - **Jump-to bar.**
+  - **Unchanged sections:** annual targets, other plan targets and the estimated-payment section stay as they were.
+  - **Import action:** "Import ND Insights data" is a header action of the state results section, outside its collapsible body, so it is visible while collapsed and still at `#state-results #nd-import-link`.
+- **Collapsible, closed by default** (keys in `open`):
+  - **"Workbook goals" (`goals`):** status legend and goal tables. Not shown on building pages.
+    - **Summary:** e.g. "4 goals · 18 metrics · Sum '26 ratings: Systems 1.38 / 3 (8 of 8 rated), Student Outcomes 1.6 / 3 (10 of 10 rated)."
+    - **Review periods:** the summary counts recorded review ratings instead.
+  - **"Official state results (ND Insights)" (`state`):** description, the year, assessment-type, student-group and "Compare with" filters (inside the section), and the result tables.
+    - **Summary:** e.g. "2024-2025 · Combined · All students · 25 goal comparisons (3 meet, 14 miss, 8 overlap)."
+    - **No data:** "No official state results imported."
+  - **"North Dakota comparison" (`nd`):** now a sibling section instead of a `<details>` nested inside state results, so there is one disclosure level; its methodology `<details>` remains.
+    - **Summary:** e.g. "62 measures compared with the statewide value for 2024-2025, using the state results filters · optional context, not a goal status."
+    - **When absent:** the section is omitted when no results are imported.
+- **Controls and state:**
+  - **Headers:** full-width buttons with a chevron, `aria-expanded` and `aria-controls`. Collapsed bodies stay in the page as `hidden` regions.
+  - **Expand all / Collapse all** cover the sections the page has; a building has state and comparison only.
+  - **URL state:** the open set is in the URL (`open=goals,state,nd`, replace-patched). Period changes, state filter changes and the "latest year" links all keep it.
+  - **Headings:** goal headings inside the section are now `h3`.
+- **PDF:** the export link and `NdFirstSchoolPdf` ignore `open`, so the PDF is always the full report.
+- **Verification:**
+  - **Tests:**
+    - **New:** `school_page_sections_live_test.exs` (6) covers:
+      - closed by default, with name, navigation, period, PDF, import action and summary cards visible and filters inside their section;
+      - the summaries;
+      - open state kept across a period change and a state filter change;
+      - Expand and Collapse all;
+      - a building page;
+      - unchanged goal marks inside collapsed bodies;
+      - a full PDF regardless of state.
+    - **Updated:** two state-results assertions now check the collapsed comparison section (`aria-expanded="false"`, hidden body) instead of the old `<details>`.
+    - **Results:** all 478 ND First, ND Insights, import and report tests pass.
+  - **Real browser:** headless Chrome on `emisint_dev` at 1280 px and 390 px, local server stopped afterwards. Pages: Fort Yates, Oberon, the Drayton district (with building subtabs), Cannon Ball and Solen High School.
+    - **Defaults:** every section was closed. Name, subtabs (where applicable), "Export PDF", "Import ND Insights data", the period selector and summary cards (not on the Solen building), and Expand/Collapse all were visible.
+    - **Keyboard and filters:** on Fort Yates and Cannon Ball, Enter opened goals and Space opened state results, with focus kept on the header. Changing the period to Spr '26 and the year to 2023-24 kept both open (`?…open=goals,state…`), and the summaries updated: Fort Yates "Spr '26 ratings: Systems 1.25 / 3", "2023-2024 · Combined · All students · 21 goal comparisons (3 meet, 14 miss, 4 overlap)".
+    - **Expand and Collapse all:** on Drayton they opened and closed all three sections.
+    - **Layout:** no horizontal page scroll at either width. Screenshots inspected.
+    - **Summaries seen:**
+      - Oberon: "3 goal comparisons (3 miss)", "8 measures compared".
+      - Drayton: "2 goal comparisons (2 gray)", "100 measures compared".
+      - Cannon Ball: "19 goal comparisons (4 meet, 10 miss, 5 overlap)".
+      - Solen High (2024-25): "no goal comparisons", since grade-10 results are published only through 2023-24.
+  - **Note:** during the first browser attempt the disk filled (another app's cache). `emisint_dev` was checked afterwards: intact, not in recovery, with unchanged counts.
+
+### Payment terms reconciled with the workbook (November 13, 2026; uncommitted)
+
+Request: apply the workbook's payment formula to all eight participants and stop silently using the Fort Yates $35,000 / $35,000 split.
+
+- **Source cells** ("ND First School MOU Goal Overview.xlsx", sheet "Performance-Based Payment"):
+  - **Headings:** A1 "Performance Based Payments (18-month review)"; I2 "18-month payout (up to $70,000)"; D2 "(70%)", F2 "(30%)".
+  - **Shared formulas** in row 3 cover C3:I11, so rows 4–11 use them unchanged:
+    - C, E: `AVERAGEIF` of the participant sheet's column I (the 18-month review ratings) for "Systems" / "Student Outcome".
+    - D `=C*70%`, F `=E*30%`, G `=D+F`, H `=G/3`.
+    - I `=IFERROR(IF(H*70000=0,"",H*70000),"")`.
+  - **Rows:** 4 Fort Yates, 5 Solen (→ Cannon Ball, confirmed November 9), 6 Oberon, 7 Warwick, 8 Mandaree, 9 Dunseith, 10 Drayton, 11 Valley MS. Each row's B cell names its goals sheet. All are blank because no 18-month review ratings exist yet.
+- **36-month allocation, sources checked:**
+  - **Workbook:** the payment sheet covers the 18-month review only. "Goals Dashboard" has 36-month check and weighted-score headings (S–V) but no payout or dollar amount. A search of every shared string and formula for 70000, 35000, payout, payment and allocation found only I2 and I3:I11.
+  - **Plan PDF:** "North Dakota - ND First Schools.pdf", all pages, has no payment amount. p.2 mentions "performance based payments calculations" only.
+  - **Recorded Ram decisions:** Ram's only recorded payment decision is the November 1, 2026 best-estimate authorization, which named no cap or split. The $70,000 total and $35,000 / $35,000 split were our own selections (see "Provisional rule").
+  - **Result:** no source sets a 36-month allocation. It is left unset, and the 18-month $70,000 is not reused for it.
+- **Corrected configuration** (`Seeds.Participant.workbook_payment_terms/0`, delegated as `payment_terms/0` by all eight participant modules, applied through the existing `GoalPlan.set_payment_terms`):
+  - **Values:** `allocation_18m` $70,000, `allocation_36m` nil, `payment_cap` $70,000 (the "up to $70,000" ceiling), `payment_terms_status` provisional (not confirmed contract terms), and a note citing the cells.
+  - **Validation** (`Validations.PaymentTerms`): allocations are now set per checkpoint; each must be ≥ 0 and ≤ the cap. The old rule that both must be set and sum to the cap encoded the withdrawn split.
+  - **Buildings** (the nine district buildings and Solen High School): no terms and no payment section, and never a portfolio or preview row.
+- **Calculation** (`Payment`):
+  - **18-month estimate:** $70,000 × weighted ÷ 3 = the workbook's column I, capped and rounded to cents.
+  - **36-month checkpoint, no allocation:** new status `:allocation_unconfirmed`. With complete ratings it shows its averages and weighted score (30% / 70%), and "Weighted score X of 3; payment allocation needs confirmation" instead of an amount. Incomplete, it reads "Awaiting review: …; payment allocation needs confirmation".
+  - **Allocation cell:** "Needs confirmation".
+  - **Combined line:** never treats the 36-month amount as $0: "Subtotal $X (18-month review only); the 36-month review payment allocation needs confirmation", or "Awaiting review; the 36-month review payment allocation needs confirmation".
+  - **Label:** "Estimated payment — provisional terms". The terms text cites the workbook sheet and states that the 36-month allocation needs confirmation.
+- **Kept deliberately:**
+  - **Completeness rule:** an amount needs every metric's scored rating, so a missing or N/A rating withholds it. The workbook's `AVERAGEIF` would skip such ratings and blank a $0; neither is done.
+  - **Preview vs formal:** the current-ratings preview and the formal-review views stay separate.
+  - **Recorded estimates:** these keep their own terms (there are none in `emisint_dev`).
+- **Consistency:** the same functions feed the formal-review table on `/school-goals`, the current-ratings preview (provisional label only where the checkpoint has an amount), each school page's card and "Estimated payment" section, and the PDF.
+- **Verification:**
+  - **Tests:**
+    - **New:** `test/emisint/improvement/workbook_payment_terms_test.exs` (6) covers:
+      - 18-month (weighted ÷ 3) × $70,000, including $53,666.67, the workbook's example-style row and a full $70,000;
+      - the 36-month weighted score with no amount and a labeled subtotal;
+      - missing and N/A ratings withholding the amount;
+      - the eight modules sharing the terms, with buildings having none;
+      - seeded plans for all eight with buildings blank;
+      - the portfolio and preview counting eight rows and never Solen High.
+    - **Updated** to the corrected terms: 28 existing assertions (amounts doubled from the $35,000 basis, e.g. $28,000 → $56,000 and $33,950 → $67,900; "Not configured" → the workbook terms; the 36-month wording).
+    - **Results:** all 484 ND First, ND Insights, import and report tests pass.
+  - **`emisint_dev`** (no reset):
+    - **Backup:** `~/emisint_backups/emisint_dev-before-workbook-payment-terms-20261113-075349.dump` (mode 600, SHA-256 6d206e21…f482c9).
+    - **Dry run:** a rolled-back seed run of all 18 modules: exactly the 8 participant plans "payment terms → provisional", nothing created, 0 drift, buildings untouched.
+    - **Applied** to the 8 participants: each now has 70000 / 70000 / NULL / provisional (terms version bumped). The rerun changed nothing.
+    - **Unchanged:** 10 building plans still have no terms; 286 ratings, 0 payment estimates and 64,279 state results.
+  - **Real browser** (EMO admin; local server stopped afterwards):
+    - **Preview, Sum '26, 18-month:** Fort Yates $33,658.33, Cannon Ball $36,328.21, Oberon $40,638.89, Warwick $45,500.00, Mandaree $53,666.67, Drayton $42,222.22, Valley $47,308.33, each "Provisional payment terms". Dunseith is withheld (1 N/A rating).
+    - **Preview, 36-month:** weighted scores shown, with "Payment allocation needs confirmation".
+    - **Formal view:** all eight "Awaiting review: N review ratings not recorded".
+    - **School pages:** all eight have an 18-month allocation of $70,000.00, a 36-month allocation of "Needs confirmation", and the combined line "Awaiting review; the 36-month review payment allocation needs confirmation". Solen High School and Drayton High School have no payment section.
+    - **PDFs:** Fort Yates and Cannon Ball carry the same wording and no $35,000; Solen High's has no payment.
+- **Unresolved:**
+  - **36-month allocation:** its dollar amount, for all eight participants, needs confirmation (Ram or the contract).
+  - **Contract confirmation:** whether the workbook's 18-month $70,000 is the contract term (recorded as provisional).
+  - **Combined maximum:** whether the per-participant maximum is $70,000 for the 18-month review alone or across both checkpoints.
+
+### N/A ratings in payment calculations (November 13, 2026; uncommitted)
+
+Request: handle explicit N/A ratings consistently for all participants, in the current-ratings preview, formal-review calculations, school pages and PDFs.
+
+- **Source check:**
+  - **Dunseith:** "Dunseith Goals"!E27 and F27 (G5-M3, Systems, "% of relevant staff trained around Infinite Campus and SOP for compliance issues") are literally "N/A". The cell's data validation (E25:G27 and others) is the list "3,2,1,0,N/A", so N/A is an explicit choice, not a blank.
+  - **Valley:** the only other N/A cells in any participant sheet's rating columns (E–G, I) are Valley Goals!E6, E13 and E41 (Spr '26).
+  - **Stored data:** `emisint_dev` holds exactly these 5 N/A ratings (Dunseith ×2, Valley ×3) and 281 numeric ratings. Nothing was changed or converted.
+  - **Workbook formula:** its `AVERAGEIF` skips "N/A" text, matching the new rule.
+- **Rule** (`Payment.checkpoint`, the one calculation used by formal reviews, the preview, school pages and PDFs):
+  - **N/A** (`:not_applicable`): excluded from the category average and from the required count (`excluded_na`).
+  - **Missing:** an applicable metric with no rating still withholds the amount ("Awaiting review: … not recorded" / "Withheld: N of M applicable ratings not recorded"). A missing rating is never treated as N/A.
+  - **Unavailable** (`:unavailable`): not N/A, so it is an applicable metric without a number and withholds the amount ("marked unavailable").
+  - **0:** a numeric 0 counts; an all-zero checkpoint gives $0.00.
+  - **No numeric rating in a category** (e.g. every Systems metric N/A): new status `:category_unavailable`, "Estimate unavailable: no numeric Systems ratings (a category is never scored 0 or reweighted)". No weighted score and no amount.
+  - **Coverage:** per checkpoint (`Payment.coverage_text/1`, `coverage_phrase/3`), e.g. "15 of 15 applicable metrics rated · 1 N/A excluded".
+- **Unchanged:** the weights (70/30 and 30/70), the $70,000 18-month allocation and the unconfirmed 36-month allocation.
+- **Display:**
+  - **Preview:** a coverage column ("15 of 15 applicable metrics rated", "1 N/A excluded", "N marked unavailable"), with withheld and unavailable reasons.
+  - **Portfolio average chips:** "rated/applicable" when partial and "N N/A" when any are N/A. Valley's Spr '26 now reads "3 N/A" instead of "13/16".
+  - **School pages:** seasonal cards and the goals summary show the applicable coverage. Each payment checkpoint shows its coverage, and the "How the estimate is calculated" text states the rule.
+  - **PDF:** the averages, checkpoint estimates "(… applicable metrics rated)" and formula text say the same.
+- **Dunseith:** in the Sum '26 preview, Systems is 13 ÷ 6 = 2.17 (G5-M3 N/A excluded) and Outcomes 17 ÷ 9 = 1.89, giving weighted 2.0833 and **$48,611.11** (18-month) with "15 of 15 applicable metrics rated · 1 N/A excluded". Before this change it was withheld. Its formal reviews still await their review ratings: the seasonal N/A isn't carried into the review ("0 of 7 applicable" Systems at the 18-month review).
+- **Verification:**
+  - **Tests:**
+    - **New:** `test/emisint/improvement/na_rating_rule_test.exs` (5), formal and preview each:
+      - N/A excluded from the average and count ($59,500.00, "3 of 3 · 1 N/A excluded");
+      - missing withholds and isn't N/A;
+      - 0 counts ($10,500.00; all zeros $0.00);
+      - an entirely N/A category is unavailable at both checkpoints;
+      - Dunseith's seeded workbook N/A gives $48,611.11 with stored ratings unchanged.
+    - **Updated:** the earlier "N/A is not silently excluded" assertions now check exclusion versus "unavailable withholds", plus coverage wording, Valley "3 N/A", and Dunseith's amount.
+    - **Results:** all 299 domain tests and all web tests pass. 3 web tests timed out only in the full parallel run (async imports over 10 s, one DB ownership error) and pass when their files run alone (33/33).
+  - **Real browser and PDF** (`emisint_dev`, EMO admin):
+    - **Preview:** "8 estimated"; Dunseith "$48,611.11", "15 of 15 applicable metrics rated · 1 N/A excluded".
+    - **Dunseith page:** the Systems card reads "2.17 / 3 · 6 of 6 applicable metrics rated · 1 N/A excluded".
+    - **Dunseith PDF** (Sum '26 and 18-month review): the same coverage and rule text.
+    - **Stored ratings:** unchanged (281 rated, 5 N/A, 0 estimates).
+
+### Official state results expanded by default on school pages (November 13, 2026; uncommitted)
+
+- **Default:**
+  - **No section state:** on `/school-goals/:slug` (school, district or building) without an `open` param, "Official state results (ND Insights)" is expanded. Workbook goals and the North Dakota comparison stay collapsed.
+  - **Navigation:** main tabs and participant subtabs link without `open`, so moving between schools, districts and buildings always shows state results.
+- **Explicit state:**
+  - **Kept:** any `open` value in a URL (e.g. `?open=goals`) is kept as is.
+  - **"none":** collapsing the last open section, or "Collapse all", writes `open=none`, so a fully collapsed page stays collapsed through period and filter changes and reloads.
+  - **Portfolio:** unaffected; its sections stay closed by default.
+- **PDF:** unchanged. The export link carries no `open`, and Dunseith's PDF text is identical with and without `open=none`.
+- **Verification:**
+  - **Tests:** `school_page_sections_live_test.exs` was rewritten (7 tests) to cover:
+    - the default (state open, the others closed);
+    - toggles kept across period and filter changes, including collapsing state results;
+    - explicit URL state;
+    - Collapse all persisting through filter changes and a reload, then Expand all;
+    - school-to-school tab navigation, and district → building → district subtab navigation.
+  - **Real browser:**
+    - **Navigation:** Fort Yates `?open=none` (all collapsed), then the Oberon tab, then the Drayton tab, then the Drayton High subtab: state results open on each.
+    - **Collapse on a building:** collapsing state results on Drayton High gives `?open=none`, which stays collapsed after a reload.
+    - **Back to the district:** state results open by default.
+
+### Main dashboard: building links only inside participant pages (November 13, 2026; uncommitted)
+
+A navigation change only (`SchoolGoalsIndexLive`): no data, permission, payment or participant mapping changed.
+
+- **Main `/school-goals` dashboard:**
+  - **Cards:** the "Participants and schools" cards are the eight participants, each linking to its main record (`#school-<slug>`). The building lists under district cards and Cannon Ball's "Solen High School" link were removed, so no building URL appears on the dashboard.
+  - **Building-only members:** a member who can read only a building (not the district) gets that participant's card linking to the first building they can read (the same destination as the participant tab, `#participant-link-<slug>`). The card says "Open the pages you can view" and lists no building names.
+- **Inside a participant:** unchanged. "District overview" plus building subtabs, with sibling navigation between buildings. For Cannon Ball, "Cannon Ball Elementary School | Solen High School". Solen High School stays Cannon Ball's building (no ninth participant, no payment of its own).
+- **Unchanged:** direct building URLs (e.g. `/school-goals/warwick-middle-school`) and access rules.
+- **Verification:**
+  - **Tests:**
+    - **New:** `landing_cards_live_test.exs` (4) covers:
+      - eight cards, each linking to its main page, with none of the 10 building URLs on the dashboard;
+      - Warwick's overview and subtabs, with sibling navigation Middle → High → overview;
+      - Solen High only inside Cannon Ball (payment card on Cannon Ball only);
+      - a Dunseith-High-only member, whose card links to that building, the building's direct URL working, and the district and sibling redirecting.
+    - **Updated:** navigation, portfolio and additional-schools assertions that expected building links on the cards.
+    - **Results:** all web tests pass when each file runs alone. As before, a few unrelated tests intermittently hit DB-ownership or async-import timeouts in the full parallel run (pre-existing).
+  - **Real browser:** headless Chrome on `emisint_dev` (EMO admin), 1280 px and 390 px; local server stopped afterwards.
+    - **Dashboard:** 8 cards (Fort Yates … Cannon Ball) and no building link at either width, with no horizontal page scroll.
+    - **Drayton:** the district card opens "District overview* | Elementary School | High School". Elementary → sibling High → District overview all work.
+    - **Cannon Ball:** "Cannon Ball Elementary School* | Solen High School" (payment card present). Solen High has the payment card absent and the current subtab marked.
+    - **Direct URL:** `/school-goals/warwick-middle-school` opens with its subtabs.
+
+### Participant pages: current-ratings preview on the payment card (November 13, 2026; uncommitted)
+
+Display only. It reuses `PaymentPreview`, which is pure, so no rating, review or payment record is created or changed. The card and PDF previously showed the formal-review combined status ("Awaiting review…").
+
+- **Calculation:** `PaymentPreview.for_participant/4` feeds one participant's plan and the page period's current ratings into the same `build/3` the portfolio uses. The page and the portfolio therefore can't diverge. The N/A exclusion, the missing-rating withhold, valid zeros and "category unavailable" all carry over unchanged.
+- **Card (the eight participant pages):**
+  - **Main figure:** "Estimated payment: $X" for the page's selected seasonal period at the 18-month checkpoint.
+  - **Labels:** the basis line, e.g. "Sum '26 ratings · 18-month checkpoint (Systems 70% / Student Outcomes 30%)"; a "Provisional terms" badge; and "Preview only; final payment depends on formal review."
+  - **No figure:** the reason is shown instead, e.g. "Withheld: 16 of 16 applicable ratings not recorded" or "Payment terms not configured".
+  - **Period changes:** the preview is recalculated wherever the period's ratings load, including after a rating is saved. A seasonal period with no ratings shows that period's withheld reason. A review period says it is a formal review period. No other period is ever used instead.
+- **Details:**
+  - **New collapsible section:** "Estimated payment details" (`payment`, collapsed by default). Its summary carries the preview and the formal status, including "the 36-month review payment allocation needs confirmation".
+  - **Contents:** the worked preview (18- and 36-month rows, with averages, coverage, weights, weighted score and allocation), then "Formal review estimates" (the existing table, combined status, calculation and recorded estimates).
+  - **Opening it:** the card's "Details" link and "Jump to → Estimated Payment" send `open_section`. That adds `payment` to the URL `open` state, leaving other sections as they are. A `phx:scroll-to` listener in `app.js` then scrolls to the section and focuses its header. A scroll margin keeps the header clear of the mobile top bar.
+  - **Expand all / Collapse all:** includes this section.
+- **Buildings:** no card and no payment section (Solen High and the district buildings), as before.
+- **PDF:**
+  - **Summary card:** the preview (headline, basis, "Preview only…" note, provisional-terms label).
+  - **Preview section:** "Current-ratings preview · <period> ratings", with its own 18/36-month table (or the reason).
+  - **Formal review:** the formal table is now headed "Formal review estimates · …", stating it is separate from the preview; the appendix calculation is "Formal review estimates: calculation"; the guidance line explains the difference.
+- **Verification:**
+  - **Tests:**
+    - **New:** `payment_card_preview_live_test.exs` (7) covers:
+      - all 8 cards matching the portfolio preview for Spr/Sum/Fal '26;
+      - Dunseith's N/A ($48,611.11, "15 of 15 applicable metrics rated · 1 N/A excluded");
+      - a period change, with no substitution, and the review-period reason;
+      - Details opening the collapsed section and pushing `scroll-to`, with other sections unchanged;
+      - the PDF data and render;
+      - buildings without a card;
+      - no records written.
+    - **New unit tests:** 5 in `payment_preview_test.exs` for `for_participant/4` (parity with `build/3`, a valid 0, N/A, missing, empty period, review period, no terms).
+    - **Retargeted:** 11 older card assertions now point at the payment details section, where the formal status now lives.
+    - **Results:** the ND First web, improvement and ND Insights tests pass together, 512 with seeds 7 and 31337.
+  - **Real browser:** headless Chrome on `emisint_dev`, 1280 px and 390 px.
+    - **Cards against the portfolio preview:** 8/8 match for Spr '26, Sum '26 and Fal '26. Sum '26: Fort Yates $33,658.33, Oberon $40,638.89, Valley $47,308.33, Drayton $42,222.22, Dunseith $48,611.11, Mandaree $53,666.67, Warwick $45,500.00, Cannon Ball $36,328.21.
+    - **Details:** opens the collapsed section (`open=state,payment`) and scrolls it into view under the mobile bar.
+    - **Period changes:** Fal '26 shows "Withheld: 16 of 16…"; 18-Month Review shows the review-period reason.
+    - **Buildings and layout:** Drayton High and Solen High have no card; no horizontal page scroll.
+  - **PDF (PDFKit text):**
+    - Dunseith Sum '26: the preview card $48,611.11, a separate "Formal review estimates" section.
+    - Fort Yates Fal '26: withheld.
+    - Fort Yates 18-Month Review: the reason instead of a figure.
+    - Solen High: no payment.
+    - `emisint_dev` ratings (286) and payment estimates (0) were unchanged.
+
 ### Phase 3: 18-month review + payment
 
 - [x] **17.** Formal review ratings: `ImplementationRating.:record_review` (review periods only; contributor policy, `RatingShape` validation and `:correct` history shared with seasonal ratings). No separate `ReviewRating` resource; the `:reviewer` membership role is still unused.
@@ -1304,7 +1817,7 @@ Requested for Ram: a summary of all participants before a school is selected, fo
 3. **Column Q "Target Check"** (36-month) has 3/2/1/0/N/A validation with an undefined meaning.
 4. **Review dates and reviewer assignments** are unknown.
 5. **Solen vs Cannon Ball:** resolved November 9, 2026 — the user confirmed that the workbook's "Solen" sheet represents the Cannon Ball participant (see "Cannon Ball participant"). Its record is Cannon Ball Elementary School (InstitutionID 4300312781); Solen district and Solen High School results are never substituted.
-6. **Weight labels, resolved October 23:** the weights differ by checkpoint. The 18-month review is Systems 70% / Outcomes 30% (the payment sheet), and the 36-month review is Systems 30% / Outcomes 70% (the "Goals Dashboard" `T2`/`V2` labels). How the $70,000 maximum applies across the checkpoints is still not confirmed. Ram authorized a best-estimate rule on November 1, 2026; the $70,000 total and equal $35,000 split are our selected provisional assumptions, not terms he specified (see Payment).
+6. **Weight labels, resolved October 23** (allocations reconciled November 13, 2026: 18-month $70,000 from the workbook for every participant; 36-month allocation still unconfirmed, see "Payment terms reconciled with the workbook"): the weights differ by checkpoint. The 18-month review is Systems 70% / Outcomes 30% (the payment sheet), and the 36-month review is Systems 30% / Outcomes 70% (the "Goals Dashboard" `T2`/`V2` labels). How the $70,000 maximum applies across the checkpoints is still not confirmed. Ram authorized a best-estimate rule on November 1, 2026; the $70,000 total and equal $35,000 split are our selected provisional assumptions, not terms he specified (see Payment).
 7. The workbook hides a $0 payout as blank. We show $0.00.
 8. Payout rounding is not specified by the sources. Provisional: half up to cents, after capping.
 9. The average-score color key (`W5:X8`) has a 0.49–0.50 gap. No color bands until confirmed.
@@ -1362,6 +1875,18 @@ Requested for Ram: a summary of all participants before a school is selected, fo
       - Before the fix: failures in 3 of 10 full runs and 1 of about 20 repeat runs.
       - After the fix: 41 consecutive full runs (257 tests each, `--repeat-until-failure 40`) with no failure and no 40P01, plus the original failing seed.
       - The three earlier failure kinds (importer deadlocks, admin count, student group) all trace to the same mechanism. Two were confirmed by their 40P01 logs; the other two were explained by the swallowed import error, which now fails loudly if it recurs.
+
+**Test issue (resolved November 13, 2026; uncommitted):**
+
+33. ~~**Intermittent DB-ownership errors and async-import timeouts in the full run.**~~ **Fixed; follow-on from item 28.**
+    - **Symptoms (full `mix test --seed 1`):** 4 ND First failures, all in tests that import ND Insights files: `ImporterTest`, `NdInsightsImportLiveTest`, `SolenHighTest` (`DBConnection.OwnershipError` after "checked out the connection for longer than 15000ms") and `ImportAllParticipantsTest` ("expected async processes to finish within 10000ms"). Each passed alone.
+    - **Cause:** item 28's `pg_advisory_xact_lock` is transaction-scoped. Under the SQL sandbox a test is one transaction, rolled back only when the test ends, so the lock (and the global `source_files.sha256` / `state_results` unique-index entries) is held for the rest of the test, not just the import. Concurrent importing tests therefore queued on each other while holding pool connections. A probe with two sandbox owners confirmed it: the second import took about 3,060 ms (the first test's remaining 3,000 ms) instead of about 100 ms. That was true for the same file and for a different file. In the full run the queue grew past DBConnection's 15 s (disconnect → owner gone → `OwnershipError`) and `render_async`'s 10 s.
+    - **Checked and not the cause:** background work outliving tests (ND imports run in LiveView `start_async` tasks the tests await; no Oban or detached tasks are involved); tenant data (per-organization, isolated by the sandbox). Tests that `Ash.Seed` uniquely keyed synthetic ND rows (`growth_percentile_test`, one `school_goals_live_test` case) take no lock and don't contend.
+    - **Fix (tests only; application behavior unchanged, lock kept for production):**
+      - The 13 test modules that import (`import_insights!`, `Importer.import_files`, page imports) declare `async: true, group: :nd_insights_import` (ExUnit groups, Elixir 1.18+). Tests in the group never run at the same time as each other, but they still run in parallel with every other async test. No timeouts were raised, nothing skipped, and nothing moved to `async: false`.
+      - **Why these must be serial with each other:** they write the same global rows under unique indexes. Two uncommitted sandbox transactions inserting the same key block until one test ends, whether or not the lock exists (item 28's deadlocks). Serializing them is required; the group does it without holding connections while waiting.
+      - The reason is documented in `test/support/nd_insights_fixtures.ex`. The guard test `test/emisint/nd_insights/test_group_test.exs` fails if a test file that imports lacks the group.
+    - **Verification:** the full suite ran with seeds 1, 42, 1234, 98765 and 5: 0 ND First failures, 0 `OwnershipError`, 0 connection-checkout timeouts and 0 `render_async` timeouts in every run. Run time was unchanged (153–171 s against 165 s before). Each run still shows 157 failures, all in the orphaned legacy test files listed under Risks (registry, compliance, analytics, assessments, `accounts/school_test.exs`), whose resources were removed in commit `64e857d`. Those are untouched.
 
 ## Risks and dependencies
 

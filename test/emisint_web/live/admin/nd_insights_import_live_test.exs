@@ -1,5 +1,6 @@
 defmodule EmisintWeb.Admin.NdInsightsImportLiveTest do
-  use EmisintWeb.ConnCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use EmisintWeb.ConnCase, async: true, group: :nd_insights_import
 
   import Emisint.NdInsightsFixtures
 

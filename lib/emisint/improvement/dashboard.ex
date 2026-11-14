@@ -106,6 +106,35 @@ defmodule Emisint.Improvement.Dashboard do
     end
   end
 
+  @doc """
+  The workbook metrics a school's published state results are compared with
+  (`ResultGoals.for_filters/4`): its own plan's, or, for a building whose
+  comparisons use its participant's metrics (`ResultGoals.config/1`
+  `workbook_from`; Solen High School's grade-10 goals are recorded on Cannon
+  Ball), the participant's current plan metrics, read as the user. When the
+  user can't read the participant, there are none.
+  """
+  def comparison_metrics(scope, school, defs) do
+    case Emisint.Improvement.ResultGoals.config(school) do
+      %{workbook_from: nil} -> defs.metrics
+      %{workbook_from: module} -> participant_metrics(scope, module.school().slug)
+    end
+  end
+
+  defp participant_metrics(scope, slug) do
+    with {:ok, participant} <- fetch_school(scope, slug),
+         %GoalPlan{} = plan <-
+           GoalPlan
+           |> Ash.Query.filter(school_id == ^participant.id and program == @program)
+           |> Ash.Query.sort(definition_version: :desc)
+           |> Ash.Query.limit(1)
+           |> Ash.read_one!(scope: scope) do
+      read_for_plan(Metric, plan, scope, position: :asc)
+    else
+      _ -> []
+    end
+  end
+
   defp read_for_plan(resource, plan, scope, sort) do
     resource
     |> Ash.Query.filter(goal_plan_id == ^plan.id)
@@ -181,7 +210,19 @@ defmodule Emisint.Improvement.Dashboard do
             do: score
 
       average = if scores == [], do: nil, else: Float.round(Enum.sum(scores) / length(scores), 2)
-      {category, %{average: average, rated: length(scores), total: length(in_category)}}
+
+      # Explicit N/A ratings are left out of the applicable count; a missing
+      # rating stays applicable.
+      na = Enum.count(in_category, &match?(%{rating_state: :not_applicable}, ratings[&1.id]))
+
+      {category,
+       %{
+         average: average,
+         rated: length(scores),
+         total: length(in_category),
+         na: na,
+         applicable: length(in_category) - na
+       }}
     end
   end
 

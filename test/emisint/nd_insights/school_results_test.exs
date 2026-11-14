@@ -1,5 +1,6 @@
 defmodule Emisint.NdInsights.SchoolResultsTest do
-  use Emisint.DataCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use Emisint.DataCase, async: true, group: :nd_insights_import
 
   import Emisint.NdInsightsFixtures
 

@@ -37,6 +37,11 @@ defmodule Emisint.Improvement.Seeds.Dunseith do
     }
   end
 
+  @doc "Payment terms: the workbook's, shared by every participant (`Seeds.Participant.workbook_payment_terms/0`)."
+  defdelegate payment_terms,
+    to: Emisint.Improvement.Seeds.Participant,
+    as: :workbook_payment_terms
+
   def goal_plan do
     %{
       program: "nd_first_mou",
@@ -74,34 +79,45 @@ defmodule Emisint.Improvement.Seeds.Dunseith do
 
   @doc """
   How the district's workbook goals are compared with the district's own
-  published ND Insights results (`Emisint.Improvement.ResultGoals`). No
-  workbook metric is matched; see `matching` for each reason.
+  published ND Insights results (`Emisint.Improvement.ResultGoals`).
+  Confirmed by the user (November 12, 2026): G6-M2 ("Disengaged") counts the
+  district's Overall Disengaged. See `matching` for the other metrics.
   """
   def comparison do
     %{
       plan_start_year: plan_start_year(),
-      workbook: [],
+      workbook: [
+        {"G6-M2", "% of students reporting as \"Disengaged\" on the ND Student Engagement Survey",
+         :engagement, :engagement_overall, "Disengaged", "Overall Disengaged"}
+      ],
+      # Confirmed by the user (November 12, 2026).
+      confirmed: %{engagement_population: :schoolwide},
+      confirmations: %{
+        "G6-M2" =>
+          "Confirmed by the user (November 12, 2026): “Disengaged” means the Engagement Survey's Overall Disengaged, the district's own published rows (InstitutionID 40001), all students. Its baseline (20%) doesn't equal a published Overall value (18% in 2022-23 through 2024-25); recorded as written."
+      },
       assumptions: %{},
       grade_reference: nil,
       matching:
-        "No workbook metric is matched to a published ND Insights measure. G1-M1 and G2-M1 count students in grades 3-10 who maintain proficiency or grow more than 17 scale-score points, which Insights doesn't publish. G3-M3 (\"Graduation Rate\", 73% to 80%) isn't in the imported datasets. G6-M2 (\"Disengaged\": baseline 20%, 36-month target \"< 15%\") doesn't name the survey area, and its baseline matches no published area (2022-23 through 2024-25: Overall 18%, Behavioral 13%–16%, Cognitive 10%–13%, Emotional 26%–30%), so it isn't compared; its \"< 15%\" target is itself comparable once the area is confirmed. The other metrics are local measures (NAVVY training, course failure, Marzano rubric scores, IEP progress, trusted adults, chronic absenteeism). The state results on this page are the district's own published rows (InstitutionID 40001); building results are on each building's dashboard and are never averaged or combined here.",
-      assumptions_text: "No assumptions are applied for Dunseith Public School District.",
+        "G6-M2 (\"Disengaged\") is matched to the district's Engagement Survey Overall Disengaged (lower is better), all students (confirmed by the user, November 12, 2026). Its 18-month target is “n/a” (gray, no target); its 36-month target “< 15%” is compared as an inequality. G1-M1 and G2-M1 count students in grades 3-10 who maintain proficiency or grow more than 17 scale-score points, which Insights doesn't publish. G3-M3 (\"Graduation Rate\", 73% to 80%) isn't in the imported datasets. The other metrics are local measures (NAVVY training, course failure, Marzano rubric scores, IEP progress, trusted adults, chronic absenteeism). The state results on this page are the district's own published rows (InstitutionID 40001); building results are on each building's dashboard and are never averaged or combined here.",
+      assumptions_text:
+        "No assumptions are applied for Dunseith Public School District. Confirmed by the user (November 12, 2026): G6-M2 counts the district's Overall Disengaged.",
       assumptions_short:
-        "No assumptions for Dunseith: no workbook metric is compared, and annual targets are compared on each building's dashboard.",
+        "Dunseith: G6-M2 → the district's Overall Disengaged (confirmed, November 12, 2026). Annual targets are compared on each building's dashboard.",
       section_notes: %{
         achievement:
           "District results (InstitutionID 40001). No workbook goal is matched to them, and the plan sets annual targets per building, not for the district.",
         growth:
           "Dunseith's growth goals (G1-M1, G2-M1) count individual scale-score growth, which Insights doesn't publish, so growth results have no school goal.",
         engagement:
-          "Not compared: G6-M2 (\"Disengaged\", 36-month target \"< 15%\") doesn't name the survey area, and its baseline (20%) matches no published area value (2022-23 through 2024-25: Overall 18%, Behavioral 13%–16%, Cognitive 10%–13%, Emotional 26%–30%). Confirming the area would enable the comparison."
+          "District Overall Disengaged is compared with G6-M2 (18-month target “n/a”; 36-month target “< 15%”), confirmed by the user (November 12, 2026)."
       },
       annual_note:
         "The continuous improvement plan lists annual Proficient-or-Advanced targets per building (Dunseith Elementary School pp.12-13, Dunseith High School pp.13-15), not for the district. They are compared on each building's dashboard with that building's own results.",
       report_notes: [
         "Workbook provenance [W]. Baselines, targets and Spring/Summer '26 ratings were imported from “ND First School MOU Goal Overview.xlsx” (sheet “Dunseith Goals”); the cell is shown with each value. The workbook does not record who entered each value. Values marked “as written” are shown exactly as in the workbook.",
         "Scope. The workbook goals are written for the district, so they appear only on this participant dashboard; they are not copied to the buildings. Building annual targets (Dunseith Elementary School pp.12-13, Dunseith High School pp.13-15) appear only on each building's dashboard.",
-        "Still to confirm. G1-M2 and G2-M2's 18-month target \"50% K-6; 100% 7-12\" (a campus split) and G4-M1's \"70% @ Level 2+\" / \"70% @ Level 3+\" are text; G4-M2 has no baseline; G6-M2's survey area; which graduation rate (4-, 5- or 6-year) G3-M3 counts."
+        "Still to confirm. G1-M2 and G2-M2's 18-month target \"50% K-6; 100% 7-12\" (a campus split) and G4-M1's \"70% @ Level 2+\" / \"70% @ Level 3+\" are text; G4-M2 has no baseline; which graduation rate (4-, 5- or 6-year) G3-M3 counts."
       ]
     }
   end

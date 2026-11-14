@@ -8,12 +8,47 @@ defmodule Emisint.Improvement.Seeds.CannonBall do
   District and its schools; this participant's record is Cannon Ball
   Elementary School (InstitutionID 4300312781, Solen Public School District
   43003, as published in every imported ND Insights file). Solen district
-  and Solen High School results are never used for it.
+  results are never used for it. Solen High School (InstitutionID
+  4300380363) is its building (`Seeds.SolenHigh`, user decision of November
+  12, 2026), with its own results; the grade-10 goals are compared there.
 
   Values that are not a plain number in the metric's unit (for example
   "< 10%" or an Excel date) are kept verbatim in `source_values`, flagged,
   and left unset in the numeric fields.
   """
+
+  # "Solen Goals" metric wording (Solen Goals!B4:B18), used to match only
+  # the expected metric.
+  @g1_m1 "% of students in Grades 3-5 that demonstrate proficiency on North Dakota Reading State Assessment"
+  @g1_m2 "% of students in Grades 6-8 that demonstrate proficiency on North Dakota Reading State Assessment"
+  @g1_m4 "% of students in Grades 3-5 performing at the Novice level in reading"
+  @g1_m5 "% of students in Grades 6-8 performing at the Novice level in reading"
+  @g2_m1 "% of students in Grades 3-5 demonstrating expected annual growth"
+  @g2_m2 "% of students in Grades 6-8 demonstrating expected annual growth"
+  @g2_m4 "% of students in Grades 3-5 performing at a Novice level"
+  @g2_m5 "% of students in Grades 6-8 performing at a Novice level"
+
+  @achievement_confirmation "Confirmed by the user (November 12, 2026): “demonstrate proficiency” means Proficient or Advanced, and the “Solen Goals” achievement goals count the Combined assessment (ND A+ Summative or NDAA, as the plan's annual targets do, p.4)."
+  @growth_provisional "Provisional, for dashboard reference (user decision, November 12, 2026): math “expected annual growth” is read as Meets or Exceeds growth expectations (derived from the published Meets and Exceeds ranges). It isn't a confirmed definition, and it doesn't record a review result."
+
+  @doc "Metric wording used by Solen High School's grade-10 comparisons."
+  def grade_10_metrics,
+    do: %{
+      "G1-M3" =>
+        "% of students in Grade 10 that demonstrate proficiency on North Dakota Reading State Assessment",
+      "G1-M6" => "% of students in Grades 10 performing at the Novice level in reading",
+      "G2-M3" => "% of students in Grade 10 demonstrating expected annual growth",
+      "G2-M6" => "% of students in Grade 10 performing at a Novice level"
+    }
+
+  def achievement_confirmation, do: @achievement_confirmation
+  def growth_provisional, do: @growth_provisional
+
+  @doc "Cannon Ball's main record is a school; Solen High School is its building."
+  def record_kind, do: :school
+
+  @doc "Solen High School: the building whose dashboard carries the grade-10 goals."
+  def buildings, do: [Emisint.Improvement.Seeds.SolenHigh]
 
   @sheet "Solen Goals"
 
@@ -44,6 +79,11 @@ defmodule Emisint.Improvement.Seeds.CannonBall do
         "Confirmed by the user (recorded in PLAN_nd_first.md, November 9, 2026): the workbook's “Solen” sheet (“Solen Goals”) represents the Cannon Ball ND FIRST participant."
     }
 
+  @doc "Payment terms: the workbook's, shared by every participant (`Seeds.Participant.workbook_payment_terms/0`)."
+  defdelegate payment_terms,
+    to: Emisint.Improvement.Seeds.Participant,
+    as: :workbook_payment_terms
+
   def goal_plan do
     %{
       program: "nd_first_mou",
@@ -69,27 +109,55 @@ defmodule Emisint.Improvement.Seeds.CannonBall do
   @doc """
   How Cannon Ball's goals are compared with published ND Insights results
   (`Emisint.Improvement.ResultGoals`); see `Seeds.FortYates.comparison/0`
-  for the shape. No workbook metric is matched (see `matching`); the PDF's
-  annual Proficient-or-Advanced targets (pp.4-5) are compared, each with the
-  same school year's result.
+  for the shape. The grade 3–5 and 6–8 goals are compared with Cannon Ball
+  Elementary's own grade rows as grade-group references (user decisions of
+  November 12, 2026: Proficient or Advanced, Combined assessment; math growth
+  as Meets or Exceeds, provisionally); the grade-10 goals are compared on
+  Solen High School's dashboard (`Seeds.SolenHigh`). The PDF's annual
+  Proficient-or-Advanced targets (pp.4-5) are compared, each with the same
+  school year's All Grades result.
   """
   def comparison do
     %{
       plan_start_year: plan_start_year(),
-      workbook: [],
+      workbook: [
+        {"G1-M1", @g1_m1, :achievement, "Reading", :proficient_or_advanced,
+         "Reading Proficient or Advanced, grades 3–5", %{grades: ~w(3 4 5), group: "grades 3–5"}},
+        {"G1-M2", @g1_m2, :achievement, "Reading", :proficient_or_advanced,
+         "Reading Proficient or Advanced, grades 6–8", %{grades: ~w(6 7 8), group: "grades 6–8"}},
+        {"G1-M4", @g1_m4, :achievement, "Reading", "Novice", "Reading Novice, grades 3–5",
+         %{grades: ~w(3 4 5), group: "grades 3–5"}},
+        {"G1-M5", @g1_m5, :achievement, "Reading", "Novice", "Reading Novice, grades 6–8",
+         %{grades: ~w(6 7 8), group: "grades 6–8"}},
+        {"G2-M4", @g2_m4, :achievement, "Math", "Novice", "Math Novice, grades 3–5",
+         %{grades: ~w(3 4 5), group: "grades 3–5"}},
+        {"G2-M5", @g2_m5, :achievement, "Math", "Novice", "Math Novice, grades 6–8",
+         %{grades: ~w(6 7 8), group: "grades 6–8"}},
+        {"G2-M1", @g2_m1, :growth, "Math", :meets_or_exceeds,
+         "Math Meets or Exceeds growth expectations, grades 3–5",
+         %{grades: ~w(3 4 5), group: "grades 3–5"}},
+        {"G2-M2", @g2_m2, :growth, "Math", :meets_or_exceeds,
+         "Math Meets or Exceeds growth expectations, grades 6–8",
+         %{grades: ~w(6 7 8), group: "grades 6–8"}}
+      ],
+      # Confirmed by the user (November 12, 2026).
+      confirmed: %{assessment_type: "Comp"},
+      confirmations:
+        Map.new(~w(G1-M1 G1-M2 G1-M4 G1-M5 G2-M4 G2-M5), &{&1, @achievement_confirmation}),
+      provisional: Map.new(~w(G2-M1 G2-M2), &{&1, @growth_provisional}),
       assumptions: %{},
       grade_reference: nil,
       matching:
-        "No workbook metric is matched to a published ND Insights measure. The “Solen Goals” sheet is written for Solen Public School District and its schools (Cannon Ball Elementary, Solen Jr. High and Solen High School), and its student-outcome metrics count grade bands: G1-M1/G1-M4 (Reading, grades 3-5), G1-M2/G1-M5 (Reading, grades 6-8), G2-M1/G2-M4 (grades 3-5), G2-M2/G2-M5 (grades 6-8). Insights publishes Cannon Ball Elementary's results per grade and for All Grades, not by these bands, and ranges can't be combined without a rule. The grade-10 metrics (G1-M3, G1-M6, G2-M3, G2-M6) have no Cannon Ball counterpart: Cannon Ball Elementary has no grade-10 results, and Solen High School's results are never substituted. G1-M1/G1-M2 say “demonstrate proficiency” without saying Proficient alone or Proficient or Advanced; G2-M1–G2-M3 count “expected annual growth”, which isn't an Insights growth category. G7-M1 and the Systems metrics are local measures. The annual Proficient-or-Advanced targets from the continuous improvement plan (pp.4-5) are compared, each with Cannon Ball Elementary's own result for the same school year (all grades, all students, Combined assessment).",
+        "Cannon Ball Elementary publishes grades 3–8 (checked in every imported Assessment Performance file, 2021-22 through 2024-25; some grades are unpublished in some years), so the “Solen Goals” grade 3–5 and grade 6–8 goals are compared on this dashboard. Insights publishes each grade and All Grades, never these grade bands, so each published grade is compared with its band's target for reference only (“grade-group reference”): one grade is not the band's result, and grades are never averaged into one. “Demonstrate proficiency” (G1-M1, G1-M2) is Proficient or Advanced (derived) and the Novice goals (G1-M4, G1-M5 reading; G2-M4, G2-M5 under Goal 2, “Mathematics Growth”) are Novice, Combined assessment (confirmed by the user, November 12, 2026). Math “expected annual growth” (G2-M1, G2-M2) is Meets or Exceeds growth expectations (derived), provisionally for dashboard reference (growth is published from grade 4). The grade-10 goals (G1-M3, G1-M6, G2-M3, G2-M6) are compared on Solen High School's dashboard with its own Grade 10 results; Cannon Ball Elementary has no grade 10. The All Grades row is compared only with the plan's annual Proficient-or-Advanced targets for the same school year. G7-M1 and the Systems metrics are local measures. Student groups are not matched.",
       assumptions_text:
-        "No assumptions are applied for Cannon Ball Elementary School: the workbook metrics stay uncompared until their grade bands, proficiency and growth definitions, and building scope are confirmed.",
+        "No assumptions are applied for Cannon Ball Elementary School. Confirmed by the user (November 12, 2026): “demonstrate proficiency” means Proficient or Advanced, and the achievement goals count the Combined assessment. Provisional for dashboard reference: math “expected annual growth” is read as Meets or Exceeds growth expectations. Grade-group references compare single grades with their band's target and are labeled as references, not band results.",
       assumptions_short:
-        "No assumptions for Cannon Ball: only the plan's annual Proficient-or-Advanced targets are compared.",
+        "Cannon Ball: Combined assessment and Proficient or Advanced confirmed; math growth as Meets or Exceeds is provisional. Single grades are compared with their grade band's target for reference only.",
       section_notes: %{
         achievement:
-          "Cannon Ball Elementary's own results (InstitutionID 4300312781). No workbook goal is matched: the Reading and Novice goals count grade bands (3-5, 6-8) that Insights doesn't publish, and the grade-10 goals belong to Solen High School, whose results are never substituted. Where an annual target exists for the same school year, the Proficient or Advanced cell shows that comparison.",
+          "Cannon Ball Elementary's own results (InstitutionID 4300312781). Grades 3–5 and 6–8 carry grade-group reference colors against the “Solen Goals” band targets (G1-M1/G1-M2 Proficient or Advanced, G1-M4/G1-M5 reading Novice, G2-M4/G2-M5 math Novice). The All Grades Proficient or Advanced cell shows the annual target for the same school year, where one exists. Grade-10 goals are on Solen High School's dashboard.",
         growth:
-          "Cannon Ball's growth goals (G2-M1–G2-M3) count “expected annual growth” for grade bands, which Insights doesn't publish, so growth results have no school goal.",
+          "Math Meets or Exceeds (derived) carries grade-group reference colors against G2-M1 (grades 3–5) and G2-M2 (grades 6–8): a provisional reading of “expected annual growth”, for dashboard reference. Growth is published from grade 4, so grade 3 has none. ELA growth has no school goal.",
         engagement: "The “Solen Goals” sheet has no Engagement Survey metric."
       },
       annual_years: %{
@@ -102,8 +170,8 @@ defmodule Emisint.Improvement.Seeds.CannonBall do
         "The continuous improvement plan (pp.4-5) lists annual Proficient-or-Advanced targets for 2025-2026 through 2030-2031, each stated with its year. Each target is compared only with Cannon Ball Elementary's result for the same year.",
       report_notes: [
         "Workbook provenance [W]. Baselines, targets and Spring/Summer '26 ratings were imported from “ND First School MOU Goal Overview.xlsx” (sheet “Solen Goals”, the Cannon Ball participant as confirmed by the user); the cell is shown with each value. The workbook does not record who entered each value. Values marked “as written” are shown exactly as in the workbook.",
-        "Scope. The sheet's goals are written for Solen Public School District and its schools (Cannon Ball Elementary, Solen Jr. High and Solen High School). State results on this page are Cannon Ball Elementary School's own (InstitutionID 4300312781); Solen district (43003) and Solen High School (4300380363) results are never used.",
-        "Still to confirm. The grade bands, proficiency definition and growth definition behind G1-M1–G2-M6; whether the grade 6-8 and grade-10 goals apply to this participant; G5-M1's baseline and targets (Solen Goals!D30, H30, P30) are stored as dates and are flagged; G7-M2's baseline is “< 10%”; G2-M1–G2-M3 have no baseline; Goals 2–7's 18-month column (I12, I21, I25, I29, I33, I37) is headed “Target Check” rather than “18-Month Review Rating”.",
+        "Scope. The sheet's goals are written for Solen Public School District and its schools (Cannon Ball Elementary, Solen Jr. High and Solen High School). State results on this page are Cannon Ball Elementary School's own (InstitutionID 4300312781; grades 3–8 published). Solen High School (4300380363; grade 10 published) is this participant's building: its own results and the grade-10 goals are on its dashboard and report. Solen district (43003) results are never used.",
+        "Still to confirm. The grade-band (3–5, 6–8) results themselves: Insights doesn't publish them, so grade rows carry reference colors only; G2-M1–G2-M3's Meets-or-Exceeds reading of “expected annual growth” is provisional; G2-M3 (grade 10 growth) has no published counterpart. G5-M1's baseline and targets (Solen Goals!D30, H30, P30) are stored as dates and are flagged; G7-M2's baseline is “< 10%”; G2-M1–G2-M3 have no baseline; Goals 2–7's 18-month column (I12, I21, I25, I29, I33, I37) is headed “Target Check” rather than “18-Month Review Rating”.",
         "Annual targets. North Dakota - ND First Schools.pdf pp.4-5 lists Cannon Ball Elementary School's annual Proficient-or-Advanced targets for 2025-2026 through 2030-2031 (ELA and mathematics, ND A+ Summative or NDAA for eligible students)."
       ]
     }

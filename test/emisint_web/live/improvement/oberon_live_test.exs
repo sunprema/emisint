@@ -4,7 +4,8 @@ defmodule EmisintWeb.Improvement.OberonLiveTest do
   targets and comparisons, and isolation from Fort Yates (updates, history,
   PDF and imports stay with the selected school).
   """
-  use EmisintWeb.ConnCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use EmisintWeb.ConnCase, async: true, group: :nd_insights_import
 
   import Emisint.ImprovementFixtures
   import Emisint.NdInsightsFixtures
@@ -118,47 +119,48 @@ defmodule EmisintWeb.Improvement.OberonLiveTest do
     } do
       import_oberon!(org)
 
-      # Workbook achievement targets stay gray, awaiting assessment
-      # confirmation (Combined and Standard being identical in 2023-24
-      # doesn't establish it). The Emotional engagement metrics are candidate
-      # mappings (survey population not stated in the sources): gray, with
-      # the value and target shown, no verdict.
+      # Confirmed by the user (November 12, 2026): the workbook achievement
+      # targets count the Combined assessment, and the Emotional metrics the
+      # schoolwide, all-student Emotional survey results.
       for {ref, novice, committed} <- [{"18m", "29%", "55-60%"}, {"36m", "22%", "60-65%"}] do
         {:ok, view, _html} =
           live(log_in(conn, admin), "#{@oberon}?state_year=2023-2024&goal_ref=#{ref}")
 
-        novice_cell = ~s([data-goal][data-kind="workbook"][data-status="gray"])
+        # ELA Novice 50%–79% (2023-24) vs the target: above it (lower is better).
+        novice_cell = ~s([data-goal="G1-M2"][data-kind="workbook"])
         assert has_element?(view, novice_cell, "G1-M2 ELA Novice")
         assert has_element?(view, novice_cell, "target #{novice}")
-        assert has_element?(view, novice_cell, "Gray: awaiting assessment confirmation")
-
-        refute has_element?(
-                 view,
-                 ~s([data-goal][data-kind="workbook"][data-status="misses"]),
-                 "Novice"
-               )
+        refute has_element?(view, ~s([data-goal="G1-M2"][data-status="gray"]))
+        refute render(view) =~ "Gray: awaiting assessment confirmation"
 
         assert has_element?(view, ~s([data-goal][data-kind="annual"][data-status="overlaps"]))
         assert has_element?(view, "#engagement-engagement_emotional", "target #{committed}")
 
-        assert has_element?(
+        refute has_element?(
                  view,
-                 ~s(#engagement-engagement_emotional [data-goal][data-status="gray"]),
-                 "Gray: candidate mapping, awaiting confirmation"
+                 ~s(#engagement-engagement_emotional [data-goal][data-status="gray"])
                )
 
-        for status <- ~w(meets misses overlaps) do
-          refute has_element?(
-                   view,
-                   ~s(#engagement-engagement_emotional [data-goal][data-status="#{status}"])
-                 )
-        end
+        refute render(view) =~ "candidate mapping"
+
+        assert has_element?(
+                 view,
+                 "#engagement-goal-notes",
+                 "Confirmed by the user (November 12, 2026)"
+               )
 
         assert has_element?(view, "#achievement-matching-note", "G1-M1 and G2-M1")
         assert has_element?(view, "#growth-matching-note", "no growth metric")
         refute has_element?(view, "#achievement-type-note")
         refute render(view) =~ "Combined assessment assumed"
       end
+
+      # The Standard view gets no workbook verdict, and says why.
+      {:ok, reg, _html} =
+        live(log_in(conn, admin), "#{@oberon}?state_year=2023-2024&state_type=Reg")
+
+      assert has_element?(reg, "#achievement-type-note", "Combined assessment view (confirmed)")
+      refute has_element?(reg, ~s([data-goal="G1-M2"]))
     end
 
     test "annual targets cover Oberon's historical goal period", %{
@@ -274,9 +276,13 @@ defmodule EmisintWeb.Improvement.OberonLiveTest do
 
         assert data.school.name == "Oberon Elementary School"
         assert Enum.map(data.goals, & &1.title) |> hd() == "Goal 1: Literacy Growth"
-        assert data.payment.label == "Estimated payment — not configured"
-        assert data.payment.combined == "Not configured"
-        assert data.payment.card_note =~ "No payment terms are set"
+        # The workbook's 18-month terms, shared by every participant (November 13, 2026).
+        assert data.payment.label == "Estimated payment — provisional terms"
+
+        assert data.payment.combined ==
+                 "Awaiting review; the 36-month review payment allocation needs confirmation"
+
+        assert data.payment.card_note =~ "Provisional, not an actual payment"
         assert data.state.notes.engagement_matching =~ "G4-M1, G4-M2 and G4-M3"
         assert data.state.notes.growth_matching =~ "no growth metric"
 

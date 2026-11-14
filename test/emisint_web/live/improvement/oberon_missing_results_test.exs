@@ -17,7 +17,8 @@ defmodule EmisintWeb.Improvement.OberonMissingResultsTest do
   downloads. The official 2024-25 Performance and Growth downloads have no
   Oberon rows.
   """
-  use EmisintWeb.ConnCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use EmisintWeb.ConnCase, async: true, group: :nd_insights_import
 
   import Emisint.ImprovementFixtures
   import Emisint.NdInsightsFixtures

@@ -135,23 +135,10 @@ defmodule Emisint.Improvement.Seeds.FortYates do
     }
   end
 
-  @doc """
-  Provisional payment terms, set through `GoalPlan.set_payment_terms`.
-  Ram authorized a best-estimate rule on November 1, 2026, pending
-  confirmation of the actual terms. The $70,000 total and the equal
-  $35,000 split are our selected provisional assumptions, not terms he
-  specified, and not contract terms.
-  """
-  def payment_terms do
-    %{
-      payment_cap: Decimal.new("70000"),
-      allocation_18m: Decimal.new("35000"),
-      allocation_36m: Decimal.new("35000"),
-      payment_terms_status: :provisional,
-      payment_terms_note:
-        "Ram authorized a best-estimate payment rule on November 1, 2026, pending confirmation of the actual terms. The $70,000 total and the equal $35,000 split are our selected provisional assumptions, not terms he specified."
-    }
-  end
+  @doc "Payment terms: the workbook's, shared by every participant (`Seeds.Participant.workbook_payment_terms/0`)."
+  defdelegate payment_terms,
+    to: Emisint.Improvement.Seeds.Participant,
+    as: :workbook_payment_terms
 
   # {code, label, kind, workbook column}
   def reporting_periods do

@@ -38,6 +38,19 @@ defmodule Emisint.Improvement.Access do
 
   def can_record_estimate?(_actor, _tenant), do: false
 
+  @doc """
+  Whether `actor` may import ND Insights data for `school`: system admins
+  only (statewide data is shared by every organization, so no organization
+  role or school membership grants it), and only for a supported ND First
+  record (`Emisint.Improvement.Pilot`). The dashboard button and the import
+  page both use this check; the import page applies it on mount and on every
+  event.
+  """
+  def can_import_state_results?(%{role: :system_admin}, school),
+    do: Emisint.Improvement.Pilot.pilot?(school)
+
+  def can_import_state_results?(_actor, _school), do: false
+
   defp same_org?(nil, _tenant), do: false
   defp same_org?(org_id, tenant), do: to_string(org_id) == to_string(tenant)
 end

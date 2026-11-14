@@ -450,7 +450,8 @@ defmodule Emisint.Improvement.SeedsTest do
                "warwick-elementary" => "0302992191",
                "warwick-middle-school" => "0302992192",
                "warwick-high-school" => "0302992193",
-               "cannon-ball-elementary" => "4300312781"
+               "cannon-ball-elementary" => "4300312781",
+               "solen-high-school" => "4300380363"
              }
     end
 

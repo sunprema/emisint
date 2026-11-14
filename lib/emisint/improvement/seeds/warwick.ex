@@ -39,6 +39,11 @@ defmodule Emisint.Improvement.Seeds.Warwick do
     }
   end
 
+  @doc "Payment terms: the workbook's, shared by every participant (`Seeds.Participant.workbook_payment_terms/0`)."
+  defdelegate payment_terms,
+    to: Emisint.Improvement.Seeds.Participant,
+    as: :workbook_payment_terms
+
   def goal_plan do
     %{
       program: "nd_first_mou",
@@ -68,13 +73,15 @@ defmodule Emisint.Improvement.Seeds.Warwick do
       excerpt:
         "“Warwick School will establish and implement a vertically aligned instructional framework …” (Warwick Goals!B2); Goals 2–5 also begin “Warwick School will …” (B9, B19, B27, B35).",
       note:
-        "Workbook scope provisional: the Warwick sheet says “Warwick School” and names neither Warwick Public School District nor one of its three buildings (Elementary 0302992191, Middle 0302992192, High 0302992193). The School Directory (row 5: “Warwick”, tab “Warwick Goals”, no folder), Overview, Evidence Tracker (rows 2–10: “Warwick”) and cell comments don't say either. The goals are recorded on the district record pending confirmation; no comparison or payment depends on that assignment.",
+        "Workbook scope provisional: the Warwick sheet says “Warwick School” and names neither Warwick Public School District nor one of its three buildings (Elementary 0302992191, Middle 0302992192, High 0302992193). The School Directory (row 5: “Warwick”, tab “Warwick Goals”, no folder), Overview, Evidence Tracker (rows 2–10: “Warwick”) and cell comments don't say either. The goals are recorded on the district record pending confirmation. Dashboard reference comparisons use the district's own published rows provisionally (user decision, November 12, 2026); no review rating or payment depends on that assignment.",
       evidence: [
         "Workbook baselines checked against 2024-25 ND Insights rows (All Grades, all students, Combined) fit no single scope: ELA Novice 59% falls in the district's 55%–59% but not any building's; Math Novice 75% falls in the elementary (70%–79%) and middle (75%–79%) ranges but not the district's 70%–74%; Emotional Disengaged 25.74% falls in the elementary (20%–29%) and middle (25%–29%) ranges but not the district's 20%–24%; Behavioral Committed 46.98% falls in none (district 40%–44%, elementary 50%–59%, middle 40%–44%, high 35%–39%). The baseline years are not stated, so this is context only, not a determination.",
         "Evidence Tracker rows 4 and 9 (school “Warwick”) link files named “Mandaree826.key” and “Mandaree1012.key”; recorded as written."
       ]
     }
   end
+
+  @provisional "Provisional dashboard reference assumption (user decision, November 12, 2026): the district's own results (InstitutionID 03029), Combined assessment, Proficient or Advanced for “proficiency”, and the relative target read as a percentage-point change from the workbook baseline. Not a confirmed definition; it doesn't record a review result."
 
   @doc """
   The first school year whose results fall inside the plan: the reporting
@@ -84,34 +91,54 @@ defmodule Emisint.Improvement.Seeds.Warwick do
 
   @doc """
   How the district's workbook goals are compared with the district's own
-  published ND Insights results (`Emisint.Improvement.ResultGoals`). No
-  workbook metric is matched; see `matching` for each reason.
+  published ND Insights results (`Emisint.Improvement.ResultGoals`), as
+  provisional dashboard reference assumptions (user decision, November 12,
+  2026): the district's own rows (InstitutionID 03029), the Combined
+  assessment, Proficient or Advanced for "proficiency", and relative targets
+  ("Inc 2-3%", "Dec 3-4%") read as percentage-point changes from the
+  workbook baseline. G2-M7 (a "Dec" target for behaviorally committed
+  students) stays unresolved pending Ram's confirmation of its direction.
   """
   def comparison do
     %{
       plan_start_year: plan_start_year(),
-      workbook: [],
-      assumptions: %{},
+      workbook: [
+        {"G2-M6", "Percentage of emotionally disengaged students", :engagement,
+         :engagement_emotional, "Disengaged", "Emotional Disengaged"},
+        {"G3-M1", "Percentage of ELA proficiency rate", :achievement, "Reading",
+         :proficient_or_advanced, "ELA Proficient or Advanced"},
+        {"G3-M2", "Percentage of ELA novice rate", :achievement, "Reading", "Novice",
+         "ELA Novice"},
+        {"G4-M1", "Percentage of NDSA Math proficiency", :achievement, "Math",
+         :proficient_or_advanced, "Math Proficient or Advanced"},
+        {"G4-M2", "Percentage of NDSA Math novice", :achievement, "Math", "Novice", "Math Novice"}
+      ],
+      # Provisional dashboard reference assumptions (user decision, November 12, 2026).
+      assumptions: %{assessment_type: "Comp", engagement_population: :schoolwide},
+      assumption_kind: "provisional assumption",
+      relative_targets: :percentage_points,
+      provisional: Map.new(~w(G2-M6 G3-M1 G3-M2 G4-M1 G4-M2), &{&1, @provisional}),
       grade_reference: nil,
       matching:
-        "No workbook metric is compared with a published ND Insights measure. Several resemble Insights measures: G2-M6 \"Percentage of emotionally disengaged students\" (baseline 25.74%), G2-M7 \"Percentage of behaviorally committed students\" (46.98%), G3-M1/G3-M2 ELA proficiency and novice rates (5%, 59%), G4-M1/G4-M2 NDSA Math proficiency and novice (4%, 75%), and G5-M3/G5-M4 special-education Novice. But every target is relative (\"Inc 2-3%\", \"Dec 3-4%\") with no stated baseline year or rule; \"Warwick School\" doesn't say whether the district or which of its three buildings is meant; \"proficiency rate\" doesn't say whether it means Proficient alone or Proficient or Advanced; and Insights doesn't publish a special-education group for these buildings. The other metrics are local measures. The state results on this page are the district's own published rows (InstitutionID 03029); building results are on each building's dashboard and are never averaged or combined here.",
-      assumptions_text: "No assumptions are applied for Warwick Public School District.",
+        "Provisional dashboard reference assumptions (user decision, November 12, 2026): the Warwick goals are compared with the district's own published rows (InstitutionID 03029), Combined assessment, all students, All Grades; “proficiency rate” (G3-M1 ELA, G4-M1 Math) is Proficient or Advanced (derived); novice (G3-M2, G4-M2) is Novice; G2-M6 is the Emotional Engagement Survey's Disengaged. Relative targets are percentage-point changes from the workbook baseline (e.g. ELA Novice baseline 59% and “Dec 2-3%” → 56%–57%), and the resulting range is colored by the dashboard comparison convention for range targets. Not compared: G2-M7 (“Percentage of behaviorally committed students”, “Dec 2-3%” / “Dec 3-4%”), unresolved until Ram confirms whether a decrease is intended; G5-M3 and G5-M4 (special-education Novice: the baselines are ranges, 80-89% and 90-100%, and student groups aren't matched). The other metrics are local measures. Building results are on each building's dashboard and are never averaged or combined here; the district goals aren't treated as building goals.",
+      assumptions_text:
+        "Provisional dashboard reference assumptions for Warwick (user decision, November 12, 2026; not confirmed definitions): the workbook goals are compared with the district's own results (the sheet's “Warwick School” scope is still unconfirmed), the Combined assessment, Proficient or Advanced for “proficiency rate”, the district's Emotional survey population for G2-M6, and relative targets as percentage-point changes from the workbook baseline. These comparisons never record a review result, set a rating or affect the payment estimate.",
       assumptions_short:
-        "No assumptions for Warwick: no workbook metric is compared, and annual targets are compared on each building's dashboard.",
+        "Warwick (provisional): district results, Combined assessment, Proficient or Advanced, percentage-point targets from the workbook baseline. G2-M7 unresolved pending Ram.",
       section_notes: %{
         achievement:
-          "District results (InstitutionID 03029). No workbook goal is matched to them: G3-M1 and G3-M2 (ELA proficiency, novice) and G4-M1 and G4-M2 (Math) have relative targets (\"Inc 2-3%\", \"Dec 2-3%\") with no stated base year and no rule for points versus percent, and the workbook scope is provisional. The plan sets annual targets per building, not for the district.",
+          "District results (InstitutionID 03029), compared provisionally with G3-M1 / G4-M1 (Proficient or Advanced) and G3-M2 / G4-M2 (Novice); relative targets are read as percentage-point changes from the workbook baseline. The plan sets annual targets per building, not for the district.",
         growth:
           "Warwick's workbook has no growth-percentile metric, so growth results have no school goal.",
         engagement:
-          "G2-M6 (emotionally disengaged) and G2-M7 (behaviorally committed) have relative targets (\"Dec 2-3%\", \"Dec 3-4%\") with no baseline-year rule, and the scope (district or building) isn't stated, so neither is compared. G2-M7's targets say \"Dec\" for a measure that is usually better when higher; recorded as written."
+          "District Emotional Disengaged is compared provisionally with G2-M6 (baseline 25.74%; “Dec 2-3%” → 22.74%–23.74%, “Dec 3-4%” → 21.74%–22.74%). Not compared: G2-M7 (behaviorally committed, “Dec” targets), unresolved until Ram confirms its direction."
       },
       annual_note:
         "The continuous improvement plan lists annual Proficient-or-Advanced targets per building (Warwick Elementary School pp.27-28, Warwick Middle School pp.28-29, Warwick High School pp.29-31), not for the district. They are compared on each building's dashboard with that building's own results.",
       report_notes: [
         "Workbook provenance [W]. Baselines, targets and Spring/Summer '26 ratings were imported from “ND First School MOU Goal Overview.xlsx” (sheet “Warwick Goals”); the cell is shown with each value. The workbook does not record who entered each value. Values marked “as written” are shown exactly as in the workbook.",
         "Scope (provisional). The Warwick sheet says “Warwick School” and doesn't say whether the district or one of its buildings is meant, so its goals are recorded on this district record provisionally, pending confirmation. They are not copied to the buildings, and no comparison or payment depends on the assignment. Building annual targets (Warwick Elementary School pp.27-28, Warwick Middle School pp.28-29, Warwick High School pp.29-31) appear only on each building's dashboard.",
-        "Still to confirm. The scope of \"Warwick School\" (district or a building); a rule for relative targets (\"Inc 2-3%\", \"Dec 3-4%\") and their baseline year; whether \"proficiency rate\" means Proficient or Proficient or Advanced; G2-M1, G2-M4 and G5-M1's range targets; G2-M5's text targets (\"Another core\")."
+        "Still to confirm. The scope of \"Warwick School\" (district or a building), the Combined assessment and Proficient or Advanced for \"proficiency rate\" (all used provisionally for dashboard reference, with relative targets as percentage-point changes from the workbook baseline; user decision, November 12, 2026); G2-M7's direction (\"Dec\" for behaviorally committed students), pending Ram; G5-M3 and G5-M4 (special-education Novice, range baselines); G2-M1, G2-M4 and G5-M1's range targets; G2-M5's text targets (\"Another core\")."
       ]
     }
   end

@@ -11,7 +11,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
   import EmisintWeb.Improvement.Components, only: [school_tabs: 1]
   import EmisintWeb.Improvement.PortfolioComponents, only: [portfolio: 1]
 
-  alias Emisint.Improvement.{Dashboard, Pilot, Portfolio}
+  alias Emisint.Improvement.{Dashboard, PaymentPreview, Pilot, Portfolio}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -31,8 +31,93 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
      )}
   end
 
-  # One card per participant, in tab order: its main record (when readable)
-  # and, for a district participant, its readable buildings.
+  # Query params, kept together so no change loses another:
+  #   * `open` — the expanded detail sections (comma-separated: "progress",
+  #     "payment"); all closed by default. Every filter change keeps it.
+  #   * `pay` "preview" (default) or "formal"; `pay_period` the seasonal
+  #     period code (default: the latest with any recorded rating);
+  #     `pay_ref` "18m" (default) or "36m". The preview is computed from the
+  #     already loaded summary and writes nothing.
+  @sections ~w(progress payment)
+  @query_keys ~w(open pay pay_period pay_ref)
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    summary = socket.assigns.summary
+    view = if params["pay"] == "formal", do: :formal, else: :preview
+    period = params["pay_period"] || PaymentPreview.default_period(summary)
+    checkpoint = PaymentPreview.checkpoint(params["pay_ref"])
+    query = Map.take(params, @query_keys)
+
+    {:noreply,
+     assign(socket,
+       query: query,
+       open: open_sections(params["open"]),
+       payment: %{
+         view: view,
+         preview: PaymentPreview.build(summary, period, checkpoint),
+         path: fn changes -> path(Map.merge(query, changes)) end
+       }
+     )}
+  end
+
+  @impl true
+  def handle_event("preview", params, socket) do
+    period = params["pay_period"] || preview_period(socket)
+
+    {:noreply,
+     patch(socket, %{"pay" => "preview", "pay_ref" => params["pay_ref"], "pay_period" => period})}
+  end
+
+  def handle_event("toggle_section", %{"section" => section}, socket) when section in @sections do
+    open = socket.assigns.open
+
+    open =
+      if MapSet.member?(open, section),
+        do: MapSet.delete(open, section),
+        else: MapSet.put(open, section)
+
+    {:noreply, patch(socket, %{"open" => open_param(open)}, replace: true)}
+  end
+
+  def handle_event("sections", %{"to" => "expand"}, socket),
+    do: {:noreply, patch(socket, %{"open" => open_param(MapSet.new(@sections))}, replace: true)}
+
+  def handle_event("sections", %{"to" => "collapse"}, socket),
+    do: {:noreply, patch(socket, %{"open" => nil}, replace: true)}
+
+  defp preview_period(socket) do
+    case socket.assigns.payment.preview.period do
+      nil -> nil
+      p -> p.code
+    end
+  end
+
+  defp patch(socket, changes, opts \\ []),
+    do: push_patch(socket, [to: path(Map.merge(socket.assigns.query, changes))] ++ opts)
+
+  defp open_sections(nil), do: MapSet.new()
+
+  defp open_sections(param),
+    do: param |> String.split(",") |> Enum.filter(&(&1 in @sections)) |> MapSet.new()
+
+  # In section order, so the URL is stable.
+  defp open_param(open) do
+    case Enum.filter(@sections, &MapSet.member?(open, &1)) do
+      [] -> nil
+      list -> Enum.join(list, ",")
+    end
+  end
+
+  defp path(query) do
+    query = query |> Enum.reject(fn {_k, v} -> v in [nil, ""] end)
+    ~p"/school-goals?#{query}"
+  end
+
+  # One card per participant, in tab order, linking to its main record.
+  # Buildings are not listed here (November 13, 2026): they appear only as
+  # subtabs inside the participant's pages. A member who can read only a
+  # building gets a card linking to that building (the tab's own `href`).
   defp groups(tabs, schools, readable) do
     by_slug = Map.new(schools, &{&1.slug, &1})
 
@@ -40,16 +125,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
       nav =
         Pilot.participant_nav(%{slug: tab.slug, state_entity_id: tab.institution_id}, readable)
 
-      buildings =
-        if nav,
-          do: for(item <- nav.items, item.slug != tab.slug, do: by_slug[item.slug]),
-          else: []
-
       %{
         name: tab.name,
         slug: tab.slug,
+        href: tab.href,
         main: by_slug[tab.slug],
-        buildings: buildings,
         provisional?: nav != nil and nav.provisional?
       }
     end
@@ -92,7 +172,12 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
           No schools are available to you. Ask your organization admin for access.
         </div>
 
-        <.portfolio :if={@summary.rows != []} summary={@summary} />
+        <.portfolio
+          :if={@summary.rows != []}
+          summary={@summary}
+          payment={@payment}
+          open={@open}
+        />
 
         <h2 :if={@groups != []} class="text-lg font-semibold" id="participants-heading">
           Participants and schools
@@ -115,7 +200,15 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
                 {g.main.state} {g.main.state_entity_id}<span :if={g.main.grade_span}> · Grades {g.main.grade_span}</span>
               </div>
             </.link>
-            <div :if={!g.main} class="font-semibold">{g.name}</div>
+            <.link
+              :if={!g.main}
+              navigate={~p"/school-goals/#{g.href}"}
+              class="block hover:text-primary transition-colors"
+              id={"participant-link-#{g.slug}"}
+            >
+              <div class="font-semibold">{g.name}</div>
+              <div class="text-sm text-base-content/60">Open the pages you can view</div>
+            </.link>
             <span
               :if={g.provisional?}
               class="badge badge-warning badge-soft badge-sm"
@@ -123,18 +216,6 @@ defmodule EmisintWeb.Improvement.SchoolGoalsIndexLive do
             >
               Workbook scope provisional
             </span>
-            <ul :if={g.buildings != []} class="text-sm space-y-1 border-t border-base-200 pt-2">
-              <li :for={b <- g.buildings}>
-                <.link
-                  navigate={~p"/school-goals/#{b.slug}"}
-                  class="link link-hover"
-                  id={"school-#{b.slug}"}
-                >
-                  {b.name}
-                </.link>
-                <span class="text-xs text-base-content/50 font-mono">{b.state_entity_id}</span>
-              </li>
-            </ul>
           </div>
         </div>
       </div>

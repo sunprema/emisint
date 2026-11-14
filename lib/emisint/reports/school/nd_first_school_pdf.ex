@@ -17,7 +17,9 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
     GoalStatus,
     GrowthPercentile,
     Payment,
+    PaymentPreview,
     Percent,
+    Portfolio,
     ResultGoals,
     Rubric
   }
@@ -62,7 +64,10 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
         if state.years != [], do: StateComparison.for_filters(state.rows, benchmark, filters)
 
       nd? = params["nd_comparison"] == "1"
-      plan = %{school: school, metrics: defs.metrics, annual_goals: defs.annual_goals}
+      # Solen High School compares its grade-10 results with Cannon Ball's
+      # workbook metrics (`Dashboard.comparison_metrics/3`).
+      comparison_metrics = Dashboard.comparison_metrics(scope, school, defs)
+      plan = %{school: school, metrics: comparison_metrics, annual_goals: defs.annual_goals}
       config = ResultGoals.config(school)
 
       used = used_files(state.files, filters, cited_years(defs, state.rows))
@@ -91,7 +96,7 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
           goal_reference: ResultGoals.reference_label(filters.reference),
           # Appended to the state results filters line; a building has no workbook goals.
           goal_reference_text:
-            if(building?,
+            if(comparison_metrics == [],
               do: "",
               else:
                 " · goals compared with the #{ResultGoals.reference_label(filters.reference)} (reference)"
@@ -104,7 +109,10 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
           grades: school.grade_span || "Not stated in the sources",
           plan: defs.plan.name
         },
-        payment: payment(defs.payment, defs.payment_estimates),
+        payment:
+          defs.payment
+          |> payment(defs.payment_estimates)
+          |> Map.put(:preview, preview(defs, period, data.ratings)),
         averages:
           for(
             category <- [:systems, :student_outcome],
@@ -169,7 +177,7 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
         ),
       terms_summary: Payment.terms_summary(p.terms),
       formula:
-        "Estimate = #{p.formula}, capped at the checkpoint allocation and rounded to cents. Category averages are taken separately before the weights apply. Only formal 18- and 36-month review ratings count: seasonal ratings, targets and actual results never do. Every metric needs a review rating (an explicit 0 counts); otherwise the checkpoint stays “Awaiting review”. Estimates are not actual payments.",
+        "Estimate = #{p.formula}, capped at the checkpoint allocation and rounded to cents. Category averages are taken separately before the weights apply. Only formal 18- and 36-month review ratings count: seasonal ratings, targets and actual results never do. A metric rated N/A is left out of its category average and of the required count; every other metric needs a numeric review rating (an explicit 0 counts), and a missing or unavailable one keeps the checkpoint “Awaiting review”. If a category has no numeric rating, the estimate is unavailable (never 0, never reweighted). Estimates are not actual payments.",
       systems_count: "#{p.systems_metric_count}",
       outcomes_count: "#{p.outcomes_metric_count}",
       max_rating: "#{p.max_rating}",
@@ -181,8 +189,8 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
             outcomes_average: Payment.score_text(c.outcomes_average),
             weights: "#{Percent.format(c.systems_weight)} / #{Percent.format(c.outcomes_weight)}",
             weighted: Payment.score_text(c.weighted_score),
-            allocation: Payment.money(c.allocation),
-            estimate: Payment.status_text(c)
+            allocation: Payment.allocation_text(c),
+            estimate: "#{Payment.status_text(c)} (#{Payment.coverage_text(c)})"
           }
         end),
       estimates:
@@ -192,10 +200,57 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
     }
   end
 
+  # The current-ratings preview for the report's period: the dashboard's and
+  # the portfolio's `PaymentPreview`, 18-month on the card and both
+  # checkpoints in the table. Strings only.
+  defp preview(defs, period, ratings) do
+    [first, second] =
+      for c <- [:review_18m, :review_36m],
+          do: PaymentPreview.for_participant(defs, period, ratings, c)
+
+    {tone, headline} = PaymentPreview.headline(first.row)
+    loaded? = first.row.status == :loaded
+
+    %{
+      title:
+        "Current-ratings preview" <>
+          if(first.period, do: " · #{first.period.label} ratings", else: ""),
+      headline: headline,
+      tone: to_string(tone),
+      basis: PaymentPreview.basis_text(first),
+      note: PaymentPreview.preview_note(),
+      terms_label: if(first.row[:provisional_terms?], do: "Provisional terms", else: ""),
+      reason:
+        if(loaded?,
+          do: "",
+          else: PaymentPreview.row_reason(first.row.status, first.row[:period] || first.period)
+        ),
+      rows: if(loaded?, do: Enum.map([first, second], &preview_row/1), else: [])
+    }
+  end
+
+  defp preview_row(%{row: r} = p) do
+    average = fn a ->
+      "#{Portfolio.number(a.value) || PaymentPreview.average_reason(a)} (#{Payment.coverage_phrase(a.rated, a.applicable, a.na)})"
+    end
+
+    %{
+      label: p.checkpoint_label,
+      systems: average.(r.systems),
+      outcomes: average.(r.outcomes),
+      weights: "#{Percent.format(p.weights.systems)} / #{Percent.format(p.weights.outcomes)}",
+      weighted:
+        (Portfolio.number(r.weighted) || PaymentPreview.weighted_reason(r)) <>
+          if(r.weighted && !r.complete?, do: " (partial)", else: ""),
+      allocation: Payment.allocation_text(r.estimate),
+      payment: "#{elem(PaymentPreview.payment_text(r), 1)} (#{Payment.coverage_text(r.estimate)})"
+    }
+  end
+
   defp average_row(category, a, _max, %{kind: kind}) when kind in [:review_18m, :review_36m] do
     %{
       category: category_label(category),
-      average: "#{a.rated} of #{a.total} scored",
+      average: Payment.coverage_phrase(a.rated, a.applicable, a.na),
       coverage:
         "Formal review ratings: the payment input. Averages appear in the estimated payment once every rating is recorded."
     }
@@ -206,7 +261,7 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
       category: category_label(category),
       average: if(a.average, do: "#{a.average} / #{max}", else: "Not rated"),
       coverage:
-        "#{a.rated} of #{a.total} metrics rated. Seasonal ratings are progress checks, not payment inputs."
+        "#{Payment.coverage_phrase(a.rated, a.applicable, a.na)}. Seasonal ratings are progress checks, not payment inputs."
     }
   end
 
@@ -453,14 +508,8 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
         achievement:
           ResultGoals.section_notes(:achievement, goals.achievement) ++
             List.wrap(config.section_notes[:achievement]) ++
-            if(
-              f.type != "Comp" and plan.metrics != [] and
-                config.assumptions[:assessment_type] == "Comp",
-              do: [
-                "Workbook targets are compared only in the Combined assessment view (demo assumption)."
-              ],
-              else: []
-            ),
+            List.wrap(ResultGoals.participant_goals_unavailable(config, plan.metrics)) ++
+            List.wrap(ResultGoals.assessment_view_note(config, f.type, plan.metrics != [])),
         growth: ResultGoals.section_notes(:growth, goals.growth),
         engagement: ResultGoals.section_notes(:engagement, goals.engagement),
         # Which workbook metrics each table is matched to (the school's own).
@@ -530,7 +579,7 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
             approaches: v.("Approaches"),
             meets: v.("Meets"),
             exceeds: v.("Exceeds"),
-            derived: goal_cell(derived(r.meets_or_exceeds), nil),
+            derived: goal_cell(derived(r.meets_or_exceeds), g[:meets_or_exceeds]),
             level: v.("OverallGrowthLevel"),
             percentile: v.("OverallGrowthPercentile")
           }
@@ -818,6 +867,17 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
         else: ""
 
     case scope do
+      %{kind: :participant, buildings: buildings, record_kind: :school} ->
+        names = Enum.map_join(buildings, ", ", & &1.school().name)
+
+        %{
+          kind: "participant",
+          note:
+            "School participant with a separate building. The ND First workbook goals, seasonal ratings and payment in this report are written for this participant, and the state results are #{school.name}'s own published rows (InstitutionID #{school.state_entity_id}). Workbook goals for grades this school doesn't publish are compared in the building's report, with that building's own results: #{names}.",
+          provisional: "",
+          annual_empty: "No annual targets are recorded for this school."
+        }
+
       %{kind: :participant, buildings: buildings} ->
         names = Enum.map_join(buildings, ", ", & &1.school().name)
 
@@ -839,12 +899,22 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
         %{
           kind: "building",
           note:
-            "Building of an ND First participant. This report shows #{school.name}'s own annual targets and published results. The ND First workbook goals, seasonal ratings and payment are " <>
+            "Building of an ND First participant. This report shows #{school.name}'s own " <>
+              if(scope[:participant_goals?],
+                do: "published results; the plan sets no annual targets for it. ",
+                else: "annual targets and published results. "
+              ) <>
+              "The ND First workbook goals, seasonal ratings and payment are " <>
               if(provisional?,
                 do:
                   "recorded provisionally on #{participant.school().name}; whether they cover this building is not established by the sources. They are in that report, not repeated here.",
                 else:
                   "written for #{participant.school().name} and are in its report, not repeated here."
+              ) <>
+              if(scope[:participant_goals?],
+                do:
+                  " Its workbook goals for this building's grades are compared in the state results below with this building's own published results, labeled by grade.",
+                else: ""
               ),
           provisional: provisional,
           annual_empty: "No annual targets are recorded for this building."
@@ -886,7 +956,7 @@ defmodule Emisint.Reports.School.NdFirstSchoolPdf do
 
   defp payment_guidance(_config),
     do:
-      "Estimated payment — provisional cap and split: only formal 18- and 36-month review ratings count. Target values, actual results and seasonal ratings never produce a payment on their own. The cap and split are provisional; see the appendix."
+      "Estimated payment — provisional terms: only formal 18- and 36-month review ratings count. Target values, actual results and seasonal ratings never produce a payment on their own. The 18-month amount follows the workbook's payment sheet; the 36-month payment allocation needs confirmation. The current-ratings preview in the Summary is separate: it applies the same formula to the selected reporting period's seasonal ratings for the 18-month checkpoint. It is a preview only; the final payment depends on formal review."
 
   # Detailed methodology, printed as an appendix.
   defp appendix(compared, nd?, config) do

@@ -28,6 +28,11 @@ defmodule Emisint.Improvement.Seeds.ValleyMiddle do
     }
   end
 
+  @doc "Payment terms: the workbook's, shared by every participant (`Seeds.Participant.workbook_payment_terms/0`)."
+  defdelegate payment_terms,
+    to: Emisint.Improvement.Seeds.Participant,
+    as: :workbook_payment_terms
+
   def goal_plan do
     %{
       program: "nd_first_mou",
@@ -57,11 +62,10 @@ defmodule Emisint.Improvement.Seeds.ValleyMiddle do
   (`Emisint.Improvement.ResultGoals`); see `Seeds.FortYates.comparison/0`
   for the shape.
 
-  G3-M1 ("Disengaged") is a candidate mapping to Overall Disengaged
-  (`candidates`): the survey category isn't named, and its baseline match
-  with the published Overall values is evidence to investigate, not a
-  confirmation, so it shows the value and target gray, without a verdict.
-  No other workbook metric is matched (see `matching`). The PDF's annual
+  Confirmed by the user (November 12, 2026): G3-M1 ("Disengaged") counts
+  the Engagement Survey's Overall Disengaged, and G5-M2 ("Engaged" or
+  "Committed") its Overall Committed, schoolwide, all students. No other
+  workbook metric is matched (see `matching`). The PDF's annual
   Proficient-or-Advanced targets (pp.25-26) are compared, each with the same
   school year's result.
   """
@@ -71,27 +75,33 @@ defmodule Emisint.Improvement.Seeds.ValleyMiddle do
       workbook: [
         {"G3-M1",
          "Percentage of students reported as \"Disengaged\" on the ND Student Engagement Survey",
-         :engagement, :engagement_overall, "Disengaged", "Overall Disengaged"}
+         :engagement, :engagement_overall, "Disengaged", "Overall Disengaged"},
+        {"G5-M2", "% of students reporting “Engaged” or “Committed” on ND Engagement Survey",
+         :engagement, :engagement_overall, "Committed", "Overall Committed"}
       ],
-      candidates: %{
+      # Confirmed by the user (November 12, 2026).
+      confirmed: %{engagement_population: :schoolwide},
+      confirmations: %{
         "G3-M1" =>
-          "G3-M1 doesn't name the survey category (Overall, Behavioral, Cognitive or Emotional). Its baseline (28%, Valley Goals!D18) and Goal 3's “2023-2025 baseline of 24-28%” equal Valley's published Overall Disengaged values (28%, 24%, 24% for 2022-23 through 2024-25), and no other area gives both values. Confirming the category would enable a verdict."
+          "Confirmed by the user (November 12, 2026): “Disengaged” means the Engagement Survey's Overall Disengaged, schoolwide, all students.",
+        "G5-M2" =>
+          "Confirmed by the user (November 12, 2026): “Engaged or Committed” means the Engagement Survey's Overall Committed, schoolwide, all students."
       },
       assumptions: %{},
       grade_reference: nil,
       matching:
-        "G3-M1 (\"Disengaged\") is a candidate mapping to the Engagement Survey's Overall Disengaged (lower is better), shown gray without a verdict until the survey category is confirmed: the workbook doesn't name it, and the baseline match with Valley's published Overall Disengaged values is evidence to investigate, not a confirmation. Its 18-month target is “n/a”; its 36-month target “< 22% or within 7% State Avg” would be compared through its “< 22%” part only (meeting it meets the target; otherwise gray, since “within 7% State Avg” isn't defined in the sources). G1-M1 and G2-M1 count students who maintained proficiency or grew more than 13 scale-score points, which Insights doesn't publish. G5-M2 counts \"Engaged\" or \"Committed\", and \"Engaged\" isn't an Insights level, so it isn't compared. Chronic absenteeism (G5-M4, G5-M5) isn't in the imported datasets. The annual Proficient-or-Advanced targets from the continuous improvement plan are compared, each with the same school year's published result (all grades, all students, Combined assessment).",
+        "G3-M1 (\"Disengaged\") is matched to the Engagement Survey's Overall Disengaged (lower is better) and G5-M2 (\"Engaged\" or \"Committed\") to Overall Committed (higher is better), schoolwide, all students (confirmed by the user, November 12, 2026). G3-M1's 18-month target is “n/a” (gray, no target); its 36-month target “< 22% or within 7% State Avg” is compared through its “< 22%” part only (meeting it meets the target; otherwise gray, since “within 7% State Avg” isn't defined in the sources). G5-M2 has no 18-month target; its 36-month target is “> 35%”. G1-M1 and G2-M1 count students who maintained proficiency or grew more than 13 scale-score points, which Insights doesn't publish. Chronic absenteeism (G5-M4, G5-M5) isn't in the imported datasets. The annual Proficient-or-Advanced targets from the continuous improvement plan are compared, each with the same school year's published result (all grades, all students, Combined assessment).",
       assumptions_text:
-        "No assumptions are applied for Valley Middle School. G3-M1's survey category is unconfirmed: Overall is a candidate because its baselines equal the published Overall Disengaged values, so the comparison is shown gray, without a verdict. G5-M2 (\"Engaged\" or \"Committed\") stays uncompared: its baseline (30%) equals the published Overall Committed values (30%, 30%, 32% for 2022-23 through 2024-25), but whether “Engaged or Committed” means Insights' Committed level needs confirmation.",
+        "No assumptions are applied for Valley Middle School. Confirmed by the user (November 12, 2026): G3-M1 counts Overall Disengaged and G5-M2 counts Overall Committed, schoolwide, all students.",
       assumptions_short:
-        "No assumptions for Valley: G3-M1 → Overall Disengaged is a candidate mapping awaiting confirmation (gray, no verdict); G5-M2 awaits confirmation that “Engaged or Committed” means Committed.",
+        "Valley: G3-M1 → Overall Disengaged and G5-M2 → Overall Committed (confirmed, November 12, 2026).",
       section_notes: %{
         achievement:
           "No workbook goal is matched to these results. Where an annual target exists for the same school year, the Proficient or Advanced cell shows that comparison.",
         growth:
           "Valley's growth goals (G1-M1, G2-M1) count individual scale-score growth, which Insights doesn't publish, so growth results have no school goal.",
         engagement:
-          "Overall Disengaged is shown with G3-M1 as a candidate mapping, gray without a verdict until the survey category is confirmed (18-month target “n/a”; 36-month target “< 22% or within 7% State Avg”). Not compared: G5-M2 counts “Engaged” or “Committed”, and “Engaged” isn't an Insights level; its baseline (30%) equals Overall Committed, but that reading needs confirmation."
+          "Overall Disengaged is compared with G3-M1 (18-month target “n/a”; 36-month target “< 22% or within 7% State Avg”, compared through “< 22%”) and Overall Committed with G5-M2 (no 18-month target; 36-month target “> 35%”). Both mappings were confirmed by the user (November 12, 2026)."
       },
       annual_years: %{
         status: :confirmed,

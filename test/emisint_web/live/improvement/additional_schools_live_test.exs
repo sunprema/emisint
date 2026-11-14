@@ -36,10 +36,11 @@ defmodule EmisintWeb.Improvement.AdditionalSchoolsLiveTest do
              "Grand Forks Public School District"
            )
 
-    for slug <-
-          ~w(drayton-public-school-district drayton-elementary drayton-high-school warwick-middle-school) do
-      assert has_element?(view, "#school-#{slug}")
-    end
+    # Participant cards link to the main record; buildings only appear inside it.
+    assert has_element?(view, "#school-drayton-public-school-district")
+
+    for slug <- ~w(drayton-elementary drayton-high-school warwick-middle-school),
+        do: refute(has_element?(view, "#school-#{slug}"))
 
     refute has_element?(view, "#school-synthetic-non-pilot-school")
   end
@@ -87,15 +88,27 @@ defmodule EmisintWeb.Improvement.AdditionalSchoolsLiveTest do
 
     # Workbook N/A and scores are imported per school.
     assert has_element?(view, "#rating-G1-M1", "Implementation on Track")
-    assert has_element?(view, "#payment-card", "Not configured")
-    assert has_element?(view, "#payment-card", "Estimated payment — not configured")
-    assert has_element?(view, "#payment-card", "No payment terms are set for this school.")
-    refute has_element?(view, "#payment-card", "Provisional, not an actual payment")
+    # The workbook's 18-month terms apply to every participant (November 13, 2026).
+    assert has_element?(view, "#payment-formal-heading", "Estimated payment — provisional terms")
+
+    assert has_element?(
+             view,
+             "#payment-card-note",
+             "Preview only; final payment depends on formal review."
+           )
+
+    assert has_element?(view, "#payment-card-terms", "Provisional terms")
     assert has_element?(view, "#payment-review_36m", "30% / 70%")
-    # Only Fort Yates has the provisional allocations; nothing is assumed here.
-    assert has_element?(view, "#payment-terms", "Not configured")
+    assert has_element?(view, "#payment-review_18m", "$70,000.00")
+    assert has_element?(view, "#payment-review_36m", "Needs confirmation")
+    assert has_element?(view, "#payment-terms", "Performance-Based Payment")
     refute render(view) =~ "$35,000"
-    assert has_element?(view, "#payment-review_18m-estimate", "Not configured")
+
+    assert has_element?(
+             view,
+             "#payment-review_18m-estimate",
+             "Awaiting review: 21 review ratings"
+           )
   end
 
   test "Valley shows N/A ratings and qualitative targets as written", %{conn: conn, admin: admin} do

@@ -1,9 +1,9 @@
 defmodule Emisint.Improvement.TextTargetComparisonsTest do
   @moduledoc """
   Goal-comparison colors beyond Fort Yates: text targets ("< 18%", "55-60%",
-  "< 22% or within 7% State Avg"), Valley Middle's and Drayton's
-  candidate engagement mappings (no verdict), and the participants whose workbook
-  goals stay uncompared (with the reason shown near the measure).
+  "< 22% or within 7% State Avg") and the records whose workbook goals stay
+  uncompared (with the reason shown near the measure). The November 12, 2026
+  mapping decisions are in `goal_comparison_decisions_test.exs`.
   """
   use ExUnit.Case, async: true
 
@@ -98,92 +98,16 @@ defmodule Emisint.Improvement.TextTargetComparisonsTest do
     end
   end
 
-  describe "candidate mappings: Valley G3-M1 and Drayton G4-M1" do
-    test "Drayton G4-M1 shows the value and \"< 18%\" target gray, with the evidence, no verdict" do
-      rows = [engagement(:engagement_overall, "Disengaged", "2024-2025", {"0.25", "0.29"})]
-      plan = plan(Seeds.Drayton)
-
-      for ref <- [:review_18m, :review_36m] do
-        match =
-          ResultGoals.for_filters(rows, filters("2024-2025", ref), plan).engagement[
-            :engagement_overall
-          ]["Disengaged"]
-
-        assert %{code: "G4-M1", status: :gray, tone: :muted, reasons: [:mapping_unconfirmed]} =
-                 match
-
-        assert match.value == "25%–29%"
-        assert match.candidate?
-        assert match.basis =~ "Drayton Goals!D21"
-        assert ResultGoals.short_label(match) == "Gray: candidate mapping, awaiting confirmation"
-
-        assert ResultGoals.explanation(match) =~
-                 "evidence below is to investigate, not a confirmation"
-      end
-
-      m36 =
-        ResultGoals.for_filters(rows, filters("2024-2025", :review_36m), plan).engagement[
-          :engagement_overall
-        ]["Disengaged"]
-
-      # The target is still parsed and shown.
-      assert {:bound, "<", _} = m36.spec
-      assert ResultGoals.goal_line(m36) =~ "36-month target < 18%"
-
-      [note | _] =
-        ResultGoals.section_notes(
-          :engagement,
-          ResultGoals.for_filters(rows, filters("2024-2025", :review_36m), plan).engagement
-        )
-
-      assert note =~ "Candidate mapping, awaiting confirmation"
-      assert note =~ "Evidence to investigate"
-    end
-
-    test "Valley G3-M1 gets no verdict, even where its \"< 22%\" part would be met" do
-      plan = plan(Seeds.ValleyMiddle)
-      rows = [engagement(:engagement_overall, "Disengaged", "2020-2021", "0.18")]
-
-      match =
-        ResultGoals.for_filters(rows, filters("2020-2021", :review_36m), plan).engagement[
-          :engagement_overall
-        ]["Disengaged"]
-
-      assert %{code: "G3-M1", status: :gray, reasons: [:mapping_unconfirmed]} = match
-      assert {:compound, "<", _, "within 7% State Avg"} = match.spec
-      assert match.basis =~ "Valley Goals!D18"
-    end
-
-    test "\"Engaged\" metrics (Drayton G4-M2, Valley G5-M2) aren't mapped, and the notes say why" do
-      rows = [engagement(:engagement_overall, "Committed", "2024-2025", {"0.25", "0.29"})]
-
-      for module <- [Seeds.Drayton, Seeds.ValleyMiddle] do
-        g = ResultGoals.for_filters(rows, filters("2024-2025", :review_36m), plan(module))
-        refute Map.has_key?(g.engagement[:engagement_overall], "Committed")
-        config = ResultGoals.config(module.school())
-        assert config.section_notes.engagement =~ "Not compared"
-        assert config.section_notes.engagement =~ "candidate mapping"
-      end
-
-      assert Map.keys(ResultGoals.config(Seeds.Drayton.school()).candidates) == ["G4-M1"]
-      assert Map.keys(ResultGoals.config(Seeds.ValleyMiddle.school()).candidates) == ["G3-M1"]
-    end
-  end
+  # The candidate mappings (Valley G3-M1, Drayton G4-M1) and the unmapped
+  # "Engaged" metrics were confirmed by the user on November 12, 2026; see
+  # `goal_comparison_decisions_test.exs`.
 
   describe "participants without a supported workbook comparison" do
-    test "Dunseith, Mandaree and Warwick match nothing, and each section says why" do
-      for module <- [Seeds.Dunseith, Seeds.Mandaree, Seeds.Warwick] do
-        config = ResultGoals.config(module.school())
-        assert config.workbook == [], inspect(module)
-        assert is_binary(config.section_notes.engagement)
-        assert is_binary(config.section_notes.achievement)
-      end
-
-      assert ResultGoals.config(Seeds.Dunseith.school()).section_notes.engagement =~
-               "matches no published area value"
-
-      assert ResultGoals.config(Seeds.Warwick.school()).section_notes.achievement =~
-               "relative targets"
+    test "Mandaree matches nothing, and each section says why" do
+      config = ResultGoals.config(Seeds.Mandaree.school())
+      assert config.workbook == []
+      assert is_binary(config.section_notes.engagement)
+      assert is_binary(config.section_notes.achievement)
     end
 
     test "buildings never inherit the district's workbook matches" do

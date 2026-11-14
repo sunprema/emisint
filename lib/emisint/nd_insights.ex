@@ -31,6 +31,7 @@ defmodule Emisint.NdInsights do
 
     resource Emisint.NdInsights.ImportRun do
       define :list_recent_import_runs, action: :recent
+      define :list_recent_import_runs_for, action: :recent, args: [:institution_id]
     end
   end
 end

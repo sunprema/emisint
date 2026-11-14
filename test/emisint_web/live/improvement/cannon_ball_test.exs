@@ -12,7 +12,8 @@ defmodule EmisintWeb.Improvement.CannonBallTest do
   Engagement file. The Solen rows prove they are never imported or shown for
   Cannon Ball.
   """
-  use EmisintWeb.ConnCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use EmisintWeb.ConnCase, async: true, group: :nd_insights_import
 
   import Emisint.ImprovementFixtures
   import Emisint.NdInsightsFixtures
@@ -64,9 +65,15 @@ defmodule EmisintWeb.Improvement.CannonBallTest do
       assert CannonBall.participant_mapping().confirmation =~ "Confirmed by the user"
       assert Seeds.module_for("4300312781") == CannonBall
       assert "4300312781" in Pilot.institution_ids()
-      # Solen district and Solen High School are not ND First records.
+      # The Solen district is not an ND First record. Solen High School is
+      # Cannon Ball's building (user decision, November 12, 2026), not a
+      # ninth participant.
       refute Seeds.module_for("43003")
-      refute Seeds.module_for("4300380363")
+      assert Seeds.module_for("4300380363") == Seeds.SolenHigh
+      assert Seeds.SolenHigh.participant() == CannonBall
+      assert CannonBall.buildings() == [Seeds.SolenHigh]
+      assert length(Pilot.roster()) == 8
+      refute Enum.any?(Pilot.roster(), &(&1.institution_id == "4300380363"))
       assert List.last(Pilot.roster()).name == "Cannon Ball"
     end
 
@@ -114,7 +121,9 @@ defmodule EmisintWeb.Improvement.CannonBallTest do
       assert Decimal.equal?(by[{"2030-2031", :math}], "0.34")
       assert Enum.all?(goals, &(&1.includes_alternate and &1.measure == :proficient_or_advanced))
       assert CannonBall.comparison().annual_years.status == :stated
-      assert CannonBall.comparison().workbook == []
+      # The grade 3–5 and 6–8 goals are grade-group references (November 12, 2026).
+      assert Enum.map(CannonBall.comparison().workbook, &elem(&1, 0)) ==
+               ~w(G1-M1 G1-M2 G1-M4 G1-M5 G2-M4 G2-M5 G2-M1 G2-M2)
     end
   end
 
@@ -180,7 +189,12 @@ defmodule EmisintWeb.Improvement.CannonBallTest do
                "No matching results in the imported data"
              )
 
-      assert has_element?(view, "#payment-card", "not configured")
+      assert has_element?(
+               view,
+               "#payment-summary",
+               "36-month review payment allocation needs confirmation"
+             )
+
       assert html =~ "Cannon Ball Elementary School"
       # Its own 2024-25 Reading Novice (All Grades, Combined): 55%–59%.
       assert html =~ "55%–59%"
@@ -216,7 +230,9 @@ defmodule EmisintWeb.Improvement.CannonBallTest do
       assert length(data.annual) == 6
       assert data.state.has_data
       # Its own 2024-25 Reading Novice (All Grades, Combined); Solen rows are never imported.
-      assert inspect(data) =~ "55%–59%"
+      # No inspect limit: row order isn't fixed, so a truncated inspect could
+      # cut the value off and make this test depend on the seed.
+      assert inspect(data, limit: :infinity, printable_limit: :infinity) =~ "55%–59%"
 
       assert {:ok, "%PDF" <> _, _} =
                NdFirstSchoolPdf.generate(scope(admin, org), "cannon-ball-elementary", params)
@@ -252,9 +268,10 @@ defmodule EmisintWeb.Improvement.CannonBallTest do
       assert_close(cb.columns.sum_26.systems.value, "1.4")
       assert_close(cb.columns.sum_26.outcomes.value, "1.923076923")
 
-      # Payment: the plan's allocations are not configured.
-      assert cb.payment.estimate.status == :no_terms
-      assert Payment.status_text(cb.payment.estimate) == "Not configured"
+      # Payment: the workbook's "Solen" row (Performance-Based Payment row 5) → $70,000 at 18 months.
+      assert cb.payment.estimate.status == :awaiting_review
+      assert Decimal.equal?(cb.payment.estimate.allocation, "70000")
+      assert Payment.status_text(cb.payment.estimate) =~ "Awaiting review: 18 review ratings"
 
       # AVERAGE row over all 8 participants: C = 68 / 8 = 8.5 (Goals Dashboard!C13).
       assert s.average.participants == 8

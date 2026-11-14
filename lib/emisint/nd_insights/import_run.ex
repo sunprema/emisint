@@ -42,6 +42,15 @@ defmodule Emisint.NdInsights.ImportRun do
     end
 
     read :recent do
+      description """
+      The 25 most recent runs. With `institution_id`, only runs that included
+      that InstitutionID; the filter is applied before the limit.
+      """
+
+      argument :institution_id, :string
+
+      filter expr(is_nil(^arg(:institution_id)) or ^arg(:institution_id) in institution_ids)
+
       prepare build(sort: [ran_at: :desc], limit: 25, load: [:imported_by])
     end
   end

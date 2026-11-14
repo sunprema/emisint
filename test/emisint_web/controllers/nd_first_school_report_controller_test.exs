@@ -1,5 +1,6 @@
 defmodule EmisintWeb.NdFirstSchoolReportControllerTest do
-  use EmisintWeb.ConnCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use EmisintWeb.ConnCase, async: true, group: :nd_insights_import
 
   import Emisint.NdInsightsFixtures
 
@@ -185,20 +186,26 @@ defmodule EmisintWeb.NdFirstSchoolReportControllerTest do
       assert row.ela_tone == "neutral"
       assert m4.rating_tone == "neutral"
       assert Enum.map(data.rubric, & &1.tone) == ~w(success info warning error)
-      assert data.payment.label == "Estimated payment — provisional cap and split"
-      assert data.payment.combined == "Awaiting review"
+      assert data.payment.label == "Estimated payment — provisional terms"
+
+      assert data.payment.combined ==
+               "Awaiting review; the 36-month review payment allocation needs confirmation"
+
       assert data.payment.terms_summary =~ "Working assumption, not confirmed contract terms"
-      assert data.payment.terms_summary =~ "$35,000.00 to the 18-month review"
+      assert data.payment.terms_summary =~ "18-month review: up to $70,000.00"
+
+      assert data.payment.terms_summary =~
+               "36-month review: payment allocation needs confirmation"
 
       # The appendix states the provisional sentence once.
       assert data.payment.terms ==
-               "Provisional estimate based on an assumed $70,000 total per school, split equally between the 18-month and 36-month checkpoints. Final payment terms are pending confirmation."
+               "Provisional estimate, not confirmed contract terms. The 18-month amount follows the workbook's “Performance-Based Payment” sheet (rows 4–11, column I: weighted score ÷ 3 × $70,000). No source sets a 36-month payment allocation, so the 36-month review shows its weighted score and its payment allocation needs confirmation."
 
       for text <- ["Ram", "best-estimate", "our selected", "not terms he specified"] do
         refute inspect(data) =~ text
       end
 
-      assert data.payment.terms_summary =~ "$70,000.00 total per school"
+      assert data.payment.terms_summary =~ "18-month review: up to $70,000.00"
       refute data.payment.terms_summary =~ "best-estimate"
       assert data.payment.formula =~ "checkpoint allocation × weighted review score ÷ 3"
       refute Map.has_key?(data.payment, :cap_note)
@@ -493,12 +500,18 @@ defmodule EmisintWeb.NdFirstSchoolReportControllerTest do
 
       assert %{unit: "", source_note: "", baseline: "22%"} = rows["G2-M1"]
       assert %{status: "18-month target 39% · Not compared: no result reported"} = rows["G2-M2"]
-      assert data.payment.combined == "Awaiting review"
-      assert Enum.map(data.averages, & &1.average) == ["0 of 8 scored", "0 of 10 scored"]
+
+      assert data.payment.combined ==
+               "Awaiting review; the 36-month review payment allocation needs confirmation"
+
+      assert Enum.map(data.averages, & &1.average) == [
+               "0 of 8 applicable metrics rated",
+               "0 of 10 applicable metrics rated"
+             ]
 
       assert Enum.map(data.payment.checkpoints, & &1.estimate) == [
-               "Awaiting review: 18 review ratings not recorded",
-               "Awaiting review: 18 review ratings not recorded"
+               "Awaiting review: 18 review ratings not recorded (0 of 18 applicable metrics rated)",
+               "Awaiting review: 18 review ratings not recorded; payment allocation needs confirmation (0 of 18 applicable metrics rated)"
              ]
 
       conn = conn |> log_in(viewer) |> get("#{@report}?period=review_18m")
@@ -544,7 +557,7 @@ defmodule EmisintWeb.NdFirstSchoolReportControllerTest do
           %{"period" => "review_18m"}
         )
 
-      # 3 × 0.70 + 1 × 0.30 = 2.4; 35,000 × 2.4 ÷ 3 = 28,000.
+      # 3 × 0.70 + 1 × 0.30 = 2.4; 70,000 × 2.4 ÷ 3 = 56,000 (the workbook's I column).
       assert [eighteen, thirty_six] = data.payment.checkpoints
 
       assert eighteen == %{
@@ -553,21 +566,27 @@ defmodule EmisintWeb.NdFirstSchoolReportControllerTest do
                outcomes_average: "1.00",
                weights: "70% / 30%",
                weighted: "2.40",
-               allocation: "$35,000.00",
-               estimate: "$28,000.00"
+               allocation: "$70,000.00",
+               estimate: "$56,000.00 (18 of 18 applicable metrics rated)"
              }
 
-      assert thirty_six.estimate == "Awaiting review: 18 review ratings not recorded"
+      assert thirty_six.allocation == "Needs confirmation"
+
+      assert thirty_six.estimate ==
+               "Awaiting review: 18 review ratings not recorded; payment allocation needs confirmation (0 of 18 applicable metrics rated)"
 
       assert data.payment.combined ==
-               "Subtotal $28,000.00 (18-month review only); the total awaits the other review"
+               "Subtotal $56,000.00 (18-month review only); the 36-month review payment allocation needs confirmation"
 
       assert [recorded] = data.payment.estimates
 
       assert recorded =~
-               "18-month review: $28,000.00 · Estimated payment — provisional cap and split"
+               "18-month review: $56,000.00 · Estimated payment — provisional terms"
 
-      assert Enum.map(data.averages, & &1.average) == ["8 of 8 scored", "10 of 10 scored"]
+      assert Enum.map(data.averages, & &1.average) == [
+               "8 of 8 applicable metrics rated",
+               "10 of 10 applicable metrics rated"
+             ]
 
       conn = conn |> log_in(viewer) |> get("#{@report}?period=review_18m")
       assert "%PDF" <> _ = conn.resp_body

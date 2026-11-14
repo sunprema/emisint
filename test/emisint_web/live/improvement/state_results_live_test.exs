@@ -1,5 +1,6 @@
 defmodule EmisintWeb.Improvement.StateResultsLiveTest do
-  use EmisintWeb.ConnCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use EmisintWeb.ConnCase, async: true, group: :nd_insights_import
 
   import Emisint.NdInsightsFixtures
 
@@ -104,7 +105,7 @@ defmodule EmisintWeb.Improvement.StateResultsLiveTest do
       assert has_element?(view, "#period option[selected][value=spr_26]")
       # Seasonal ratings and the payment card are unchanged by state data.
       assert has_element?(view, "#rating-G1-M1", "Some Progress")
-      assert has_element?(view, "#payment-card", "Awaiting review")
+      assert has_element?(view, "#payment-combined-text", "Awaiting review")
     end
 
     test "annual goals compare only with matching published results", %{
@@ -362,9 +363,11 @@ defmodule EmisintWeb.Improvement.StateResultsLiveTest do
 
       assert has_element?(
                view,
-               "details#nd-comparison:not([open]) summary",
+               ~s(#nd-comparison-toggle[aria-expanded="false"]),
                "North Dakota comparison"
              )
+
+      assert has_element?(view, "#nd-comparison-body[hidden]")
 
       assert has_element?(view, "#nd-comparison #engagement-benchmark[data-status=compared]")
 
@@ -507,7 +510,7 @@ defmodule EmisintWeb.Improvement.StateResultsLiveTest do
                "2024-2025 results have no annual goal"
              )
 
-      assert has_element?(view, "details#nd-comparison:not([open])")
+      assert has_element?(view, ~s(#nd-comparison-toggle[aria-expanded="false"]))
       assert has_element?(view, "#state-benchmark-key", "not a goal result or a test")
 
       novice = "#nd-row-achievement-math-6-novice"

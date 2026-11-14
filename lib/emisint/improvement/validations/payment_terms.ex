@@ -1,35 +1,36 @@
 defmodule Emisint.Improvement.Validations.PaymentTerms do
   @moduledoc """
-  Payment terms on a goal plan: when checkpoint allocations are set, both must
-  be set, neither may be negative, and together they must equal the payment
-  cap exactly.
+  Payment terms on a goal plan. Each checkpoint allocation is set on its own
+  (a checkpoint without one is "payment allocation needs confirmation"); a
+  set allocation may not be negative and may not exceed the payment cap
+  (the workbook's "up to $70,000" ceiling) when a cap is set.
+
+  Until November 13, 2026 the two allocations had to be set together and
+  sum to the cap; that encoded the withdrawn $35,000 / $35,000 assumption.
   """
   use Ash.Resource.Validation
 
   @impl true
   def validate(changeset, _opts, _context) do
     cap = Ash.Changeset.get_attribute(changeset, :payment_cap)
-    a18 = Ash.Changeset.get_attribute(changeset, :allocation_18m)
-    a36 = Ash.Changeset.get_attribute(changeset, :allocation_36m)
 
-    cond do
-      is_nil(a18) and is_nil(a36) ->
-        :ok
+    [:allocation_18m, :allocation_36m]
+    |> Enum.map(&{&1, Ash.Changeset.get_attribute(changeset, &1)})
+    |> Enum.find_value(:ok, fn
+      {_field, nil} ->
+        nil
 
-      is_nil(a18) or is_nil(a36) ->
-        {:error,
-         field: :allocation_18m, message: "both checkpoint allocations must be set together"}
+      {field, amount} ->
+        cond do
+          Decimal.negative?(amount) ->
+            {:error, field: field, message: "can't be negative"}
 
-      is_nil(cap) ->
-        {:error, field: :payment_cap, message: "is required when checkpoint allocations are set"}
+          cap != nil and Decimal.compare(amount, cap) == :gt ->
+            {:error, field: field, message: "can't exceed the payment cap (#{cap})"}
 
-      Decimal.compare(Decimal.add(a18, a36), cap) != :eq ->
-        {:error,
-         field: :allocation_18m,
-         message: "checkpoint allocations (#{a18} + #{a36}) must sum to the payment cap (#{cap})"}
-
-      true ->
-        :ok
-    end
+          true ->
+            nil
+        end
+    end)
   end
 end

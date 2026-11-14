@@ -14,7 +14,8 @@ defmodule EmisintWeb.Improvement.ExpansionSchoolsTest do
   copied unchanged from the official 2024-25 Performance, Participation and
   Growth files and the Emotional Engagement file.
   """
-  use EmisintWeb.ConnCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use EmisintWeb.ConnCase, async: true, group: :nd_insights_import
 
   import Emisint.ImprovementFixtures
   import Emisint.NdInsightsFixtures
@@ -106,7 +107,10 @@ defmodule EmisintWeb.Improvement.ExpansionSchoolsTest do
         assert {c.goals, map_size(c.metrics), c.ratings} == {goals, metrics, ratings}, slug
         assert c.annual == %{}, slug
         assert c.plan.payment_cap == Decimal.new("70000")
-        assert c.plan.payment_terms_status == :unconfirmed
+        # The workbook's 18-month terms (November 13, 2026); the 36-month allocation is unset.
+        assert c.plan.payment_terms_status == :provisional
+        assert c.plan.allocation_18m == Decimal.new("70000")
+        assert c.plan.allocation_36m == nil
       end
 
       # Values cite their own cells and keep text verbatim.
@@ -166,16 +170,23 @@ defmodule EmisintWeb.Improvement.ExpansionSchoolsTest do
       assert report.unchanged != []
     end
 
-    test "only candidate workbook mappings are listed (no verdict), and scopes are explicit" do
-      candidates = %{Seeds.ValleyMiddle => ["G3-M1"], Seeds.Drayton => ["G4-M1"]}
+    test "workbook mappings are the confirmed or provisional ones, none a candidate, and scopes are explicit" do
+      # User decisions of November 12, 2026.
+      expected = %{
+        Seeds.ValleyMiddle => {~w(G3-M1 G5-M2), :confirmations},
+        Seeds.Drayton => {~w(G4-M1 G4-M2), :confirmations},
+        Seeds.Dunseith => {~w(G6-M2), :confirmations},
+        Seeds.Warwick => {~w(G2-M6 G3-M1 G3-M2 G4-M1 G4-M2), :provisional}
+      }
 
       for module <- @new_modules do
         config = ResultGoals.config(module.school())
         codes = Enum.map(config.workbook, &elem(&1, 0))
+        {want, key} = Map.get(expected, module, {[], :confirmations})
 
-        # Every listed mapping is a candidate awaiting confirmation.
-        assert codes == Map.get(candidates, module, []), inspect(module)
-        assert Enum.sort(Map.keys(config.candidates)) == codes, inspect(module)
+        assert codes == want, inspect(module)
+        assert config.candidates == %{}, inspect(module)
+        assert Enum.sort(Map.keys(Map.fetch!(config, key))) == Enum.sort(codes), inspect(module)
       end
 
       assert %{kind: :participant, buildings: [Seeds.DraytonElementary, Seeds.DraytonHigh]} =
@@ -202,7 +213,13 @@ defmodule EmisintWeb.Improvement.ExpansionSchoolsTest do
       assert has_element?(view, "#related-drayton-high-school", "Drayton High School")
       assert has_element?(view, "#goals")
       assert has_element?(view, "#metric-G1-M1")
-      assert has_element?(view, "#payment-card", "not configured")
+
+      assert has_element?(
+               view,
+               "#payment-summary",
+               "36-month review payment allocation needs confirmation"
+             )
+
       assert has_element?(view, "#annual-by-building", "Drayton Elementary School")
 
       # District 34019: Approaching Proficiency 50%–54% (the elementary publishes 55%–59%).

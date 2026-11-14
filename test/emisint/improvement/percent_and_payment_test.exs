@@ -60,8 +60,14 @@ defmodule Emisint.Improvement.PercentAndPaymentTest do
                &(&1.status == :awaiting_review and &1.estimate == nil)
              )
 
+      # The 36-month allocation isn't set by any source: said, never treated as $0.
+      [eighteen, thirty_six] = summary.checkpoints
+      refute eighteen.allocation_unconfirmed?
+      assert thirty_six.allocation_unconfirmed?
       assert summary.combined.status == :awaiting_review
-      assert Payment.combined_text(summary.combined) == "Awaiting review"
+
+      assert Payment.combined_text(summary.combined) ==
+               "Awaiting review; the 36-month review payment allocation needs confirmation"
     end
 
     test "uses the confirmed per-checkpoint weights, not one fixed pair" do

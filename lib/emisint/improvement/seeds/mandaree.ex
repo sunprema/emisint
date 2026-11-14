@@ -37,6 +37,11 @@ defmodule Emisint.Improvement.Seeds.Mandaree do
     }
   end
 
+  @doc "Payment terms: the workbook's, shared by every participant (`Seeds.Participant.workbook_payment_terms/0`)."
+  defdelegate payment_terms,
+    to: Emisint.Improvement.Seeds.Participant,
+    as: :workbook_payment_terms
+
   def goal_plan do
     %{
       program: "nd_first_mou",

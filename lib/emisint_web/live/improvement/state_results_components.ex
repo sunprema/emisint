@@ -15,6 +15,8 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
   """
   use EmisintWeb, :html
 
+  import EmisintWeb.Improvement.SectionComponents, only: [collapsible: 1]
+
   alias Emisint.Improvement.{Percent, ResultGoals}
   alias Emisint.NdInsights.{SchoolResults, StateComparison}
 
@@ -61,6 +63,10 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
   attr :annual_goals, :list, default: [], doc: "the school's annual assessment goals"
   attr :import_path, :string, default: nil, doc: "ND Insights import link; shown only when set"
 
+  attr :open, :any,
+    default: nil,
+    doc: "the page's open sections (MapSet of \"state\", \"nd\"); nil: all open"
+
   attr :comparison_pdf_path, :string, default: nil, doc: "PDF export including the comparison"
 
   attr :link_params, :map,
@@ -73,6 +79,8 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
     doc: "the year's North Dakota benchmark rows (SchoolResults.load_benchmark/2)"
 
   def state_results(assigns) do
+    open? = fn section -> assigns.open == nil or MapSet.member?(assigns.open, section) end
+    assigns = assign(assigns, state_open?: open?.("state"), nd_open?: open?.("nd"))
     %{rows: rows} = assigns.state
     %{year: year, type: type, subgroup: subgroup} = assigns.filters
 
@@ -126,24 +134,22 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
       )
 
     ~H"""
-    <section
-      class="bg-base-100 border border-base-200 rounded-xl overflow-hidden scroll-mt-4"
+    <.collapsible
+      tag="section"
       id="state-results"
+      section="state"
+      open?={@state_open?}
+      title="Official state results (ND Insights)"
+      summary={state_summary(assigns)}
     >
+      <:actions :if={@import_path}>
+        <.link navigate={@import_path} class="btn btn-sm btn-outline" id="nd-import-link">
+          <.icon name="hero-arrow-up-tray" class="size-4" /> Import ND Insights data
+        </.link>
+      </:actions>
       <div class="px-4 py-3 border-b border-base-200 space-y-3">
         <div>
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="font-semibold">Official state results (ND Insights)</h2>
-            <.link
-              :if={@import_path}
-              navigate={@import_path}
-              class="btn btn-sm btn-outline"
-              id="nd-import-link"
-            >
-              <.icon name="hero-arrow-up-tray" class="size-4" /> Import ND Insights data
-            </.link>
-          </div>
-          <p class="text-sm text-base-content/60 mt-1">
+          <p class="text-sm text-base-content/60">
             Annual results published by the state. They are separate from seasonal implementation
             ratings and are not assigned to a reporting period.
             <a href={@school_page} target="_blank" rel="noopener noreferrer" class="link link-primary">
@@ -268,14 +274,18 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
             {@config.section_notes[:achievement]}
           </p>
           <p
-            :if={
-              @filters.type != "Comp" and @metrics != [] and
-                @config.assumptions[:assessment_type] == "Comp"
-            }
+            :if={ResultGoals.participant_goals_unavailable(@config, @metrics)}
+            class="text-xs text-base-content/60"
+            id="participant-goals-unavailable"
+          >
+            {ResultGoals.participant_goals_unavailable(@config, @metrics)}
+          </p>
+          <p
+            :if={ResultGoals.assessment_view_note(@config, @filters.type, @metrics != [])}
             class="text-xs text-base-content/60"
             id="achievement-type-note"
           >
-            Workbook targets are compared only in the Combined assessment view (demo assumption).
+            {ResultGoals.assessment_view_note(@config, @filters.type, @metrics != [])}
           </p>
           <p
             :if={@filters.year not in @annual_goal_years}
@@ -438,8 +448,12 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
                   <td :for={{measure, _} <- SchoolResults.growth_levels()}>
                     <.state_value result={row.levels[measure]} />
                   </td>
-                  <td class="border-l border-base-200">
+                  <td class={[
+                    "border-l border-base-200",
+                    goal_class(goal(@goals, :growth, row, :meets_or_exceeds))
+                  ]}>
                     <.derived value={row.meets_or_exceeds} />
+                    <.goal_mark m={goal(@goals, :growth, row, :meets_or_exceeds)} />
                   </td>
                   <td
                     :for={measure <- ~w(OverallGrowthLevel OverallGrowthPercentile)}
@@ -512,84 +526,6 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
           </p>
         </div>
 
-        <details class="p-4 group" id="nd-comparison">
-          <summary class="cursor-pointer font-medium">
-            North Dakota comparison
-            <span class="text-xs font-normal text-base-content/60">
-              · optional context, not a goal status
-            </span>
-          </summary>
-          <div class="mt-2 space-y-2 text-xs text-base-content/70">
-            <.nd_legend benchmark?={@compared.benchmark?} year={@filters.year} />
-            <.coverage_note
-              notes={StateComparison.coverage_notes(@compared, :achievement)}
-              id="achievement-coverage"
-              section="Achievement"
-            />
-            <.coverage_note
-              notes={StateComparison.coverage_notes(@compared, :growth)}
-              id="growth-coverage"
-              section="Growth"
-            />
-            <.survey_benchmark
-              :if={@engagement != []}
-              note={StateComparison.survey_note(@compared.survey_benchmark)}
-            />
-            <p :if={@compared.benchmark?} id="state-benchmark-key">
-              Every rated measure, with the matching statewide value (same year, subject, grade,
-              assessment type and student group) and the reason for its color. Only lower Novice,
-              Does not meet and Disengaged, and higher Advanced, Proficient or Advanced, Exceeds,
-              Meets or Exceeds, Overall growth percentile and Committed are rated. This compares
-              published values; it is not a goal result or a test of statistical significance.
-            </p>
-            <p :if={!@compared.benchmark?} id="state-benchmark-missing">
-              No North Dakota benchmark rows have been imported for {@filters.year}. Importing an
-              Insights file that includes the “State of North Dakota” rows adds them.
-            </p>
-            <div :if={@comparison_rows != []} class="overflow-x-auto">
-              <table class="table table-xs w-full" id="nd-comparison-table">
-                <thead>
-                  <tr class="bg-base-200/60 text-base-content/70 uppercase tracking-wide">
-                    <th>Section</th>
-                    <th>Subject</th>
-                    <th>Grade</th>
-                    <th>Measure</th>
-                    <th>This school</th>
-                    <th>North Dakota</th>
-                    <th>Comparison</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={r <- @comparison_rows} id={comparison_row_id(r)}>
-                    <td>{section_label(r.section)}</td>
-                    <td>{subject_label(r.subject)}</td>
-                    <td>{r.grade}</td>
-                    <td>{r.measure}</td>
-                    <td class={["whitespace-nowrap", "nd-cell-#{r.tone}"]}>{r.school}</td>
-                    <td class="whitespace-nowrap">{r.state || "—"}</td>
-                    <td class={["min-w-64 whitespace-normal", "nd-cell-#{r.tone}"]}>
-                      <span class={["font-medium", mark_text(r.tone)]}>
-                        <span aria-hidden="true">{mark_symbol(r.tone)}</span> {r.label}
-                      </span>
-                      <span class="block text-base-content/70">{r.explanation}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <a
-              :if={@compared.benchmark? and @comparison_pdf_path}
-              href={@comparison_pdf_path}
-              target="_blank"
-              rel="noopener"
-              class="link link-primary"
-              id="nd-comparison-pdf"
-            >
-              Export PDF including the North Dakota comparison
-            </a>
-          </div>
-        </details>
-
         <div class="p-4 text-xs text-base-content/60 space-y-2" id="state-sources">
           <div>
             “Not published” means the state's download has no row for that group. Insights notes:
@@ -625,7 +561,87 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
           </div>
         </div>
       </div>
-    </section>
+    </.collapsible>
+
+    <.collapsible
+      :if={@state.years != []}
+      tag="section"
+      id="nd-comparison"
+      section="nd"
+      open?={@nd_open?}
+      title="North Dakota comparison"
+      summary={nd_summary(assigns)}
+    >
+      <div class="p-4 space-y-2 text-xs text-base-content/70">
+        <.nd_legend benchmark?={@compared.benchmark?} year={@filters.year} />
+        <.coverage_note
+          notes={StateComparison.coverage_notes(@compared, :achievement)}
+          id="achievement-coverage"
+          section="Achievement"
+        />
+        <.coverage_note
+          notes={StateComparison.coverage_notes(@compared, :growth)}
+          id="growth-coverage"
+          section="Growth"
+        />
+        <.survey_benchmark
+          :if={@engagement != []}
+          note={StateComparison.survey_note(@compared.survey_benchmark)}
+        />
+        <p :if={@compared.benchmark?} id="state-benchmark-key">
+          Every rated measure, with the matching statewide value (same year, subject, grade,
+          assessment type and student group) and the reason for its color. Only lower Novice,
+          Does not meet and Disengaged, and higher Advanced, Proficient or Advanced, Exceeds,
+          Meets or Exceeds, Overall growth percentile and Committed are rated. This compares
+          published values; it is not a goal result or a test of statistical significance.
+        </p>
+        <p :if={!@compared.benchmark?} id="state-benchmark-missing">
+          No North Dakota benchmark rows have been imported for {@filters.year}. Importing an
+          Insights file that includes the “State of North Dakota” rows adds them.
+        </p>
+        <div :if={@comparison_rows != []} class="overflow-x-auto">
+          <table class="table table-xs w-full" id="nd-comparison-table">
+            <thead>
+              <tr class="bg-base-200/60 text-base-content/70 uppercase tracking-wide">
+                <th>Section</th>
+                <th>Subject</th>
+                <th>Grade</th>
+                <th>Measure</th>
+                <th>This school</th>
+                <th>North Dakota</th>
+                <th>Comparison</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={r <- @comparison_rows} id={comparison_row_id(r)}>
+                <td>{section_label(r.section)}</td>
+                <td>{subject_label(r.subject)}</td>
+                <td>{r.grade}</td>
+                <td>{r.measure}</td>
+                <td class={["whitespace-nowrap", "nd-cell-#{r.tone}"]}>{r.school}</td>
+                <td class="whitespace-nowrap">{r.state || "—"}</td>
+                <td class={["min-w-64 whitespace-normal", "nd-cell-#{r.tone}"]}>
+                  <span class={["font-medium", mark_text(r.tone)]}>
+                    <span aria-hidden="true">{mark_symbol(r.tone)}</span> {r.label}
+                  </span>
+                  <span class="block text-base-content/70">{r.explanation}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <a
+          :if={@compared.benchmark? and @comparison_pdf_path}
+          href={@comparison_pdf_path}
+          target="_blank"
+          rel="noopener"
+          class="link link-primary"
+          id="nd-comparison-pdf"
+        >
+          Export PDF including the North Dakota comparison
+        </a>
+      </div>
+    </.collapsible>
     """
   end
 
@@ -676,6 +692,45 @@ defmodule EmisintWeb.Improvement.StateResultsComponents do
     </div>
     """
   end
+
+  # The state results header: what is shown and how its goal colors fall.
+  defp state_summary(%{state: %{years: []}}), do: "No official state results imported."
+
+  defp state_summary(assigns) do
+    marks =
+      for {_section, by} <- assigns.goals, {_key, ms} <- by, {_m, m} <- ms, do: m.tone
+
+    counts = Enum.frequencies(marks)
+
+    colors =
+      [
+        {counts[:success], "meet"},
+        {counts[:error], "miss"},
+        {counts[:warning], "overlap"},
+        {counts[:muted], "gray"}
+      ]
+      |> Enum.reject(fn {n, _} -> n in [nil, 0] end)
+      |> Enum.map_join(", ", fn {n, word} -> "#{n} #{word}" end)
+
+    goals =
+      case marks do
+        [] ->
+          "no goal comparisons"
+
+        _ ->
+          "#{length(marks)} goal #{if length(marks) == 1, do: "comparison", else: "comparisons"} (#{colors})"
+      end
+
+    "#{assigns.filters.year} · #{assigns.type_label} · #{assigns.subgroup_label} · #{goals}."
+  end
+
+  # The North Dakota comparison header: how many measures are compared.
+  defp nd_summary(%{compared: %{benchmark?: false}, filters: f}),
+    do: "No North Dakota benchmark rows imported for #{f.year}."
+
+  defp nd_summary(%{comparison_rows: rows, filters: f}),
+    do:
+      "#{length(rows)} #{if length(rows) == 1, do: "measure", else: "measures"} compared with the statewide value for #{f.year}, using the state results filters · optional context, not a goal status."
 
   defp type_label(code) do
     case List.keyfind(SchoolResults.assessment_types(), code, 0) do

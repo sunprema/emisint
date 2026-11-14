@@ -6,37 +6,102 @@ defmodule EmisintWeb.Improvement.PortfolioComponents do
   """
   use EmisintWeb, :html
 
-  alias Emisint.Improvement.{Display, Payment, Portfolio, Rubric}
+  import EmisintWeb.Improvement.SectionComponents, only: [collapsible: 1]
+
+  alias Emisint.Improvement.{Display, Payment, PaymentPreview, Portfolio, Rubric}
 
   @early [:spr_26, :sum_26, :fal_26, :check_18m]
   @later [:win_27, :spr_27, :sum_27, :fal_27, :win_28, :spr_28]
 
   attr :summary, :map, required: true
 
+  attr :payment, :map,
+    default: nil,
+    doc:
+      "`%{view: :preview | :formal, preview: PaymentPreview.build/3 result}`; nil shows the formal view"
+
+  attr :open, :any,
+    default: nil,
+    doc: "the expanded detail sections (a MapSet of \"progress\", \"payment\"); nil: all open"
+
   def portfolio(assigns) do
     headings = Map.new(Portfolio.progress_columns(), fn {k, h, _c, _kind} -> {k, h} end)
-    assigns = assign(assigns, headings: headings, early: @early, later: @later)
+    open? = fn section -> assigns.open == nil or MapSet.member?(assigns.open, section) end
+
+    assigns =
+      assign(assigns,
+        headings: headings,
+        early: @early,
+        later: @later,
+        latest: latest_average(assigns.summary),
+        progress_open?: open?.("progress"),
+        payment_open?: open?.("payment")
+      )
 
     ~H"""
     <section id="portfolio" class="space-y-6">
-      <div class="space-y-1">
-        <h2 class="text-lg font-semibold">Portfolio</h2>
-        <p class="text-sm text-base-content/70 max-w-3xl" id="portfolio-scope">
-          One row per ND FIRST participant, from the workbook's “Goals Dashboard” and
-          “Performance-Based Payment” sheets. District participants appear once; their
-          buildings' pages add no rows or ratings. Showing {@summary.coverage.loaded} of {@summary.coverage.listed} listed participants with data you can view.
-        </p>
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div class="space-y-1">
+          <h2 class="text-lg font-semibold">Portfolio</h2>
+          <p class="text-sm text-base-content/70" id="portfolio-scope">
+            One row per participant; buildings add no rows. Showing {@summary.coverage.loaded} of {@summary.coverage.listed} participants you can view.
+          </p>
+        </div>
+        <div :if={@open} class="flex gap-2" id="portfolio-section-controls">
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost"
+            phx-click="sections"
+            phx-value-to="expand"
+            id="sections-expand-all"
+            disabled={@progress_open? and @payment_open?}
+          >
+            <.icon name="hero-chevron-double-down" class="size-4" /> Expand all
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost"
+            phx-click="sections"
+            phx-value-to="collapse"
+            id="sections-collapse-all"
+            disabled={!@progress_open? and !@payment_open?}
+          >
+            <.icon name="hero-chevron-double-up" class="size-4" /> Collapse all
+          </button>
+        </div>
       </div>
 
-      <%!-- Goals Dashboard --%>
-      <div class="bg-base-100 border border-base-200 rounded-xl p-4 space-y-3" id="portfolio-progress">
-        <div class="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 class="font-semibold">Overall Goal Progress — Average Rubric Score</h3>
-          <span class="text-xs text-base-content/60">
-            Seasonal implementation ratings and formal review checks (0–3)
-          </span>
+      <dl class="grid grid-cols-2 md:grid-cols-4 gap-3" id="portfolio-glance">
+        <div class="bg-base-100 border border-base-200 rounded-xl p-3">
+          <dt class="text-xs text-base-content/60">Participants shown</dt>
+          <dd class="text-lg font-semibold tabular-nums" id="glance-participants">
+            {@summary.coverage.loaded} of {@summary.coverage.listed}
+          </dd>
         </div>
+        <div class="bg-base-100 border border-base-200 rounded-xl p-3">
+          <dt class="text-xs text-base-content/60">Latest seasonal ratings</dt>
+          <dd class="text-lg font-semibold" id="glance-period">
+            {if @latest, do: @latest.heading, else: "None recorded"}
+          </dd>
+        </div>
+        <div class="bg-base-100 border border-base-200 rounded-xl p-3">
+          <dt class="text-xs text-base-content/60">Systems average</dt>
+          <dd id="glance-systems"><.glance a={@latest && @latest.systems} /></dd>
+        </div>
+        <div class="bg-base-100 border border-base-200 rounded-xl p-3">
+          <dt class="text-xs text-base-content/60">Student Outcomes average</dt>
+          <dd id="glance-outcomes"><.glance a={@latest && @latest.outcomes} /></dd>
+        </div>
+      </dl>
 
+      <%!-- Goals Dashboard --%>
+      <.section
+        id="portfolio-progress"
+        section="progress"
+        open?={@progress_open?}
+        title="Overall Goal Progress — Average Rubric Score"
+        summary={progress_summary(@latest)}
+      >
         <div class="overflow-x-auto">
           <table class="table table-sm" id="portfolio-progress-table">
             <thead>
@@ -134,13 +199,16 @@ defmodule EmisintWeb.Improvement.PortfolioComponents do
             {score} — {label} ({band_range(score)})
           </span>
           <span class="text-base-content/60">
-            “—” no scored ratings (missing, never zero) · “6/7” only 6 of 7 metrics scored
+            “—” no scored ratings (missing, never zero) · “6/7” 6 of 7 applicable metrics rated · “1 N/A” explicitly not applicable, left out
           </span>
         </div>
 
         <details class="text-sm text-base-content/70" id="portfolio-progress-how">
           <summary class="cursor-pointer text-primary">How these are calculated</summary>
           <ul class="list-disc pl-5 mt-2 space-y-1">
+            <li>
+              Source: the workbook's “Goals Dashboard” sheet, one row per ND FIRST participant. District participants appear once; their buildings' pages add no rows or ratings.
+            </li>
             <li>
               Metric counts: the plan's Systems and Student Outcome metrics (workbook <span class="font-mono">COUNTIF</span>).
             </li>
@@ -170,85 +238,403 @@ defmodule EmisintWeb.Improvement.PortfolioComponents do
             </li>
           </ul>
         </details>
-      </div>
+      </.section>
 
-      <%!-- Performance-Based Payment --%>
-      <div class="bg-base-100 border border-base-200 rounded-xl p-4 space-y-3" id="portfolio-payment">
-        <div class="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 class="font-semibold">Performance Based Payments (18-month review)</h3>
-          <span class="text-xs text-base-content/60">
-            Formal 18-month review ratings only · estimates, not payments
-          </span>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="table table-sm" id="portfolio-payment-table">
-            <thead>
-              <tr>
-                <th>Participant</th>
-                <th class="text-right">18-month Systems score</th>
-                <th class="text-right">Systems Weighted (70%)</th>
-                <th class="text-right">Outcomes Score</th>
-                <th class="text-right">Outcomes Weighted (30%)</th>
-                <th class="text-right">Overall Weighted Score</th>
-                <th class="text-right">Performance %</th>
-                <th>18-month estimated payment</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={r <- @summary.rows} id={"portfolio-payment-row-#{row_id(r)}"}>
-                <th class="font-medium"><.participant row={r} links?={false} /></th>
-                <%= if r.status == :loaded do %>
-                  <td class="text-right">
-                    <.avg a={r.payment.systems_score} id={"#{row_id(r)}-pay-systems"} />
-                  </td>
-                  <td class="text-right tabular-nums">
-                    <.plain value={r.payment.systems_weighted} />
-                  </td>
-                  <td class="text-right">
-                    <.avg a={r.payment.outcomes_score} id={"#{row_id(r)}-pay-outcomes"} />
-                  </td>
-                  <td class="text-right tabular-nums">
-                    <.plain value={r.payment.outcomes_weighted} />
-                  </td>
-                  <td class="text-right tabular-nums"><.plain value={r.payment.overall} /></td>
-                  <td class="text-right tabular-nums">
-                    {Portfolio.percent(r.payment.performance) || "—"}
-                  </td>
-                  <td id={"#{row_id(r)}-estimate"} class="text-sm">
-                    <span class={estimate_class(r.payment.estimate)}>
-                      {Payment.status_text(r.payment.estimate)}
-                    </span>
-                  </td>
-                <% else %>
-                  <td colspan="7" class="text-base-content/60"><.row_note row={r} /></td>
-                <% end %>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="text-xs text-base-content/60">
-          No portfolio payment total is shown: the workbook's payment sheet has no total row.
-        </p>
-        <details class="text-sm text-base-content/70" id="portfolio-payment-how">
-          <summary class="cursor-pointer text-primary">How these are calculated</summary>
-          <ul class="list-disc pl-5 mt-2 space-y-1">
-            <li>
-              Scores: the mean of each category's current formal 18-month review ratings (workbook
-              <span class="font-mono">AVERAGEIF</span>
-              on the review column). Seasonal ratings never feed payment.
-            </li>
-            <li>
-              Weighted: Systems × 70% and Outcomes × 30%; the overall score is their sum, shown only when both exist. Performance % = overall ÷ 3.
-            </li>
-            <li>
-              Estimated payment: the school dashboard's existing estimate, {Payment.formula()}. It uses each plan's 18-month allocation instead of the workbook's single $70,000 and needs every metric's review rating, so it shows “Awaiting review” until all are recorded and “Not configured” where the plan has no payment terms.
-            </li>
-          </ul>
-        </details>
-      </div>
+      <.section
+        id="portfolio-payment-section"
+        section="payment"
+        open?={@payment_open?}
+        title="Performance-based payment"
+        summary={payment_summary(@payment)}
+      >
+        <.payment_views summary={@summary} payment={@payment} />
+      </.section>
     </section>
     """
   end
+
+  attr :id, :string, required: true
+  attr :section, :string, required: true, doc: "the `open` param value"
+  attr :open?, :boolean, required: true
+  attr :title, :string, required: true
+  attr :summary, :string, default: nil
+  slot :inner_block, required: true
+
+  # A collapsible detail section (`SectionComponents.collapsible/1`).
+  defp section(assigns) do
+    ~H"""
+    <.collapsible
+      id={@id}
+      section={@section}
+      open?={@open?}
+      title={@title}
+      summary={@summary}
+      heading="h3"
+    >
+      <div class="space-y-3 p-4">{render_slot(@inner_block)}</div>
+    </.collapsible>
+    """
+  end
+
+  attr :a, :map, default: nil
+
+  defp glance(assigns) do
+    ~H"""
+    <span
+      :if={!@a || !@a.value}
+      class="text-sm text-base-content/60"
+      data-missing
+    >
+      No scored ratings
+    </span>
+    <span :if={@a && @a.value}>
+      <span class={["badge tabular-nums", band_class(Portfolio.band(@a.value))]}>
+        {Portfolio.number(@a.value)}
+      </span>
+      <span class="block text-xs text-base-content/60">
+        AVERAGE of {@a.of} {if @a.of == 1, do: "participant", else: "participants"}
+      </span>
+    </span>
+    """
+  end
+
+  # The latest seasonal column (Spr '26, Sum '26, Fal '26) with any average
+  # in the AVERAGE row: `%{heading, systems, outcomes}`, or nil.
+  defp latest_average(summary) do
+    headings = Map.new(Portfolio.progress_columns(), fn {k, h, _c, _kind} -> {k, h} end)
+
+    @early
+    |> Enum.reject(&(&1 == :check_18m))
+    |> Enum.reverse()
+    |> Enum.find_value(fn k ->
+      col = summary.average.columns[k]
+
+      if col.systems.value || col.outcomes.value,
+        do: %{heading: headings[k], systems: col.systems, outcomes: col.outcomes}
+    end)
+  end
+
+  defp progress_summary(nil),
+    do: "No seasonal ratings recorded yet; formal 18- and 36-month checks inside."
+
+  defp progress_summary(latest),
+    do:
+      "Seasonal ratings through #{latest.heading}, formal 18- and 36-month checks and later periods (0–3 rubric)."
+
+  # The payment section header: the selected view and what it currently shows.
+  defp payment_summary(nil), do: nil
+
+  defp payment_summary(%{view: :formal}),
+    do: "Formal review: estimates from formal 18-month review ratings only."
+
+  defp payment_summary(%{preview: %{period: nil}}),
+    do: "Current ratings preview: no period with ratings yet."
+
+  defp payment_summary(%{preview: p}) do
+    tones =
+      p.rows
+      |> Enum.filter(&(&1.status == :loaded))
+      |> Enum.frequencies_by(&elem(PaymentPreview.payment_text(&1), 0))
+
+    parts =
+      [
+        {Map.get(tones, :amount, 0), "estimated"},
+        {Map.get(tones, :withheld, 0), "withheld (ratings incomplete)"},
+        {Map.get(tones, :no_terms, 0), "payment terms not configured"},
+        {Map.get(tones, :allocation_unconfirmed, 0), "payment allocation needs confirmation"}
+      ]
+      |> Enum.reject(fn {n, _} -> n == 0 end)
+      |> Enum.map_join(" · ", fn {n, text} -> "#{n} #{text}" end)
+
+    "Current ratings preview, #{p.period.label}, #{p.checkpoint_label}: #{parts}. Preview only."
+  end
+
+  attr :summary, :map, required: true
+  attr :payment, :map, default: nil
+
+  # The two payment views, clearly separated: the current-ratings preview
+  # (default) and the formal-review table (unchanged).
+  defp payment_views(assigns) do
+    assigns = assign(assigns, view: (assigns.payment && assigns.payment.view) || :formal)
+
+    ~H"""
+    <div class="space-y-3" id="portfolio-payment-views">
+      <div role="tablist" class="tabs tabs-box w-fit" id="payment-view-tabs">
+        <.link
+          :if={@payment}
+          patch={@payment.path.(%{"pay" => "preview"})}
+          role="tab"
+          class={["tab", @view == :preview && "tab-active"]}
+          aria-selected={to_string(@view == :preview)}
+          id="payment-view-preview"
+        >
+          Current ratings preview
+        </.link>
+        <.link
+          :if={@payment}
+          patch={@payment.path.(%{"pay" => "formal"})}
+          role="tab"
+          class={["tab", @view == :formal && "tab-active"]}
+          aria-selected={to_string(@view == :formal)}
+          id="payment-view-formal"
+        >
+          Formal review
+        </.link>
+      </div>
+      <.preview_payment :if={@view == :preview} preview={@payment.preview} path={@payment.path} />
+      <.formal_payment :if={@view == :formal} summary={@summary} />
+    </div>
+    """
+  end
+
+  attr :summary, :map, required: true
+
+  # The formal-review payment table (behavior unchanged).
+  defp formal_payment(assigns) do
+    ~H"""
+    <div class="space-y-3" id="portfolio-payment">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <h4 class="font-semibold">Performance Based Payments (18-month review)</h4>
+        <span class="text-xs text-base-content/60">
+          Formal 18-month review ratings only · estimates, not payments
+        </span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table table-sm" id="portfolio-payment-table">
+          <thead>
+            <tr>
+              <th>Participant</th>
+              <th class="text-right">18-month Systems score</th>
+              <th class="text-right">Systems Weighted (70%)</th>
+              <th class="text-right">Outcomes Score</th>
+              <th class="text-right">Outcomes Weighted (30%)</th>
+              <th class="text-right">Overall Weighted Score</th>
+              <th class="text-right">Performance %</th>
+              <th>18-month estimated payment</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={r <- @summary.rows} id={"portfolio-payment-row-#{row_id(r)}"}>
+              <th class="font-medium"><.participant row={r} links?={false} /></th>
+              <%= if r.status == :loaded do %>
+                <td class="text-right">
+                  <.avg a={r.payment.systems_score} id={"#{row_id(r)}-pay-systems"} />
+                </td>
+                <td class="text-right tabular-nums">
+                  <.plain value={r.payment.systems_weighted} />
+                </td>
+                <td class="text-right">
+                  <.avg a={r.payment.outcomes_score} id={"#{row_id(r)}-pay-outcomes"} />
+                </td>
+                <td class="text-right tabular-nums">
+                  <.plain value={r.payment.outcomes_weighted} />
+                </td>
+                <td class="text-right tabular-nums"><.plain value={r.payment.overall} /></td>
+                <td class="text-right tabular-nums">
+                  {Portfolio.percent(r.payment.performance) || "—"}
+                </td>
+                <td id={"#{row_id(r)}-estimate"} class="text-sm">
+                  <span class={estimate_class(r.payment.estimate)}>
+                    {Payment.status_text(r.payment.estimate)}
+                  </span>
+                </td>
+              <% else %>
+                <td colspan="7" class="text-base-content/60"><.row_note row={r} /></td>
+              <% end %>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <details class="text-sm text-base-content/70" id="portfolio-payment-how">
+        <summary class="cursor-pointer text-primary">How these are calculated</summary>
+        <ul class="list-disc pl-5 mt-2 space-y-1">
+          <li>
+            Source: the workbook's “Performance-Based Payment” sheet. No portfolio payment total is shown: the sheet has no total row.
+          </li>
+          <li>
+            Scores: the mean of each category's current formal 18-month review ratings (workbook
+            <span class="font-mono">AVERAGEIF</span>
+            on the review column). Seasonal ratings never feed payment.
+          </li>
+          <li>
+            Weighted: Systems × 70% and Outcomes × 30%; the overall score is their sum, shown only when both exist. Performance % = overall ÷ 3.
+          </li>
+          <li>
+            Estimated payment: the school dashboard's existing estimate, {Payment.formula()}, with the workbook's $70,000 18-month allocation (the same for every participant, rows 4–11). Unlike the workbook's blank-skipping average, it needs every metric's review rating, so it shows “Awaiting review” until all are recorded.
+          </li>
+        </ul>
+      </details>
+    </div>
+    """
+  end
+
+  attr :preview, :map, required: true
+  attr :path, :any, required: true
+
+  defp preview_payment(assigns) do
+    ~H"""
+    <div class="space-y-3" id="portfolio-preview">
+      <div class="space-y-1">
+        <h4 class="font-semibold">Estimated payment based on current ratings.</h4>
+        <p
+          class="text-sm font-medium text-warning-content bg-warning/15 rounded px-2 py-1 w-fit"
+          id="preview-disclaimer"
+        >
+          Preview only. Final payment depends on formal review.
+        </p>
+      </div>
+
+      <form phx-change="preview" class="flex flex-wrap items-end gap-3" id="preview-form">
+        <label class="form-control">
+          <span class="label-text text-xs">Reporting period (same for every participant)</span>
+          <select name="pay_period" class="select select-sm select-bordered" id="preview-period">
+            <option :if={@preview.period == nil} value="" selected>No period with ratings</option>
+            <option
+              :for={p <- @preview.periods}
+              value={p.code}
+              selected={@preview.period && p.code == @preview.period.code}
+            >
+              {p.label}{if p.rated?, do: "", else: " (no ratings yet)"}
+            </option>
+          </select>
+        </label>
+        <label class="form-control">
+          <span class="label-text text-xs">Checkpoint weights</span>
+          <select name="pay_ref" class="select select-sm select-bordered" id="preview-checkpoint">
+            <option
+              :for={{param, checkpoint, label} <- PaymentPreview.checkpoints()}
+              value={param}
+              selected={checkpoint == @preview.checkpoint}
+            >
+              {label}
+            </option>
+          </select>
+        </label>
+        <p class="text-xs text-base-content/70 pb-1" id="preview-weights">
+          {@preview.checkpoint_label}: Systems {Portfolio.percent(@preview.weights.systems)} · Student Outcomes {Portfolio.percent(
+            @preview.weights.outcomes
+          )}
+        </p>
+      </form>
+
+      <div class="overflow-x-auto">
+        <table class="table table-sm" id="preview-table">
+          <thead>
+            <tr>
+              <th>Participant</th>
+              <th class="text-right">Systems average</th>
+              <th class="text-right">Outcomes average</th>
+              <th class="text-right">Rating coverage</th>
+              <th class="text-right">
+                Weighted score <span class="block font-normal text-[11px]">0–3</span>
+              </th>
+              <th>
+                Estimated payment
+                <span class="block font-normal text-[11px]">{@preview.checkpoint_label}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={r <- @preview.rows} id={"preview-row-#{r.slug}"} data-status={r.status}>
+              <th class="font-medium align-top"><.participant row={r} links?={false} /></th>
+              <%= if r.status == :loaded do %>
+                <td class="text-right align-top">
+                  <.preview_avg a={r.systems} id={"preview-#{r.slug}-systems"} />
+                </td>
+                <td class="text-right align-top">
+                  <.preview_avg a={r.outcomes} id={"preview-#{r.slug}-outcomes"} />
+                </td>
+                <td class="text-right align-top text-sm" id={"preview-#{r.slug}-coverage"}>
+                  <span class="tabular-nums">
+                    {r.coverage.rated} of {r.coverage.applicable} applicable metrics rated
+                  </span>
+                  <span :if={r.coverage.na > 0} class="block text-xs text-base-content/60">
+                    {r.coverage.na} N/A excluded
+                  </span>
+                  <span :if={r.coverage.recorded == 0} class="block text-xs text-base-content/60">
+                    No ratings recorded for {r.period.label}
+                  </span>
+                  <span :if={r.coverage.unavailable > 0} class="block text-xs text-base-content/60">
+                    {r.coverage.unavailable} marked unavailable
+                  </span>
+                </td>
+                <td class="text-right align-top" id={"preview-#{r.slug}-weighted"}>
+                  <span :if={r.weighted} class="tabular-nums">{Portfolio.number(r.weighted)}</span>
+                  <span
+                    :if={r.weighted && !r.complete?}
+                    class="block text-[11px] text-base-content/60"
+                  >
+                    partial
+                  </span>
+                  <span :if={!r.weighted} class="text-xs text-base-content/60" data-missing>
+                    {PaymentPreview.weighted_reason(r)}
+                  </span>
+                </td>
+                <td class="align-top text-sm" id={"preview-#{r.slug}-payment"}>
+                  <% {tone, text} = PaymentPreview.payment_text(r) %>
+                  <span
+                    class={[
+                      tone == :amount && "font-medium",
+                      tone != :amount && "text-base-content/70"
+                    ]}
+                    data-payment={tone}
+                  >
+                    {text}
+                  </span>
+                  <span
+                    :if={r.provisional_terms?}
+                    class="block text-[11px] text-warning"
+                    id={"preview-#{r.slug}-provisional"}
+                  >
+                    Provisional payment terms
+                  </span>
+                </td>
+              <% else %>
+                <td colspan="5" class="text-sm text-base-content/60">
+                  {PaymentPreview.row_reason(r.status, @preview.period)}
+                </td>
+              <% end %>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details class="text-sm text-base-content/70" id="preview-how">
+        <summary class="cursor-pointer text-primary">How these are calculated</summary>
+        <ul class="list-disc pl-5 mt-2 space-y-1">
+          <li>
+            Inputs: each participant's current seasonal implementation ratings for the selected period, the same period for everyone. A participant without ratings in that period shows so; no other period is used. ND Insights comparison colors are never ratings.
+          </li>
+          <li>
+            Averages: the mean of each category's numeric ratings. An explicit 0 counts. A metric explicitly rated N/A is left out of the average and of the required count. A missing or unavailable rating is also left out of the average but still counts as required, so the amount is withheld (never zero). If a category has no numeric rating, the estimate is unavailable; its weight is never moved to the other category.
+          </li>
+          <li>
+            Weighted score: Systems average × Systems weight + Student Outcomes average × Student Outcomes weight (18-month 70% / 30%; 36-month 30% / 70%), shown when both averages exist and marked partial when ratings are missing.
+          </li>
+          <li>
+            Estimated payment: the existing formula, {Payment.formula()}, with each plan's own allocation for the selected checkpoint. It is withheld until every metric has a scored rating, and shows “Payment terms not configured” where the plan has none.
+          </li>
+          <li>
+            One row per participant: buildings (including Solen High School) add no row or rating. Nothing here is saved: no review rating, payment record or estimate is created.
+          </li>
+        </ul>
+      </details>
+    </div>
+    """
+  end
+
+  attr :a, :map, required: true
+  attr :id, :string, required: true
+
+  defp preview_avg(%{a: %{value: nil}} = assigns) do
+    ~H"""
+    <span id={@id} class="text-xs text-base-content/60" data-missing>
+      {PaymentPreview.average_reason(@a)}
+    </span>
+    """
+  end
+
+  defp preview_avg(assigns), do: avg(assigns)
 
   attr :row, :map, required: true
   attr :links?, :boolean, default: true
@@ -323,25 +709,39 @@ defmodule EmisintWeb.Improvement.PortfolioComponents do
     <span
       id={@id}
       class="text-base-content/40"
-      title={"No scored ratings (0 of #{@a.total})"}
+      title={
+        if Map.get(@a, :na, 0) == @a.total and @a.total > 0,
+          do: "All #{@a.total} N/A: no numeric ratings",
+          else: "No scored ratings (0 of #{Map.get(@a, :applicable, @a.total)} applicable)"
+      }
       data-missing
     >
       —
     </span>
+    <span :if={Map.get(@a, :na, 0) > 0} class="block text-[11px] text-base-content/50">
+      {@a.na} N/A
+    </span>
     """
   end
 
+  # Partial coverage shows rated/applicable; explicit N/A is shown apart and
+  # never counts as missing.
   defp avg(assigns) do
+    assigns = assign(assigns, applicable: Map.get(assigns.a, :applicable, assigns.a.total))
+
     ~H"""
     <span
       id={@id}
       class={["badge badge-sm tabular-nums", band_class(Portfolio.band(@a.value))]}
-      title={"#{@a.rated} of #{@a.total} metrics scored"}
+      title={"#{@a.rated} of #{@applicable} applicable metrics rated" <> if(Map.get(@a, :na, 0) > 0, do: " · #{@a.na} N/A excluded", else: "")}
     >
       {Portfolio.number(@a.value)}
     </span>
-    <span :if={@a.rated < @a.total} class="block text-[11px] text-base-content/50">
-      {@a.rated}/{@a.total}
+    <span :if={@a.rated < @applicable} class="block text-[11px] text-base-content/50">
+      {@a.rated}/{@applicable}
+    </span>
+    <span :if={Map.get(@a, :na, 0) > 0} class="block text-[11px] text-base-content/50">
+      {@a.na} N/A
     </span>
     """
   end

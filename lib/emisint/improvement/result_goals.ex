@@ -20,16 +20,23 @@ defmodule Emisint.Improvement.ResultGoals do
       Novice → G2-M2 / G3-M2; Overall growth percentile → G2-M3 / G3-M3;
       Disengaged by domain → G4-M2 / G4-M3 / G4-M4.
     * Oberon (`Seeds.Oberon`): Proficient or Advanced (derived) → G1-M1 /
-      G2-M1; Novice → G1-M2 / G2-M2 (gray, awaiting confirmation of the
-      assessment the workbook counts); Emotional Committed, Compliant and
-      Disengaged → G4-M1 / G4-M2 / G4-M3, candidates only (the survey
-      population is inferred from baselines, not stated in the sources).
-    * Valley Middle (`Seeds.ValleyMiddle`): Overall Disengaged → G3-M1, a
-      candidate only (`candidates`; gray until the category is confirmed).
-    * Drayton district (`Seeds.Drayton`): Overall Disengaged → G4-M1, a
-      candidate only.
-    * Dunseith, Mandaree, Warwick and every building: no workbook match
-      (each module's `section_notes` says why).
+      G2-M1; Novice → G1-M2 / G2-M2; Emotional Committed, Compliant and
+      Disengaged → G4-M1 / G4-M2 / G4-M3 (Combined assessment and the
+      schoolwide Emotional survey population confirmed by the user,
+      November 12, 2026).
+    * Valley Middle: Overall Disengaged → G3-M1, Overall Committed → G5-M2;
+      Drayton district: Overall Disengaged → G4-M1, Overall Committed →
+      G4-M2; Dunseith district: Overall Disengaged → G6-M2 (confirmed).
+    * Warwick district: provisional dashboard reference assumptions
+      (district rows, Combined, Proficient or Advanced, percentage-point
+      relative targets; `provisional`, `relative_targets`).
+    * Cannon Ball: grade 3–5 and 6–8 goals as grade-group references on its
+      own grade rows (Proficient or Advanced and Novice, Combined, confirmed;
+      math growth as Meets or Exceeds, provisional). Solen High School
+      (its building): the grade-10 goals, recorded on Cannon Ball
+      (`workbook_from`), on its own Grade 10 rows.
+    * Mandaree and the other buildings: no workbook match (each module's
+      `section_notes` says why).
     * Proficient or Advanced (derived) → also the annual state-assessment
       target for the same school year (`AnnualAssessmentGoal`); never another
       year's. Where both exist, the annual comparison is shown.
@@ -108,12 +115,37 @@ defmodule Emisint.Improvement.ResultGoals do
     # published counterpart is only evidenced (e.g. by a baseline match), not
     # confirmed. Its value and target are shown, gray, with the evidence.
     candidates: %{},
+    # Mappings confirmed by the user, `%{code => text}`: the confirmation is
+    # shown with the comparison (its explanation and the section note).
+    confirmations: %{},
+    # Mappings used provisionally for dashboard reference, `%{code => text}`:
+    # they get a verdict, labeled provisional, with the text shown.
+    provisional: %{},
+    # Comparison settings confirmed by the user (same keys as `assumptions`:
+    # `assessment_type`, `engagement_population`). Unlike `assumptions`
+    # (Fort Yates's demo assumptions, Warwick's provisional ones), these are
+    # not labeled as assumed.
+    confirmed: %{},
+    # What the school's `assumptions` are called in notes ("demo assumption",
+    # "provisional assumption").
+    assumption_kind: "demo assumption",
+    # How relative workbook targets ("Inc 2-3%", "Dec 3-4%") are read: nil
+    # (not comparable) or `:percentage_points` (a band of percentage-point
+    # changes from the metric's workbook baseline; Warwick, user decision
+    # of November 12, 2026).
+    relative_targets: nil,
+    # A building whose workbook comparisons use its participant's metrics
+    # (Solen High School: the "Solen Goals" grade-10 metrics, recorded on
+    # Cannon Ball): the participant's definition module. See
+    # `Dashboard.comparison_metrics/3`.
+    workbook_from: nil,
     report_notes: []
   }
 
   @not_official "A dashboard comparison rule, not an official ND FIRST scoring method; it doesn't record a review result, set a rating or affect the payment estimate."
 
   @grade_note "Grade-level colors compare each grade’s results with the schoolwide target for reference. These are not separate grade-level goals."
+  @grade_group_note "Grade-group references: each published grade is compared with the workbook target for its grade group (for example grades 3–5) for reference only. A single grade's result is not the grade group's result, and grades are never averaged into one; the grade group's combined result isn't published."
   @growth_grade_note "Grade-level colors compare each grade’s growth percentile with the schoolwide target for reference. These are not separate grade-level goals."
 
   @checkpoints %{
@@ -183,6 +215,8 @@ defmodule Emisint.Improvement.ResultGoals do
     config = config(plan.school)
     established = Map.merge(@established, Map.new(Keyword.get(opts, :established, %{})))
     assumptions = Map.new(Keyword.get(opts, :assumptions, config.assumptions))
+    confirmed = Map.new(config.confirmed)
+    confirmed_type = established.assessment_type || confirmed[:assessment_type]
 
     ctx = %{
       year: year,
@@ -190,12 +224,15 @@ defmodule Emisint.Improvement.ResultGoals do
       subgroup: subgroup,
       reference: Map.get(f, :reference) || :review_18m,
       established: established,
-      assessment_type: established.assessment_type || assumptions[:assessment_type],
-      assumed_type?: established.assessment_type == nil and assumptions[:assessment_type] != nil,
-      population: assumptions[:engagement_population],
+      assessment_type: confirmed_type || assumptions[:assessment_type],
+      assumed_type?: confirmed_type == nil and assumptions[:assessment_type] != nil,
+      population: confirmed[:engagement_population] || assumptions[:engagement_population],
+      assumed_population?:
+        confirmed[:engagement_population] == nil and assumptions[:engagement_population] != nil,
       plan_start_year: config.plan_start_year,
       grade_reference: config.grade_reference,
-      annual_years: config.annual_years
+      annual_years: config.annual_years,
+      relative_targets: config.relative_targets
     }
 
     workbook = workbook(plan, config)
@@ -239,7 +276,8 @@ defmodule Emisint.Improvement.ResultGoals do
   defp workbook(%{metrics: metrics}, config) do
     by_code = Map.new(metrics, &{&1.code, &1})
 
-    for {code, expected, section, key, published, label} <- config.workbook,
+    for entry <- config.workbook,
+        {code, expected, section, key, published, label, opts} = entry(entry),
         metric = by_code[code],
         metric != nil and expected?(metric, expected),
         do: %{
@@ -248,39 +286,79 @@ defmodule Emisint.Improvement.ResultGoals do
           key: key,
           measure: published,
           label: label,
-          candidate: config.candidates[code]
+          grades: opts[:grades],
+          group: opts[:group],
+          candidate: config.candidates[code],
+          provisional: config.provisional[code],
+          confirmation: config.confirmations[code]
         }
   end
+
+  # A workbook entry, optionally with `%{grades: [grade], group: label}`:
+  # one grade (Solen High's grade 10) is that grade's own result; several
+  # (a grade band such as 3–5) are grade-group references.
+  defp entry({code, expected, section, key, published, label}),
+    do: {code, expected, section, key, published, label, %{}}
+
+  defp entry({_, _, _, _, _, _, _} = entry), do: entry
 
   defp expected?(metric, measure) when is_atom(measure), do: metric.performance_measure == measure
   defp expected?(metric, wording) when is_binary(wording), do: metric.description == wording
 
   defp workbook_matches(workbook, section, row, key, ctx) do
+    for w <- workbook,
+        w.section == section,
+        w.key == key,
+        match = entry_match(w, row, section, ctx),
+        match != nil,
+        into: %{},
+        do: {w.measure, match}
+  end
+
+  # A schoolwide goal: the All Grades row, all students; eligible grade rows
+  # are schoolwide references (`grade_reference`, Fort Yates).
+  defp entry_match(%{grades: nil} = w, row, section, ctx) do
     cond do
       schoolwide?(row, ctx) and type_matches?(section, ctx) ->
-        for w <- workbook, w.section == section, w.key == key, into: %{} do
-          {w.measure, workbook_match(w, published(row, w.measure), section, ctx)}
-        end
+        workbook_match(w, published(row, w.measure), section, ctx)
 
-      grade_reference?(section, row, ctx) ->
-        for w <- workbook,
-            w.section == section,
-            w.key == key,
-            w.measure in Map.get(ctx.grade_reference, section, []),
-            into: %{} do
-          match = workbook_match(w, published(row, w.measure), section, ctx)
-          {w.measure, Map.merge(match, %{kind: :grade_reference, grade: row.grade})}
-        end
+      grade_reference?(section, row, ctx) and
+          w.measure in Map.get(ctx.grade_reference, section, []) ->
+        w
+        |> workbook_match(published(row, w.measure), section, ctx)
+        |> Map.merge(%{kind: :grade_reference, grade: row.grade})
 
       true ->
-        %{}
+        nil
     end
   end
 
-  # The published value for a workbook measure: a level row, or the derived
-  # Proficient-or-Advanced interval (as published bounds, never a midpoint).
-  defp published(row, :proficient_or_advanced) do
-    case Map.get(row, :proficient_or_advanced) do
+  # A one-grade goal (Solen High's grade 10): that grade's row, all
+  # students, is the goal's own published result.
+  defp entry_match(%{grades: [grade]} = w, row, section, ctx) do
+    if row.grade == grade and ctx.subgroup == "All" and type_matches?(section, ctx) do
+      w
+      |> workbook_match(published(row, w.measure), section, ctx)
+      |> Map.put(:grade, grade)
+    end
+  end
+
+  # A grade-band goal (e.g. grades 3–5): each published grade in the band is
+  # compared with the band's target for reference only. Neither one grade
+  # nor an average of grades is the band's result.
+  defp entry_match(%{grades: grades} = w, row, section, ctx) do
+    if row.grade in grades and ctx.subgroup == "All" and type_matches?(section, ctx) do
+      w
+      |> workbook_match(published(row, w.measure), section, ctx)
+      |> Map.merge(%{kind: :grade_group_reference, grade: row.grade, group: w.group})
+    end
+  end
+
+  # The published value for a workbook measure: a level row, or a derived
+  # Proficient-or-Advanced or Meets-or-Exceeds interval (as published bounds,
+  # never a midpoint).
+  defp published(row, derived) when derived in [:proficient_or_advanced, :meets_or_exceeds] do
+    case Map.get(row, derived) do
       {:ok, low, high} when low == high -> %{value_state: :exact, value: low}
       {:ok, low, high} -> %{value_state: :range, range_low: low, range_high: high}
       {:not_derivable, _reason} -> :not_derivable
@@ -320,7 +398,7 @@ defmodule Emisint.Improvement.ResultGoals do
   defp workbook_match(w, value, section, ctx) do
     {field, label} = Map.fetch!(@checkpoints, ctx.reference)
     target = Display.target(w.metric, field)
-    spec = target_spec(w.metric, field)
+    spec = target_spec(w.metric, field, ctx.relative_targets)
 
     blocked =
       cond do
@@ -354,15 +432,19 @@ defmodule Emisint.Improvement.ResultGoals do
       direction: w.metric.direction,
       year: ctx.year,
       value: value_text(value, w.metric),
-      target: %{label: label, text: elem(target, 1)},
+      target: %{label: label, text: target_text(elem(target, 1), spec, w.metric)},
       spec: spec,
       timing: timing(ctx.established.review_years[ctx.reference], ctx.year, ctx.plan_start_year),
       assumed: assumed(section, ctx),
       candidate?: w.candidate != nil,
-      basis: w.candidate
+      provisional?: w.candidate == nil and w.provisional != nil,
+      basis: w.candidate || w.provisional || w.confirmation
     }
     |> judge(blocked, interval(value), spec)
   end
+
+  @num "(\\d+(?:\\.\\d+)?)"
+  @relative_re Regex.compile!("^(Inc|Dec)\\s*#{@num}\\s*[-–]\\s*#{@num}\\s*%$", "u")
 
   @doc """
   How a workbook target can be compared, from its stored number or its
@@ -380,16 +462,60 @@ defmodule Emisint.Improvement.ResultGoals do
 
   Percent metrics store 0–1 proportions, so "18%" becomes 0.18.
   """
-  def target_spec(metric, field) do
+  def target_spec(metric, field, relative \\ nil) do
     case Display.target(metric, field) do
-      {:number, _text} -> {:number, Map.get(metric, field)}
-      {:empty, _text} -> :none
-      {:text, raw} -> parse_target(metric.unit, String.trim(raw))
-      _other -> :not_comparable
+      {:number, _text} ->
+        {:number, Map.get(metric, field)}
+
+      {:empty, _text} ->
+        :none
+
+      {:text, raw} ->
+        raw = String.trim(raw)
+
+        case Regex.run(@relative_re, raw, capture: :all_but_first) do
+          nil -> parse_target(metric.unit, raw)
+          parts -> relative_target(relative, metric, parts)
+        end
+
+      _other ->
+        :not_comparable
     end
   end
 
-  @num "(\\d+(?:\\.\\d+)?)"
+  # "Inc 2-3%" / "Dec 3-4%": with the percentage-point rule, a band of
+  # changes from the metric's workbook baseline, e.g. baseline 59% and
+  # "Dec 2-3%" → 56%–57%. `{:relative, op, change, baseline, low, high}`.
+  # Without the rule, or without a numeric percent baseline, not comparable.
+  defp relative_target(:percentage_points, %{unit: :percent, baseline_value: %Decimal{} = b}, [
+         op,
+         from,
+         to
+       ]) do
+    {d1, d2} = {points(from), points(to)}
+
+    if Decimal.compare(d1, d2) == :gt do
+      :not_comparable
+    else
+      {low, high} =
+        if op == "Inc",
+          do: {Decimal.add(b, d1), Decimal.add(b, d2)},
+          else: {Decimal.sub(b, d2), Decimal.sub(b, d1)}
+
+      {:relative, op, "#{from}-#{to}%", b, low, high}
+    end
+  end
+
+  defp relative_target(_rule, _metric, _parts), do: :not_comparable
+
+  defp points(n), do: n |> Decimal.new() |> Decimal.div(100)
+
+  # The workbook text with the band it is read as, e.g. "Dec 2-3% (56%–57%)".
+  defp target_text(text, {:relative, _op, _change, _b, low, high}, metric),
+    do: "#{text} (#{number_text(metric, low)}–#{number_text(metric, high)})"
+
+  defp target_text(text, _spec, _metric), do: text
+
   @band_re Regex.compile!("^#{@num}\\s*(%?)\\s*[-–]\\s*#{@num}\\s*(%?)$", "u")
   @bound_re Regex.compile!("^(<=|>=|<|>|≤|≥)\\s*#{@num}\\s*(%?)$", "u")
   @compound_re Regex.compile!("^(<=|>=|<|>|≤|≥)\\s*#{@num}\\s*(%?)\\s+or\\s+(.+)$", "iu")
@@ -445,7 +571,9 @@ defmodule Emisint.Improvement.ResultGoals do
 
   defp assumed(:achievement, %{assumed_type?: true}), do: [:combined_assessment]
 
-  defp assumed(:engagement, %{population: :schoolwide}), do: [:schoolwide_survey]
+  defp assumed(:engagement, %{population: :schoolwide, assumed_population?: true}),
+    do: [:schoolwide_survey]
+
   defp assumed(_section, _ctx), do: []
 
   # :before_plan — a result from before the plan began, compared with a
@@ -476,6 +604,14 @@ defmodule Emisint.Improvement.ResultGoals do
   defp judge(match, nil, interval, {:band, low, high}),
     do: verdict_status(match, classify_band(match.direction, interval, low, high))
 
+  # A relative target is a band of changes; "Inc" must be higher-is-better
+  # and "Dec" lower-is-better, otherwise its direction is unclear.
+  defp judge(match, nil, interval, {:relative, op, _change, _b, low, high}) do
+    if relative_direction(op) == match.direction,
+      do: verdict_status(match, classify_band(match.direction, interval, low, high)),
+      else: gray(match, :target_direction_conflict)
+  end
+
   # Only the inequality of a compound target can be evaluated: meeting it
   # meets the target; otherwise the other condition decides, which isn't
   # evaluated, so the comparison is gray.
@@ -494,6 +630,9 @@ defmodule Emisint.Improvement.ResultGoals do
 
   defp bound_direction(op) when op in ["<", "<="], do: :lower_is_better
   defp bound_direction(_op), do: :higher_is_better
+
+  defp relative_direction("Dec"), do: :lower_is_better
+  defp relative_direction("Inc"), do: :higher_is_better
 
   @doc """
   An inequality target ("< 18%", "> 35%", "<= …", ">= …") against published
@@ -705,6 +844,25 @@ defmodule Emisint.Improvement.ResultGoals do
   def short_label(%{kind: :grade_reference, status: :overlaps}),
     do: "Range overlaps schoolwide target"
 
+  def short_label(
+        %{kind: :grade_group_reference, status: :meets, direction: :lower_is_better} = m
+      ),
+      do: "At or below #{m.group} target"
+
+  def short_label(%{kind: :grade_group_reference, status: :meets} = m),
+    do: "At or above #{m.group} target"
+
+  def short_label(
+        %{kind: :grade_group_reference, status: :misses, direction: :lower_is_better} = m
+      ),
+      do: "Above #{m.group} target"
+
+  def short_label(%{kind: :grade_group_reference, status: :misses} = m),
+    do: "Below #{m.group} target"
+
+  def short_label(%{kind: :grade_group_reference, status: :overlaps} = m),
+    do: "Range overlaps #{m.group} target"
+
   def short_label(%{status: :meets}), do: "Meets target"
   def short_label(%{status: :misses, direction: :lower_is_better}), do: "Above target"
   def short_label(%{status: :misses}), do: "Below target"
@@ -746,6 +904,10 @@ defmodule Emisint.Improvement.ResultGoals do
   def goal_line(%{kind: :grade_reference} = m),
     do: "Schoolwide reference: #{m.target.text} · #{checkpoint(m)}"
 
+  def goal_line(%{kind: :grade_group_reference} = m),
+    do:
+      "#{String.capitalize(m.group)} target: #{m.target.text} · #{checkpoint(m)} · #{m.code} · Grade-group reference#{provisional_suffix(m)}"
+
   def goal_line(%{percentile?: true} = m),
     do:
       "#{m.year} result · Growth percentile target: #{m.target.text} · #{checkpoint(m)} · #{m.code}"
@@ -753,8 +915,11 @@ defmodule Emisint.Improvement.ResultGoals do
   def goal_line(match) do
     direction = if match.direction == :lower_is_better, do: ", lower is better", else: ""
 
-    "#{match.year} result vs #{match.target.label} #{match.target.text} · #{match.name}#{direction}"
+    "#{match.year} result vs #{match.target.label} #{match.target.text} · #{match.name}#{direction}#{provisional_suffix(match)}"
   end
+
+  defp provisional_suffix(%{provisional?: true}), do: " · provisional"
+  defp provisional_suffix(_match), do: ""
 
   defp checkpoint(m), do: String.replace(m.target.label, " target", "")
 
@@ -768,6 +933,10 @@ defmodule Emisint.Improvement.ResultGoals do
   defp grade_text(%{kind: :grade_reference, grade: grade, code: code}),
     do:
       "Grade #{grade} compared with the schoolwide #{code} target for reference; this is not a separate grade-level goal."
+
+  defp grade_text(%{kind: :grade_group_reference, grade: grade, code: code, group: group}),
+    do:
+      "Grade #{grade} compared with the #{code} target for #{group}, for reference only: #{code} counts #{group} together, and this single grade's result is not the #{group} result (grades are never averaged into one)."
 
   defp grade_text(_match), do: nil
 
@@ -788,6 +957,22 @@ defmodule Emisint.Improvement.ResultGoals do
   defp verdict(%{spec: {:compound, op, t, rest}} = m),
     do:
       "#{m.year} published value #{m.value}: the whole published value satisfies “#{op} #{number_text(m, t)}”, part of the #{target_label(m)} “#{m.target.text}”, so it meets the target whatever “#{rest}” means."
+
+  defp verdict(%{spec: {:relative, op, change, b, l, h}} = m) do
+    {low, high} = {number_text(m, l), number_text(m, h)}
+    word = if op == "Inc", do: "increase", else: "decrease"
+
+    how =
+      case {m.status, m.direction} do
+        {:meets, :lower_is_better} -> "the whole published value is at or below #{low}"
+        {:meets, _} -> "the whole published value is at or above #{high}"
+        {:misses, :lower_is_better} -> "the whole published value is above #{high}"
+        {:misses, _} -> "the whole published value is below #{low}"
+        {:overlaps, _} -> "the published value isn't wholly beyond either end of the range"
+      end
+
+    "#{m.year} published value #{m.value}: #{how}. The #{target_label(m)} “#{op} #{change}” is read as a #{change} percentage-point #{word} from the workbook baseline #{number_text(m, b)}, giving #{low}–#{high}. That range is colored by the dashboard comparison convention for range targets, not a source-confirmed scoring rule: only a verdict that holds whichever end of the range counts is given; otherwise the range overlaps."
+  end
 
   defp verdict(%{spec: {:band, l, h}} = m) do
     {low, high} = {number_text(m, l), number_text(m, h)}
@@ -831,7 +1016,16 @@ defmodule Emisint.Improvement.ResultGoals do
   defp bound_rule(">=", t, m),
     do: "#{number_text(m, t)} or more meets; below #{number_text(m, t)} misses"
 
-  defp number_text(%{unit: :percent}, t), do: Percent.format(t)
+  # Percent to two decimals (a baseline such as 25.74% keeps its precision).
+  defp number_text(%{unit: :percent}, t),
+    do:
+      (t
+       |> Decimal.mult(100)
+       |> Decimal.round(2)
+       |> Decimal.normalize()
+       |> Decimal.to_string(:normal)) <>
+        "%"
+
   defp number_text(_m, t), do: Decimal.to_string(t, :normal)
 
   defp target_label(%{percentile?: true} = m), do: "#{checkpoint(m)} growth percentile target"
@@ -928,7 +1122,38 @@ defmodule Emisint.Improvement.ResultGoals do
         true -> [@grade_note]
       end
 
-    base_notes(section, matches) ++ grade_note
+    group_matches = Enum.filter(all, &(&1.kind == :grade_group_reference))
+    group_note = if group_matches == [], do: [], else: [@grade_group_note]
+
+    base_notes(section, matches ++ group_matches) ++ grade_note ++ group_note
+  end
+
+  @doc """
+  For a building whose comparisons use its participant's metrics (Solen
+  High School), the note shown when none could be read (the user can't read
+  the participant's record), or nil.
+  """
+  def participant_goals_unavailable(%{workbook_from: module}, []) when module != nil,
+    do:
+      "The workbook goals compared on this page are recorded on #{module.school().name}, which you don't have access to, so no goal comparisons are shown."
+
+  def participant_goals_unavailable(_config, _metrics), do: nil
+
+  @doc """
+  The note shown when a non-Combined assessment view is selected and the
+  workbook targets count the Combined assessment, or nil: "(confirmed)" when
+  the user confirmed it, otherwise the school's `assumption_kind`.
+  """
+  def assessment_view_note(config, type, workbook?) do
+    basis =
+      cond do
+        config.confirmed[:assessment_type] == "Comp" -> "confirmed"
+        config.assumptions[:assessment_type] == "Comp" -> config.assumption_kind
+        true -> nil
+      end
+
+    if type != "Comp" and workbook? and basis,
+      do: "Workbook targets are compared only in the Combined assessment view (#{basis})."
   end
 
   @doc "The note shown above Achievement when grade rows carry reference colors."
@@ -951,11 +1176,22 @@ defmodule Emisint.Improvement.ResultGoals do
     end
   end
 
+  defp section_note(:achievement, %{assumed: [:combined_assessment], provisional?: true, basis: b}),
+       do:
+         "Reference comparison; Combined assessment assumed for workbook targets (provisional). " <>
+           b
+
+  defp section_note(:engagement, %{assumed: [:schoolwide_survey], provisional?: true, basis: b}),
+    do: "Reference comparison; schoolwide survey population match assumed (provisional). " <> b
+
   defp section_note(:achievement, %{assumed: [:combined_assessment]}),
     do: "Reference comparison; Combined assessment assumed for workbook targets."
 
   defp section_note(:engagement, %{assumed: [:schoolwide_survey]}),
     do: "Reference comparison; schoolwide survey population match assumed."
+
+  defp section_note(_section, %{provisional?: true, basis: basis}),
+    do: "Provisional mapping for dashboard reference. " <> basis
 
   defp section_note(_section, %{candidate?: true, basis: basis}),
     do:

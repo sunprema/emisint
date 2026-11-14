@@ -21,6 +21,9 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
 
   import EmisintWeb.Improvement.Components
   import EmisintWeb.Improvement.StateResultsComponents
+  import EmisintWeb.Improvement.SectionComponents, only: [collapsible: 1, section_controls: 1]
+
+  alias EmisintWeb.Improvement.SectionComponents
 
   alias Emisint.Improvement.{
     Access,
@@ -30,7 +33,9 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
     GoalStatus,
     GrowthPercentile,
     Payment,
+    PaymentPreview,
     Percent,
+    Portfolio,
     ResultGoals,
     Rubric
   }
@@ -38,6 +43,14 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
   alias Emisint.NdInsights.SchoolResults
 
   @state_params ~w(state_year state_type state_subgroup goal_ref)
+
+  # Collapsible detail sections; the open ones are in the URL (`open`), so
+  # period and filter changes keep them. Without an `open` param the official
+  # state results are expanded and the others collapsed (user decision,
+  # November 13, 2026). An explicit `open` is always kept: "none" means every
+  # section collapsed (Collapse all), so that survives filters and reloads.
+  @sections ~w(goals state nd payment)
+  @default_open ~w(state)
 
   @impl true
   def mount(%{"slug" => slug}, session, socket) do
@@ -60,12 +73,14 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
            Access.can_contribute?(scope.current_user, scope.current_tenant, school),
          can_record_estimate?:
            Access.can_record_estimate?(scope.current_user, scope.current_tenant),
-         # Matches the importer's own check; the import page enforces it again.
-         can_import?:
-           match?(%{role: :system_admin}, scope.current_user) and
-             Emisint.Improvement.Pilot.pilot?(school),
+         # The same check as the import page, which enforces it again on mount
+         # and on every event. Every supported participant and building record.
+         can_import?: Access.can_import_state_results?(scope.current_user, school),
          editing: nil,
          comparison: ResultGoals.config(school),
+         # Workbook metrics the state results are compared with: the plan's
+         # own, or the participant's for Solen High School's grade-10 goals.
+         comparison_metrics: Dashboard.comparison_metrics(scope, school, defs),
          tabs: Emisint.Improvement.Pilot.tabs(readable),
          tab_slug: Emisint.Improvement.Pilot.tab_slug(school),
          participant_nav: Emisint.Improvement.Pilot.participant_nav(school, readable),
@@ -92,7 +107,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
 
     socket =
       socket
-      |> assign(period: period, params: Map.take(params, ["period" | @state_params]))
+      |> assign(
+        period: period,
+        params: Map.take(params, ["period", "open" | @state_params]),
+        open: open_from_params(params)
+      )
       |> load_period()
       |> assign_state_filters(params)
       |> assign(editing: nil)
@@ -164,11 +183,59 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
     |> Enum.reject(fn {_, v} -> is_nil(v) end)
   end
 
-  defp patch_with(socket, changes) do
+  defp patch_with(socket, changes, opts \\ []) do
     query =
       socket.assigns.params |> Map.merge(changes) |> Enum.reject(fn {_, v} -> v in [nil, ""] end)
 
-    push_patch(socket, to: ~p"/school-goals/#{socket.assigns.school.slug}?#{query}")
+    push_patch(socket, [to: ~p"/school-goals/#{socket.assigns.school.slug}?#{query}"] ++ opts)
+  end
+
+  # The sections this page has: no workbook goals on a building, no North
+  # Dakota comparison without imported results.
+  defp sections(assigns) do
+    Enum.filter(@sections, fn
+      "goals" -> assigns.participant_scope.kind != :building
+      "nd" -> assigns.state.years != []
+      "payment" -> assigns.participant_scope.kind != :building
+      _ -> true
+    end)
+  end
+
+  defp open_from_params(%{"open" => param}) when is_binary(param),
+    do: SectionComponents.open_sections(param, @sections)
+
+  defp open_from_params(_params), do: MapSet.new(@default_open)
+
+  # Always explicit once the user acts, so a fully collapsed page stays so.
+  defp open_patch(socket, open),
+    do:
+      patch_with(
+        socket,
+        %{"open" => SectionComponents.open_param(open, @sections) || "none"},
+        replace: true
+      )
+
+  # The workbook goals header: size of the plan and the selected period's ratings.
+  defp goals_summary(defs, period, averages) do
+    size = "#{length(defs.goals)} goals · #{length(defs.metrics)} metrics"
+
+    ratings =
+      if review?(period) do
+        n = averages.systems.rated + averages.student_outcome.rated
+        t = averages.systems.applicable + averages.student_outcome.applicable
+        na = averages.systems.na + averages.student_outcome.na
+        "#{period.label}: " <> Payment.coverage_phrase(n, t, na)
+      else
+        part = fn %{average: a, rated: r, applicable: t, na: na} ->
+          if a,
+            do: "#{a} / #{defs.plan.max_rating} (#{Payment.coverage_phrase(r, t, na)})",
+            else: "no numeric ratings (#{Payment.coverage_phrase(r, t, na)})"
+        end
+
+        "#{period.label} ratings: Systems #{part.(averages.systems)}, Student Outcomes #{part.(averages.student_outcome)}"
+      end
+
+    "#{size} · #{ratings}."
   end
 
   defp maybe_open_from_params(socket, nil), do: socket
@@ -186,9 +253,22 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
 
     assign(socket,
       data: data,
-      averages: Dashboard.seasonal_averages(defs.metrics, data.ratings)
+      averages: Dashboard.seasonal_averages(defs.metrics, data.ratings),
+      payment_previews: payment_previews(socket.assigns.participant_scope, defs, period, data)
     )
   end
+
+  # The current-ratings payment preview for the selected period: the
+  # portfolio's own calculation (`PaymentPreview`), 18-month on the card and
+  # both checkpoints in the details. Buildings have no payment.
+  defp payment_previews(%{kind: :building}, _defs, _period, _data), do: nil
+
+  defp payment_previews(_scope, defs, period, data),
+    do:
+      Map.new(
+        [:review_18m, :review_36m],
+        &{&1, PaymentPreview.for_participant(defs, period, data.ratings, &1)}
+      )
 
   @impl true
   def handle_info({:nd_insights_imported, institution_ids}, socket) do
@@ -207,6 +287,26 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
   end
 
   @impl true
+  def handle_event("toggle_section", %{"section" => section}, socket)
+      when section in @sections,
+      do: {:noreply, open_patch(socket, SectionComponents.toggle(socket.assigns.open, section))}
+
+  # A link to a section (the payment card's "Details", "Jump to"): opens it
+  # if collapsed, keeping the others as they are, then scrolls to it.
+  def handle_event("open_section", %{"section" => section, "target" => target}, socket)
+      when section in @sections do
+    {:noreply,
+     socket
+     |> open_patch(MapSet.put(socket.assigns.open, section))
+     |> push_event("scroll-to", %{id: target})}
+  end
+
+  def handle_event("sections", %{"to" => "expand"}, socket),
+    do: {:noreply, open_patch(socket, MapSet.new(sections(socket.assigns)))}
+
+  def handle_event("sections", %{"to" => "collapse"}, socket),
+    do: {:noreply, open_patch(socket, MapSet.new())}
+
   def handle_event("select_period", %{"period" => code}, socket) do
     {:noreply, patch_with(socket, %{"period" => code})}
   end
@@ -233,7 +333,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
              |> reload_defs()
              |> put_flash(
                :info,
-               "Estimate recorded for the #{period.label}: #{Payment.money(estimate.amount)} (provisional cap and split)."
+               "Estimate recorded for the #{period.label}: #{Payment.money(estimate.amount)} (provisional terms)."
              )}
 
           {:error, %Ash.Error.Forbidden{}} ->
@@ -505,7 +605,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
             </div>
             <div :if={review?(@period)}>
               <div class="font-semibold">
-                {@averages[category].rated} of {@averages[category].total} scored
+                {Payment.coverage_phrase(
+                  @averages[category].rated,
+                  @averages[category].applicable,
+                  @averages[category].na
+                )}
               </div>
               <div class="text-xs text-base-content/50">
                 Formal review ratings: the payment input. Averages appear in the estimated
@@ -523,7 +627,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
                 </span>
               </span>
               <span class="text-xs text-base-content/50">
-                {@averages[category].rated} of {@averages[category].total} rated
+                {Payment.coverage_phrase(
+                  @averages[category].rated,
+                  @averages[category].applicable,
+                  @averages[category].na
+                )}
               </span>
             </div>
             <div :if={!review?(@period)} class="text-xs text-base-content/50">
@@ -531,18 +639,52 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
             </div>
           </div>
 
-          <div class="bg-base-100 border border-base-200 rounded-xl px-4 py-3" id="payment-card">
-            <div class="text-xs uppercase tracking-wide text-base-content/60">
-              {@defs.payment.label}
+          <div
+            :if={@payment_previews}
+            class="bg-base-100 border border-base-200 rounded-xl px-4 py-3 space-y-1"
+            id="payment-card"
+          >
+            <% preview = @payment_previews.review_18m %>
+            <% {tone, headline} = PaymentPreview.headline(preview.row) %>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs uppercase tracking-wide text-base-content/60">
+                Current-ratings preview
+              </span>
+              <span
+                :if={preview.row[:provisional_terms?]}
+                class="badge badge-sm badge-warning badge-soft"
+                id="payment-card-terms"
+              >
+                Provisional terms
+              </span>
             </div>
-            <div class="font-semibold" id="payment-combined">
-              {Payment.combined_text(@defs.payment.combined)}
+            <div
+              class={[
+                if(tone == :amount,
+                  do: "text-lg font-bold",
+                  else: "font-semibold text-base-content/80"
+                )
+              ]}
+              id="payment-card-headline"
+              data-tone={tone}
+            >
+              {headline}
             </div>
-            <div class="text-xs text-base-content/50">
-              {if @defs.payment.terms.configured?,
-                do: "Provisional, not an actual payment.",
-                else: "No payment terms are set for this school."}
-              <a href="#payment" class="link">Details</a>
+            <div class="text-xs text-base-content/60" id="payment-card-basis">
+              {PaymentPreview.basis_text(preview)}
+            </div>
+            <div class="text-xs text-base-content/50" id="payment-card-note">
+              {PaymentPreview.preview_note()}
+              <a
+                href="#payment"
+                class="link"
+                id="payment-details-link"
+                phx-click="open_section"
+                phx-value-section="payment"
+                phx-value-target="payment"
+              >
+                Details
+              </a>
             </div>
           </div>
         </div>
@@ -562,162 +704,183 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
             :if={@participant_scope.kind != :building}
             href="#payment"
             class="btn btn-xs btn-ghost"
+            id="jump-payment"
+            phx-click="open_section"
+            phx-value-section="payment"
+            phx-value-target="payment"
           >
             Estimated Payment
           </a>
         </nav>
 
-        <div :if={@participant_scope.kind != :building} id="goals" class="space-y-6 scroll-mt-4">
-          <p class="text-xs text-base-content/70" id="status-legend">
-            <span class="font-medium">Status:</span>
-            <span class="nd-text-success font-medium">Meets target</span>
-            · <span class="nd-text-error font-medium">Below target</span>
-            — a result compared with its own target when that target is due (18-month target at the
-            18-Month Review, 36-month target at the 36-Month Review), respecting whether the metric
-            should rise or fall; reaching the target exactly counts as meeting it. Choose the
-            18-Month Review or 36-Month Review in “Reporting period” to see or enter those results.
-            Uncolored: not reported, no target due this period, or not comparable. Ratings use the 0–3 rubric: <span class="nd-text-success font-medium">3 · Demonstrated Progress</span>, <span class="nd-text-info font-medium">2 · Implementation on Track</span>, <span class="nd-text-warning font-medium">1 · Some Progress</span>, <span class="nd-text-error font-medium">0 · Not Started</span>.
-          </p>
-          <section
-            :for={goal <- @defs.goals}
-            class="bg-base-100 border border-base-200 rounded-xl overflow-hidden"
-            id={"goal-#{goal.number}"}
-          >
-            <div class="px-4 py-3 border-b border-base-200">
-              <h2 class="font-semibold">Goal {goal.number}: {goal.title}</h2>
-              <p :if={goal.description} class="text-sm text-base-content/60 mt-1">
-                {Display.goal_description(goal.description)}
-              </p>
-              <.review_column_note
-                goal={goal}
-                metrics={Map.get(@defs.metrics_by_goal, goal.id, [])}
-                goals={@defs.goals}
-                metrics_by_goal={@defs.metrics_by_goal}
-              />
-              <.implementation_steps
-                :if={goal.implementation_steps != %{}}
-                goal={goal}
-                period={@period}
-                periods={@defs.periods}
-                plan={@defs.plan}
-              />
-            </div>
-
-            <div class="overflow-x-auto">
-              <table class="table table-sm w-full table-fixed min-w-[52rem]">
-                <colgroup>
-                  <col class="w-[29%]" />
-                  <col class="w-[18%]" />
-                  <col class="w-[21%]" />
-                  <col class="w-[22%]" />
-                  <col class="w-24" />
-                </colgroup>
-                <thead>
-                  <tr class="bg-base-200/60 text-base-content/70 text-xs uppercase tracking-wide align-bottom">
-                    <th class="whitespace-normal">Metric</th>
-                    <th class="whitespace-normal">Baseline &amp; targets</th>
-                    <th class="border-l border-base-200 whitespace-normal">
-                      Actual result
-                      <span class="block normal-case tracking-normal">{@period.label}</span>
-                    </th>
-                    <th class="border-l border-base-200 whitespace-normal">
-                      Implementation rating (0–3)
-                      <span class="block normal-case tracking-normal">{@period.label}</span>
-                    </th>
-                    <th class="sticky right-0 bg-base-200 z-10">
-                      <span class="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    :for={metric <- Map.get(@defs.metrics_by_goal, goal.id, [])}
-                    id={"metric-#{metric.code}"}
-                    class="align-top"
-                  >
-                    <td>
-                      <div class="font-mono text-xs text-base-content/50">{metric.code}</div>
-                      <div class="font-medium break-words">{metric.description}</div>
-                      <div class="flex flex-wrap gap-1 mt-1">
-                        <span class="badge badge-outline badge-xs">
-                          {category_label(metric.category)}
-                        </span>
-                        <span
-                          :if={metric.direction == :lower_is_better}
-                          class="badge badge-outline badge-xs"
-                        >
-                          Lower is better
-                        </span>
-                        <span
-                          :if={Display.unit_label(metric)}
-                          class="badge badge-outline badge-xs"
-                          id={"unit-#{metric.code}"}
-                        >
-                          {Display.unit_label(metric)}
-                        </span>
-                      </div>
-                      <.insights_source metric={metric} rows={@state.rows} />
-                    </td>
-                    <td>
-                      <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-0.5 text-xs">
-                        <dt class="text-base-content/50">Baseline</dt>
-                        <dd><.target metric={metric} field={:baseline_value} /></dd>
-                        <dt class="text-base-content/50">18-mo</dt>
-                        <dd><.target metric={metric} field={:target_18m} /></dd>
-                        <dt class="text-base-content/50">36-mo</dt>
-                        <dd><.target metric={metric} field={:target_36m} /></dd>
-                      </dl>
-                      <.target_source_details metric={metric} class="mt-1" />
-                    </td>
-                    <td class="border-l border-base-200 break-words" id={"actual-#{metric.code}"}>
-                      <.goal_result
-                        status={GoalStatus.evaluate(metric, @data.actuals[metric.id], @period)}
-                        id={"status-#{metric.code}"}
-                      >
-                        <.actual_value entry={@data.actuals[metric.id]} metric={metric} />
-                      </.goal_result>
-                      <.compact_provenance
-                        :if={@data.actuals[metric.id]}
-                        id={"actual-source-#{metric.code}"}
-                        entry={@data.actuals[metric.id]}
-                        users={@data.users}
-                      />
-                    </td>
-                    <td class="border-l border-base-200 break-words" id={"rating-#{metric.code}"}>
-                      <.rating_value entry={@data.ratings[metric.id]} />
-                      <.compact_provenance
-                        :if={@data.ratings[metric.id]}
-                        id={"rating-source-#{metric.code}"}
-                        entry={@data.ratings[metric.id]}
-                        users={@data.users}
-                      />
-                    </td>
-                    <td class="sticky right-0 bg-base-100 z-10 border-l border-base-200">
-                      <div class="flex flex-col items-stretch gap-1">
-                        <button
-                          :if={@can_contribute?}
-                          class="btn btn-xs btn-primary"
-                          phx-click="open_update"
-                          phx-value-metric-id={metric.id}
-                          id={"update-#{metric.code}"}
-                        >
-                          Update
-                        </button>
-                        <.link
-                          navigate={~p"/school-goals/#{@school.slug}/metrics/#{metric.code}"}
-                          class="btn btn-xs btn-ghost"
-                          id={"history-#{metric.code}"}
-                        >
-                          History
-                        </.link>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+        <div class="flex justify-end">
+          <.section_controls
+            all_open?={Enum.all?(sections(assigns), &MapSet.member?(@open, &1))}
+            none_open?={MapSet.size(@open) == 0}
+          />
         </div>
+
+        <.collapsible
+          :if={@participant_scope.kind != :building}
+          tag="section"
+          id="goals"
+          section="goals"
+          open?={MapSet.member?(@open, "goals")}
+          title="Workbook goals"
+          summary={goals_summary(@defs, @period, @averages)}
+        >
+          <div class="space-y-6 p-4">
+            <p class="text-xs text-base-content/70" id="status-legend">
+              <span class="font-medium">Status:</span>
+              <span class="nd-text-success font-medium">Meets target</span>
+              · <span class="nd-text-error font-medium">Below target</span>
+              — a result compared with its own target when that target is due (18-month target at the
+              18-Month Review, 36-month target at the 36-Month Review), respecting whether the metric
+              should rise or fall; reaching the target exactly counts as meeting it. Choose the
+              18-Month Review or 36-Month Review in “Reporting period” to see or enter those results.
+              Uncolored: not reported, no target due this period, or not comparable. Ratings use the 0–3 rubric: <span class="nd-text-success font-medium">3 · Demonstrated Progress</span>, <span class="nd-text-info font-medium">2 · Implementation on Track</span>, <span class="nd-text-warning font-medium">1 · Some Progress</span>, <span class="nd-text-error font-medium">0 · Not Started</span>.
+            </p>
+            <section
+              :for={goal <- @defs.goals}
+              class="bg-base-100 border border-base-200 rounded-xl overflow-hidden"
+              id={"goal-#{goal.number}"}
+            >
+              <div class="px-4 py-3 border-b border-base-200">
+                <h3 class="font-semibold">Goal {goal.number}: {goal.title}</h3>
+                <p :if={goal.description} class="text-sm text-base-content/60 mt-1">
+                  {Display.goal_description(goal.description)}
+                </p>
+                <.review_column_note
+                  goal={goal}
+                  metrics={Map.get(@defs.metrics_by_goal, goal.id, [])}
+                  goals={@defs.goals}
+                  metrics_by_goal={@defs.metrics_by_goal}
+                />
+                <.implementation_steps
+                  :if={goal.implementation_steps != %{}}
+                  goal={goal}
+                  period={@period}
+                  periods={@defs.periods}
+                  plan={@defs.plan}
+                />
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="table table-sm w-full table-fixed min-w-[52rem]">
+                  <colgroup>
+                    <col class="w-[29%]" />
+                    <col class="w-[18%]" />
+                    <col class="w-[21%]" />
+                    <col class="w-[22%]" />
+                    <col class="w-24" />
+                  </colgroup>
+                  <thead>
+                    <tr class="bg-base-200/60 text-base-content/70 text-xs uppercase tracking-wide align-bottom">
+                      <th class="whitespace-normal">Metric</th>
+                      <th class="whitespace-normal">Baseline &amp; targets</th>
+                      <th class="border-l border-base-200 whitespace-normal">
+                        Actual result
+                        <span class="block normal-case tracking-normal">{@period.label}</span>
+                      </th>
+                      <th class="border-l border-base-200 whitespace-normal">
+                        Implementation rating (0–3)
+                        <span class="block normal-case tracking-normal">{@period.label}</span>
+                      </th>
+                      <th class="sticky right-0 bg-base-200 z-10">
+                        <span class="sr-only">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      :for={metric <- Map.get(@defs.metrics_by_goal, goal.id, [])}
+                      id={"metric-#{metric.code}"}
+                      class="align-top"
+                    >
+                      <td>
+                        <div class="font-mono text-xs text-base-content/50">{metric.code}</div>
+                        <div class="font-medium break-words">{metric.description}</div>
+                        <div class="flex flex-wrap gap-1 mt-1">
+                          <span class="badge badge-outline badge-xs">
+                            {category_label(metric.category)}
+                          </span>
+                          <span
+                            :if={metric.direction == :lower_is_better}
+                            class="badge badge-outline badge-xs"
+                          >
+                            Lower is better
+                          </span>
+                          <span
+                            :if={Display.unit_label(metric)}
+                            class="badge badge-outline badge-xs"
+                            id={"unit-#{metric.code}"}
+                          >
+                            {Display.unit_label(metric)}
+                          </span>
+                        </div>
+                        <.insights_source metric={metric} rows={@state.rows} />
+                      </td>
+                      <td>
+                        <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-0.5 text-xs">
+                          <dt class="text-base-content/50">Baseline</dt>
+                          <dd><.target metric={metric} field={:baseline_value} /></dd>
+                          <dt class="text-base-content/50">18-mo</dt>
+                          <dd><.target metric={metric} field={:target_18m} /></dd>
+                          <dt class="text-base-content/50">36-mo</dt>
+                          <dd><.target metric={metric} field={:target_36m} /></dd>
+                        </dl>
+                        <.target_source_details metric={metric} class="mt-1" />
+                      </td>
+                      <td class="border-l border-base-200 break-words" id={"actual-#{metric.code}"}>
+                        <.goal_result
+                          status={GoalStatus.evaluate(metric, @data.actuals[metric.id], @period)}
+                          id={"status-#{metric.code}"}
+                        >
+                          <.actual_value entry={@data.actuals[metric.id]} metric={metric} />
+                        </.goal_result>
+                        <.compact_provenance
+                          :if={@data.actuals[metric.id]}
+                          id={"actual-source-#{metric.code}"}
+                          entry={@data.actuals[metric.id]}
+                          users={@data.users}
+                        />
+                      </td>
+                      <td class="border-l border-base-200 break-words" id={"rating-#{metric.code}"}>
+                        <.rating_value entry={@data.ratings[metric.id]} />
+                        <.compact_provenance
+                          :if={@data.ratings[metric.id]}
+                          id={"rating-source-#{metric.code}"}
+                          entry={@data.ratings[metric.id]}
+                          users={@data.users}
+                        />
+                      </td>
+                      <td class="sticky right-0 bg-base-100 z-10 border-l border-base-200">
+                        <div class="flex flex-col items-stretch gap-1">
+                          <button
+                            :if={@can_contribute?}
+                            class="btn btn-xs btn-primary"
+                            phx-click="open_update"
+                            phx-value-metric-id={metric.id}
+                            id={"update-#{metric.code}"}
+                          >
+                            Update
+                          </button>
+                          <.link
+                            navigate={~p"/school-goals/#{@school.slug}/metrics/#{metric.code}"}
+                            class="btn btn-xs btn-ghost"
+                            id={"history-#{metric.code}"}
+                          >
+                            History
+                          </.link>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </.collapsible>
 
         <section
           class="bg-base-100 border border-base-200 rounded-xl overflow-hidden scroll-mt-4"
@@ -800,23 +963,37 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
           state={@state}
           filters={@state_filters}
           benchmark_rows={@benchmark.rows}
-          metrics={@defs.metrics}
+          metrics={@comparison_metrics}
           annual_goals={@defs.annual_goals}
+          open={@open}
           import_path={if @can_import?, do: ~p"/school-goals/#{@school.slug}/import"}
           comparison_pdf_path={
             ~p"/school-goals/#{@school.slug}/report.pdf?#{report_query(@period, @state_filters) ++ [nd_comparison: "1"]}"
           }
           link_params={
-            Map.new(report_query(@period, @state_filters), fn {k, v} -> {to_string(k), v} end)
+            report_query(@period, @state_filters)
+            |> Map.new(fn {k, v} -> {to_string(k), v} end)
+            |> Map.merge(Map.take(@params, ["open"]))
           }
         />
 
-        <.payment_section
-          :if={@participant_scope.kind != :building}
-          payment={@defs.payment}
-          estimates={@defs.payment_estimates}
-          can_record?={@can_record_estimate?}
-        />
+        <.collapsible
+          :if={@payment_previews}
+          tag="section"
+          id="payment"
+          section="payment"
+          open?={MapSet.member?(@open, "payment")}
+          title="Estimated payment details"
+          class="bg-base-100 border border-base-200 rounded-xl scroll-mt-20 lg:scroll-mt-4"
+          summary={payment_summary(@payment_previews.review_18m, @defs.payment)}
+        >
+          <.payment_preview_details previews={@payment_previews} />
+          <.payment_section
+            payment={@defs.payment}
+            estimates={@defs.payment_estimates}
+            can_record?={@can_record_estimate?}
+          />
+        </.collapsible>
       </div>
 
       <.update_panel
@@ -1054,12 +1231,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
 
   defp payment_section(assigns) do
     ~H"""
-    <section
-      class="bg-base-100 border border-base-200 rounded-xl overflow-hidden scroll-mt-4"
-      id="payment"
-    >
+    <div class="border-t border-base-200" id="payment-formal">
       <div class="px-4 py-3 border-b border-base-200 space-y-1">
-        <h2 class="font-semibold">{@payment.label}</h2>
+        <h3 class="font-semibold" id="payment-formal-heading">
+          Formal review estimates · {@payment.label}
+        </h3>
         <p class="text-sm text-base-content/70" id="payment-terms-summary">
           {Payment.terms_summary(@payment.terms)} Only formal 18- and 36-month review ratings count. Estimates are not actual payments.
         </p>
@@ -1081,13 +1257,19 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
               <td class="whitespace-nowrap">
                 {format_weight(c.systems_weight)} / {format_weight(c.outcomes_weight)}
               </td>
-              <td>{Payment.money(c.allocation)}</td>
+              <td>{Payment.allocation_text(c)}</td>
               <td id={"payment-#{c.checkpoint}-estimate"}>
                 <span :if={c.status == :estimated} class="font-semibold">
                   {Payment.status_text(c)}
                 </span>
                 <span :if={c.status != :estimated} class="text-base-content/70">
                   {Payment.status_text(c)}
+                </span>
+                <span
+                  class="block text-xs text-base-content/60"
+                  id={"payment-#{c.checkpoint}-coverage"}
+                >
+                  {Payment.coverage_text(c)}
                 </span>
               </td>
               <td :if={@can_record?}>
@@ -1123,8 +1305,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
             Estimate = {@payment.formula}, capped at the checkpoint allocation and rounded to cents.
             Category averages are taken separately before the weights apply. Only formal
             18- and 36-month review ratings count: seasonal ratings, targets and actual results
-            never do. Every metric needs a review rating (an explicit 0 counts); otherwise the
-            checkpoint stays “Awaiting review”. Estimates are not actual payments.
+            never do. A metric rated N/A is left out of its category average and of the
+            required count. Every other metric needs a numeric review rating (an explicit 0 counts);
+            a missing or unavailable one keeps the checkpoint “Awaiting review”. If a category has
+            no numeric rating, the estimate is unavailable (never 0, never reweighted). Estimates
+            are not actual payments.
           </p>
           <div
             class="overflow-x-auto"
@@ -1157,8 +1342,11 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
                     {format_weight(c.systems_weight)} / {format_weight(c.outcomes_weight)}
                   </td>
                   <td>{Payment.score_text(c.weighted_score)}</td>
-                  <td>{Payment.money(c.allocation)}</td>
-                  <td>{Payment.status_text(c)}</td>
+                  <td>{Payment.allocation_text(c)}</td>
+                  <td>
+                    {Payment.status_text(c)}
+                    <span class="block text-xs text-base-content/60">{Payment.coverage_text(c)}</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -1188,7 +1376,101 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLive do
           </li>
         </ul>
       </div>
-    </section>
+    </div>
+    """
+  end
+
+  # The collapsed details header: the preview and the formal review status
+  # (which carries the unresolved 36-month allocation).
+  defp payment_summary(preview, payment) do
+    {_tone, headline} = PaymentPreview.headline(preview.row)
+    period = if preview.period, do: "#{preview.period.label} preview", else: "Preview"
+
+    "#{period}: #{headline}. Formal review: #{Payment.combined_text(payment.combined)}."
+  end
+
+  attr :previews, :map, required: true
+
+  # The current-ratings preview, worked: the same figures as the portfolio's
+  # preview for this participant and period, at both checkpoints.
+  defp payment_preview_details(assigns) do
+    assigns = assign(assigns, :first, assigns.previews.review_18m)
+
+    ~H"""
+    <div class="px-4 py-3 space-y-2" id="payment-preview">
+      <h3 class="font-semibold">
+        Current-ratings preview{if @first.period, do: " · #{@first.period.label} ratings"}
+      </h3>
+      <p class="text-sm text-base-content/70" id="payment-preview-note">
+        {PaymentPreview.preview_note()} It applies the payment formula and completeness rule to
+        the selected reporting period's current implementation ratings, as if they were review
+        ratings. Nothing is recorded, and no other period is used when ratings are missing.
+      </p>
+      <p
+        :if={@first.row.status != :loaded}
+        class="text-sm text-base-content/70"
+        id="payment-preview-reason"
+      >
+        {PaymentPreview.row_reason(@first.row.status, @first.row[:period] || @first.period)}
+      </p>
+      <div
+        :if={@first.row.status == :loaded}
+        class="overflow-x-auto"
+        tabindex="0"
+        role="region"
+        aria-label="Current-ratings preview calculation"
+      >
+        <table class="table table-sm w-full" id="payment-preview-table">
+          <thead>
+            <tr class="bg-base-200/60 text-base-content/70 text-xs uppercase tracking-wide align-bottom">
+              <th>Checkpoint</th>
+              <th>Systems average</th>
+              <th>Student Outcome average</th>
+              <th>Weights</th>
+              <th class="whitespace-normal">Weighted score</th>
+              <th>Allocation</th>
+              <th class="whitespace-normal">Preview payment</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              :for={
+                {checkpoint, p} <- [
+                  review_18m: @previews.review_18m,
+                  review_36m: @previews.review_36m
+                ]
+              }
+              id={"payment-preview-#{checkpoint}"}
+            >
+              <% r = p.row %>
+              <td class="font-medium">{p.checkpoint_label}</td>
+              <td :for={a <- [r.systems, r.outcomes]}>
+                {Portfolio.number(a.value) || PaymentPreview.average_reason(a)}
+                <span class="block text-xs text-base-content/60">
+                  {Payment.coverage_phrase(a.rated, a.applicable, a.na)}
+                </span>
+              </td>
+              <td class="whitespace-nowrap">
+                {format_weight(p.weights.systems)} / {format_weight(p.weights.outcomes)}
+              </td>
+              <td>
+                {Portfolio.number(r.weighted) || PaymentPreview.weighted_reason(r)}
+                <span :if={r.weighted && !r.complete?} class="block text-xs text-base-content/60">
+                  partial
+                </span>
+              </td>
+              <td>{Payment.allocation_text(r.estimate)}</td>
+              <td id={"payment-preview-#{checkpoint}-payment"}>
+                {elem(PaymentPreview.payment_text(r), 1)}
+                <span class="block text-xs text-base-content/60">
+                  {Payment.coverage_text(r.estimate)}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
     """
   end
 

@@ -35,11 +35,10 @@ defmodule EmisintWeb.Improvement.PortfolioLiveTest do
              "Overall Goal Progress — Average Rubric Score"
            )
 
-    assert has_element?(
-             view,
-             "#portfolio-payment",
-             "Performance Based Payments (18-month review)"
-           )
+    # The current-ratings preview is the default payment view; the formal
+    # review table is its own view (checked below).
+    assert has_element?(view, "#portfolio-preview", "Estimated payment based on current ratings.")
+    refute has_element?(view, "#portfolio-payment")
 
     for slug <-
           ~w(fort-yates-ms oberon-elementary valley-middle-school drayton-public-school-district dunseith-public-school-district mandaree-public-school-district warwick-public-school-district) do
@@ -54,18 +53,35 @@ defmodule EmisintWeb.Improvement.PortfolioLiveTest do
     assert has_element?(view, "#fort-yates-ms-spr_26-systems", "1.25")
     assert has_element?(view, "#fort-yates-ms-spr_26-outcomes", "1.6")
     assert has_element?(view, "#fort-yates-ms-sum_26-systems", "1.38")
-    # Valley: 13 of 16 Systems metrics scored in Spr '26.
-    assert has_element?(view, "#portfolio-row-valley-middle-school", "13/16")
+    # Valley, Spr '26: the workbook marks 3 Systems metrics N/A (Valley Goals!E6,
+    # E13, E41). They are excluded, not missing: 13 of 13 applicable, "3 N/A".
+    assert has_element?(view, "#portfolio-row-valley-middle-school", "3 N/A")
+    refute has_element?(view, "#portfolio-row-valley-middle-school", "13/16")
 
     # Missing values are "—", never 0.
     assert has_element?(view, "#fort-yates-ms-fal_26-systems[data-missing]", "—")
     assert has_element?(view, "#fort-yates-ms-check_18m-systems[data-missing]", "—")
     assert has_element?(view, "#portfolio-average", "of 8 participants shown")
 
-    # Payment: explicit statuses, no invented total.
-    assert has_element?(view, "#fort-yates-ms-estimate", "Awaiting review")
-    assert has_element?(view, "#oberon-elementary-estimate", "Not configured")
-    assert has_element?(view, "#portfolio-payment", "No portfolio payment total is shown")
+    # Formal review payment: explicit statuses, no invented total.
+    {:ok, formal, _html} = live(log_in(conn, admin), "/school-goals?pay=formal")
+    refute has_element?(formal, "#portfolio-preview")
+
+    assert has_element?(
+             formal,
+             "#portfolio-payment",
+             "Performance Based Payments (18-month review)"
+           )
+
+    assert has_element?(formal, "#fort-yates-ms-estimate", "Awaiting review")
+
+    assert has_element?(
+             formal,
+             "#oberon-elementary-estimate",
+             "Awaiting review: 21 review ratings"
+           )
+
+    assert has_element?(formal, "#portfolio-payment", "No portfolio payment total is shown")
 
     # The workbook's Solen row is the Cannon Ball participant, linked once.
     assert has_element?(
@@ -77,12 +93,18 @@ defmodule EmisintWeb.Improvement.PortfolioLiveTest do
     assert has_element?(view, "#portfolio-row-cannon-ball-elementary", "Workbook row “Solen”")
     assert has_element?(view, "#cannon-ball-elementary-spr_26-systems", "1.20")
     refute html =~ "portfolio-row-solen"
-    refute html =~ ~s(href="/school-goals/solen)
+    # Solen High School is Cannon Ball's building: never a portfolio row, and
+    # (November 13, 2026) not listed on the main dashboard; it is a subtab
+    # inside Cannon Ball's pages.
+    refute has_element?(view, "#portfolio-row-solen-high-school")
+    refute has_element?(view, "#school-solen-high-school")
+    refute html =~ ~s(href="/school-goals/solen-high-school")
 
-    # School navigation is kept.
+    # Participant navigation is kept; buildings only inside their participant.
     assert has_element?(view, "#nd-tab-fort-yates-ms")
     assert has_element?(view, "#participant-drayton-public-school-district")
-    assert has_element?(view, "#school-drayton-elementary")
+    assert has_element?(view, "#school-drayton-public-school-district")
+    refute has_element?(view, "#school-drayton-elementary")
   end
 
   test "a single-school viewer sees only that participant's row and figures", %{

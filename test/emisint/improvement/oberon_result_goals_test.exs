@@ -73,7 +73,7 @@ defmodule Emisint.Improvement.OberonResultGoalsTest do
   defp goals(rows, f \\ filters(), opts \\ []), do: ResultGoals.for_filters(rows, f, plan(), opts)
 
   describe "Oberon's own comparison configuration" do
-    test "maps Oberon's metrics, with no assumptions or grade references" do
+    test "maps Oberon's metrics, with confirmations, no assumptions or grade references" do
       config = ResultGoals.config(Oberon.school())
 
       assert Enum.map(config.workbook, &elem(&1, 0)) ==
@@ -113,35 +113,39 @@ defmodule Emisint.Improvement.OberonResultGoalsTest do
   end
 
   describe "achievement" do
-    test "workbook targets stay gray, awaiting assessment confirmation" do
+    test "workbook targets are compared in the Combined view (confirmed November 12, 2026)" do
       ela = goals(oberon_2324()).achievement[{"Reading", "All Grades"}]
 
-      assert %{status: :gray, reasons: [:assessment_type_unconfirmed], code: "G1-M2"} =
-               ela["Novice"]
-
-      assert ResultGoals.short_label(ela["Novice"]) == "Gray: awaiting assessment confirmation"
-      assert ResultGoals.explanation(ela["Novice"]) =~ "awaiting assessment confirmation"
-      # The target and value are still shown.
+      # Novice 50%–59% vs 18-month 29% (lower is better): above the target.
+      assert %{status: :misses, code: "G1-M2", kind: :workbook} = ela["Novice"]
+      assert ResultGoals.short_label(ela["Novice"]) == "Above target"
       assert ela["Novice"].target.text == "29%"
       assert ela["Novice"].value == "50%–59%"
+      # Confirmed, not assumed: no "assumed" label, the confirmation is shown.
+      assert ela["Novice"].assumed == []
+      refute ela["Novice"].candidate?
+      assert ela["Novice"].basis =~ "Confirmed by the user (November 12, 2026)"
+      assert ResultGoals.explanation(ela["Novice"]) =~ "Combined assessment"
+      # The baseline caveat is kept with the confirmation.
+      assert ela["Novice"].basis =~ "baselines don't match the published state values"
       # 2023-24 predates the plan.
       assert ela["Novice"].timing == :before_plan
     end
 
-    test "identical Combined and Standard values don't establish the assessment" do
+    test "the Standard and Alternate views get no workbook verdict" do
       rows = oberon_2324() ++ standard(oberon_2324())
 
-      for type <- ["Comp", "Reg"], subject <- ["Reading", "Math"] do
-        row = goals(rows, %{filters() | type: type}).achievement[{subject, "All Grades"}]
-        assert %{status: :gray, reasons: [:assessment_type_unconfirmed]} = row["Novice"]
-      end
-
       reg = goals(rows, %{filters() | type: "Reg"}).achievement[{"Reading", "All Grades"}]
-      assert %{kind: :workbook, status: :gray} = reg[:proficient_or_advanced]
+      refute Map.has_key?(reg, "Novice")
+      refute Map.has_key?(reg, :proficient_or_advanced)
 
       config = ResultGoals.config(Oberon.school())
-      assert config.section_notes.achievement =~ "awaiting assessment confirmation"
-      refute Map.has_key?(config, :assessment_type_rule)
+      assert config.confirmed.assessment_type == "Comp"
+
+      assert ResultGoals.assessment_view_note(config, "Reg", true) ==
+               "Workbook targets are compared only in the Combined assessment view (confirmed)."
+
+      assert ResultGoals.assessment_view_note(config, "Comp", true) == nil
     end
 
     test "the same-year annual target takes the Proficient-or-Advanced cell" do
@@ -193,47 +197,38 @@ defmodule Emisint.Improvement.OberonResultGoalsTest do
   end
 
   describe "engagement" do
-    test "Emotional Committed, Compliant and Disengaged are candidate mappings: gray, no verdict" do
+    test "Emotional Committed, Compliant and Disengaged are compared (confirmed November 12, 2026)" do
       emotional = goals(oberon_2324()).engagement[:engagement_emotional]
 
-      for {level, code} <- [
-            {"Committed", "G4-M1"},
-            {"Compliant", "G4-M2"},
-            {"Disengaged", "G4-M3"}
-          ] do
-        match = emotional[level]
+      # 2023-24 vs the 18-month range targets, by the dashboard range convention:
+      # Committed 50%–59% vs 55-60%: overlaps; Compliant 30%–39% vs 50-55%:
+      # misses; Disengaged 10%–19% vs 4-8% (lower is better): misses.
+      assert %{code: "G4-M1", status: :overlaps} = emotional["Committed"]
+      assert %{code: "G4-M2", status: :misses} = emotional["Compliant"]
+      assert %{code: "G4-M3", status: :misses} = emotional["Disengaged"]
 
-        assert %{code: ^code, status: :gray, tone: :muted, reasons: [:mapping_unconfirmed]} =
-                 match
-
-        assert match.candidate?
-        # The value and the (still parsed) range target are shown.
+      for {_level, match} <- emotional do
+        refute match.candidate?
         assert {:band, _, _} = match.spec
-        assert is_binary(match.value)
-        assert ResultGoals.short_label(match) == "Gray: candidate mapping, awaiting confirmation"
+        # Confirmed population: not labeled as an assumption.
+        assert match.assumed == []
+        assert match.basis =~ "schoolwide, all-student Emotional"
+        assert ResultGoals.explanation(match) =~ "dashboard comparison convention"
       end
 
       assert emotional["Committed"].target.text == "55-60%"
-      assert emotional["Disengaged"].direction == :lower_is_better
-      assert emotional["Committed"].assumed == []
-
-      # The evidence: the source check and the baseline match, not a confirmation.
-      basis = emotional["Committed"].basis
-      assert basis =~ "pp.23-24"
-      assert basis =~ "inferred only from matching baselines"
-      assert basis =~ "45-49%, 40-44%"
-      assert ResultGoals.explanation(emotional["Committed"]) =~ "not a confirmation"
 
       [note | _] = ResultGoals.section_notes(:engagement, goals(oberon_2324()).engagement)
-      assert note =~ "Candidate mapping, awaiting confirmation"
+      assert note =~ "Confirmed by the user (November 12, 2026)"
+      refute note =~ "Candidate"
 
       config = ResultGoals.config(Oberon.school())
-      assert Enum.sort(Map.keys(config.candidates)) == ~w(G4-M1 G4-M2 G4-M3)
-      assert config.section_notes.engagement =~ "no source states the survey population"
-      refute Map.has_key?(config, :engagement_basis)
+      assert config.candidates == %{}
+      assert config.confirmed.engagement_population == :schoolwide
 
       e36 = goals(oberon_2324(), filters(@y, :review_36m)).engagement[:engagement_emotional]
-      assert %{status: :gray, reasons: [:mapping_unconfirmed]} = e36["Committed"]
+      # 50%–59% vs 60-65%: wholly below the low end, misses.
+      assert %{status: :misses} = e36["Committed"]
       assert e36["Committed"].target.text == "60-65%"
     end
 

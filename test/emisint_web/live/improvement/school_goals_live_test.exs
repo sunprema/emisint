@@ -123,7 +123,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
       refute html =~ "perfoming"
       refute html =~ "data-drive practices"
 
-      assert has_element?(view, "#payment-card", "Awaiting review")
+      assert has_element?(view, "#payment-combined-text", "Awaiting review")
       assert has_element?(view, "#payment-calculation", "8 metrics")
       assert has_element?(view, "#payment-calculation", "10 metrics")
     end
@@ -204,7 +204,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
       # Seasonal Systems average from the workbook's Goals Dashboard.
       assert has_element?(view, "#seasonal-average-systems", "1.25")
       # Seasonal ratings never become a payment amount.
-      assert has_element?(view, "#payment-card", "Awaiting review")
+      assert has_element?(view, "#payment-combined-text", "Awaiting review")
     end
   end
 
@@ -728,7 +728,7 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
 
       refute has_element?(view, "#actual-G2-M3 [class*=nd-text-]")
       assert has_element?(view, "#rating-G2-M3", "Not rated")
-      assert has_element?(view, "#payment-card", "Awaiting review")
+      assert has_element?(view, "#payment-combined-text", "Awaiting review")
 
       view |> element("#update-G2-M3") |> render_click()
       assert has_element?(view, "#review-entry-note")
@@ -999,24 +999,28 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
                current(ImplementationRating, org, "G2-M3", "review_18m")
 
       # Systems 3; Student Outcome (9 × 3 + 0) ÷ 10 = 2.7.
-      # 3 × 0.70 + 2.7 × 0.30 = 2.91; 35,000 × 2.91 ÷ 3 = 33,950.00.
+      # 3 × 0.70 + 2.7 × 0.30 = 2.91; 70,000 × 2.91 ÷ 3 = 67,900.00.
       assert has_element?(view, "#payment-calc-review_18m", "2.70")
       assert has_element?(view, "#payment-calc-review_18m", "2.91")
-      assert has_element?(view, "#payment-review_18m-estimate", "$33,950.00")
+      assert has_element?(view, "#payment-review_18m-estimate", "$67,900.00")
 
       assert has_element?(
                view,
                "#payment-review_36m-estimate",
-               "Awaiting review: 18 review ratings"
+               "Awaiting review: 18 review ratings not recorded; payment allocation needs confirmation"
              )
 
       assert has_element?(
                view,
                "#payment-combined-text",
-               "Subtotal $33,950.00 (18-month review only); the total awaits the other review"
+               "Subtotal $67,900.00 (18-month review only); the 36-month review payment allocation needs confirmation"
              )
 
-      assert has_element?(view, "#payment-card", "Estimated payment — provisional cap and split")
+      assert has_element?(
+               view,
+               "#payment-formal-heading",
+               "Estimated payment — provisional terms"
+             )
 
       assert has_element?(
                view,
@@ -1029,14 +1033,20 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
 
       # The short summary keeps the provisional total, split and weights in
       # view; the provenance note and formula sit in the expandable details.
-      assert has_element?(view, "#payment-terms-summary", "$70,000.00 total per school")
-      assert has_element?(view, "#payment-terms-summary", "$35,000.00 to the 18-month review")
+      assert has_element?(view, "#payment-terms-summary", "18-month review: up to $70,000.00")
+
+      assert has_element?(
+               view,
+               "#payment-terms-summary",
+               "36-month review: payment allocation needs confirmation"
+             )
+
       refute has_element?(view, "#payment-terms-summary", "best-estimate")
 
       assert has_element?(
                view,
                "#payment-details #payment-terms",
-               "Provisional estimate based on an assumed $70,000 total per school, split equally between the 18-month and 36-month checkpoints. Final payment terms are pending confirmation."
+               "Provisional estimate, not confirmed contract terms. The 18-month amount follows the workbook's “Performance-Based Payment” sheet (rows 4–11, column I: weighted score ÷ 3 × $70,000). No source sets a 36-month payment allocation, so the 36-month review shows its weighted score and its payment allocation needs confirmation."
              )
 
       # No personal attribution or internal history anywhere on the page.
@@ -1079,14 +1089,14 @@ defmodule EmisintWeb.Improvement.SchoolGoalsLiveTest do
       assert has_element?(view, "#payment-estimates", "None recorded")
       html = view |> element("#record-estimate-review_18m") |> render_click()
 
-      assert html =~ "Estimate recorded for the 18-Month Review: $33,950.00"
-      assert has_element?(view, "#payment-estimates", "18-month review: $33,950.00")
-      assert has_element?(view, "#payment-estimates", "cap $70,000.00, allocation $35,000.00")
+      assert html =~ "Estimate recorded for the 18-Month Review: $67,900.00"
+      assert has_element?(view, "#payment-estimates", "18-month review: $67,900.00")
+      assert has_element?(view, "#payment-estimates", "cap $70,000.00, allocation $70,000.00")
 
       assert [estimate] =
                Ash.read!(Emisint.Improvement.PaymentEstimate, tenant: org.id, authorize?: false)
 
-      assert Decimal.equal?(estimate.amount, "33950.00")
+      assert Decimal.equal?(estimate.amount, "67900.00")
     end
 
     test "a forged record event from a contributor is refused", %{

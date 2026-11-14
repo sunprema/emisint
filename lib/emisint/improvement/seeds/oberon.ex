@@ -28,6 +28,11 @@ defmodule Emisint.Improvement.Seeds.Oberon do
     }
   end
 
+  @doc "Payment terms: the workbook's, shared by every participant (`Seeds.Participant.workbook_payment_terms/0`)."
+  defdelegate payment_terms,
+    to: Emisint.Improvement.Seeds.Participant,
+    as: :workbook_payment_terms
+
   def goal_plan do
     %{
       program: "nd_first_mou",
@@ -51,7 +56,8 @@ defmodule Emisint.Improvement.Seeds.Oberon do
   """
   def plan_start_year, do: "2025-2026"
 
-  @engagement_evidence "The workbook names the Emotional category but not the survey, year, grades or population behind G4-M1..M3, and the continuous improvement plan (North Dakota - ND First Schools.pdf pp.23-24) says nothing about the engagement survey. The population is inferred only from matching baselines: G4-M1 and G4-M2 (45-49%, 40-44%, Oberon Goals!D27:D28) equal Oberon's published 2024-25 Emotional Committed and Compliant values; G4-M3's baseline (6-10%) doesn't match (10%–14% published). Confirming the survey population would enable a verdict."
+  @achievement_confirmation "Confirmed by the user (November 12, 2026): Oberon's workbook achievement targets count the Combined assessment. Caveat: the workbook's achievement baselines don't match the published state values (for example, the ELA Novice baseline is 36%, while Insights publishes 50%–79% for 2021-22 through 2023-24)."
+  @engagement_confirmation "Confirmed by the user (November 12, 2026): G4-M1, G4-M2 and G4-M3 count Oberon's schoolwide, all-student Emotional Engagement Survey results (Committed, Compliant and Disengaged). The targets are written as ranges (e.g. 55-60%), which the sources don't define as met at either end, so their colors follow the dashboard comparison convention for range targets."
 
   @doc """
   How Oberon's workbook metrics are compared with published ND Insights
@@ -60,15 +66,12 @@ defmodule Emisint.Improvement.Seeds.Oberon do
   with `performance_measure: :other`, so each match is guarded by the exact
   workbook wording instead.
 
-  No assumptions are applied. The workbook doesn't name the assessment
-  behind its achievement targets, so those comparisons stay gray, awaiting
-  assessment confirmation (identical Combined and Standard values don't
-  establish the workbook's definition). Its Emotional engagement metrics are
-  candidate mappings (`candidates`): no source states the survey population,
-  which is inferred only from matching baselines, so they are shown gray
-  without a verdict. Their range targets would be colored by the dashboard's
-  either-end convention (`ResultGoals.classify_band/4`, not a
-  source-confirmed rule) once confirmed.
+  No assumptions are applied. Confirmed by the user (November 12, 2026)
+  (`confirmed`, `confirmations`): the achievement targets count the
+  Combined assessment, and the Emotional engagement metrics count the
+  schoolwide, all-student Emotional survey results. Their range targets are
+  colored by the dashboard's either-end convention
+  (`ResultGoals.classify_band/4`, not a source-confirmed rule).
   Insights publishes only All Grades rows for Oberon, so there are no
   grade-level references.
   """
@@ -91,20 +94,26 @@ defmodule Emisint.Improvement.Seeds.Oberon do
          :engagement_emotional, "Disengaged", "Emotional Disengaged"}
       ],
       assumptions: %{},
-      candidates: Map.new(~w(G4-M1 G4-M2 G4-M3), &{&1, @engagement_evidence}),
+      # Confirmed by the user (November 12, 2026).
+      confirmed: %{assessment_type: "Comp", engagement_population: :schoolwide},
+      confirmations:
+        Map.merge(
+          Map.new(~w(G1-M1 G1-M2 G2-M1 G2-M2), &{&1, @achievement_confirmation}),
+          Map.new(~w(G4-M1 G4-M2 G4-M3), &{&1, @engagement_confirmation})
+        ),
       grade_reference: nil,
       matching:
-        "Proficient or Advanced (derived) is matched to the workbook Proficient & Advanced metrics (G1-M1 ELA, G2-M1 Math) and Novice to the Novice metrics (G1-M2 ELA, G2-M2 Math; lower is better). Where the continuous improvement plan has an annual Proficient-or-Advanced target for the same school year, that cell shows the annual comparison instead. The Emotional Engagement Survey's Committed, Compliant and Disengaged are candidate mappings for G4-M1, G4-M2 and G4-M3 (Disengaged: lower is better), shown gray without a verdict until the survey population is confirmed. Only schoolwide results (All Grades, all students) are matched: Insights publishes no grade-level rows for Oberon, so there are no grade-level references. Oberon has no growth metric. Attendance (Goal 3), behavioral referrals (G4-M4) and the Systems metrics have no ND Insights counterpart. Student groups are not matched.",
+        "Proficient or Advanced (derived) is matched to the workbook Proficient & Advanced metrics (G1-M1 ELA, G2-M1 Math) and Novice to the Novice metrics (G1-M2 ELA, G2-M2 Math; lower is better). Where the continuous improvement plan has an annual Proficient-or-Advanced target for the same school year, that cell shows the annual comparison instead. Workbook achievement targets count the Combined assessment (confirmed by the user, November 12, 2026), so the Standard and Alternate views get no workbook verdict. The schoolwide, all-student Emotional Engagement Survey's Committed, Compliant and Disengaged are matched to G4-M1, G4-M2 and G4-M3 (Disengaged: lower is better; confirmed by the user, November 12, 2026); their range targets are colored by the dashboard comparison convention. Only schoolwide results (All Grades, all students) are matched: Insights publishes no grade-level rows for Oberon, so there are no grade-level references. Oberon has no growth metric. Attendance (Goal 3), behavioral referrals (G4-M4) and the Systems metrics have no ND Insights counterpart. Student groups are not matched.",
       assumptions_text:
-        "No assumptions are applied for Oberon. Assessment: the workbook doesn't say which assessment (Combined, Standard or Alternate) its Proficient & Advanced and Novice targets count, so those workbook comparisons stay gray, awaiting assessment confirmation. Combined and Standard publishing identical values for a year doesn't establish the workbook's definition. Caveat for when it is confirmed: the workbook's achievement baselines don't match the published state values (for example, the ELA Novice baseline is 36%, while Insights publishes 50%–79% for 2021-22 through 2023-24). The annual Proficient-or-Advanced targets from the continuous improvement plan state their assessment (including the alternate assessment) and are compared with the same year's Combined result. Engagement: The workbook names the Emotional category but not the survey, year, grades or population behind G4-M1..M3, and the continuous improvement plan (North Dakota - ND First Schools.pdf pp.23-24) says nothing about the engagement survey. The population is inferred only from matching baselines: G4-M1 and G4-M2 (45-49%, 40-44%, Oberon Goals!D27:D28) equal Oberon's published 2024-25 Emotional Committed and Compliant values; G4-M3's baseline (6-10%) doesn't match (10%–14% published). Confirming the survey population would enable a verdict. The engagement targets are written as ranges (for example, 55-60%), and the sources don't define when a range target is met; once confirmed, they would be colored by a dashboard comparison convention, not a source-confirmed scoring rule.",
+        "No assumptions are applied for Oberon. Confirmed by the user (November 12, 2026): the workbook achievement targets count the Combined assessment, and the Emotional engagement metrics (G4-M1..M3) count the schoolwide, all-student Emotional survey results. Caveat: the workbook's achievement baselines don't match the published state values (for example, the ELA Novice baseline is 36%, while Insights publishes 50%–79% for 2021-22 through 2023-24). The annual Proficient-or-Advanced targets from the continuous improvement plan state their assessment (including the alternate assessment) and are compared with the same year's Combined result. The engagement targets are written as ranges (for example, 55-60%); the sources don't define when a range target is met, so they are colored by a dashboard comparison convention, not a source-confirmed scoring rule.",
       assumptions_short:
-        "No assumptions for Oberon: workbook achievement targets stay gray, awaiting assessment confirmation; Emotional engagement metrics are candidate mappings awaiting confirmation of the survey population (gray, no verdict).",
+        "Oberon: Combined assessment and the schoolwide Emotional survey population confirmed (November 12, 2026); range targets use the dashboard comparison convention.",
       section_notes: %{
         achievement:
-          "Workbook targets G1-M1 and G2-M1 (Proficient & Advanced) and G1-M2 and G2-M2 (Novice) are shown gray, awaiting assessment confirmation: the workbook doesn't name the assessment they count. Where an annual target exists for the same school year, the Proficient or Advanced cell shows that comparison instead.",
+          "Workbook targets G1-M1 and G2-M1 (Proficient & Advanced) and G1-M2 and G2-M2 (Novice) are compared in the Combined assessment view (confirmed). Where an annual target exists for the same school year, the Proficient or Advanced cell shows that comparison instead.",
         growth: "Oberon's workbook has no growth metric, so growth results have no school goal.",
         engagement:
-          "Emotional Committed, Compliant and Disengaged are shown with G4-M1, G4-M2 and G4-M3 as candidate mappings, gray without a verdict: no source states the survey population (it is inferred only from matching baselines). Once confirmed, their range targets would be colored by a dashboard comparison convention, not a source-confirmed scoring rule."
+          "Emotional Committed, Compliant and Disengaged are compared with G4-M1, G4-M2 and G4-M3 (schoolwide, all-student Emotional survey results; confirmed). Their range targets are colored by a dashboard comparison convention, not a source-confirmed scoring rule."
       },
       annual_years: %{
         status: :stated,
@@ -116,7 +125,7 @@ defmodule Emisint.Improvement.Seeds.Oberon do
         "Oberon's continuous improvement plan lists annual targets for a historical goal period (2018-19 through 2023-24) and none for 2024-25 or later. Each target is compared only with results of its own year.",
       report_notes: [
         "Workbook provenance [W]. Baselines, targets and Spring/Summer '26 ratings were imported from “ND First School MOU Goal Overview.xlsx” (sheet “Oberon Goals”); the cell is shown with each value. The workbook does not record who entered each value. Values marked “as written” are shown exactly as in the workbook.",
-        "Still to confirm. G4-M7's targets (Oberon Goals!H33 and P33) are stored as the date February 3, probably “2-3” converted by the spreadsheet, so they are flagged and excluded. G1-M3 and G1-M4 have no baseline. G3-M2, G3-M3's baseline and G4-M1 through G4-M3 are written as ranges and kept as text. Goals 2–4's 18-month column (I12, I19, I26) is headed “Target Check” rather than “18-Month Review Rating”. The grade span isn't stated in the sources.",
+        "Still to confirm. G4-M7's targets (Oberon Goals!H33 and P33) are stored as the date February 3, probably “2-3” converted by the spreadsheet, so they are flagged and excluded. G1-M3 and G1-M4 have no baseline. G3-M2, G3-M3's baseline and G4-M1 through G4-M3 are written as ranges and kept as text (G4-M1..M3's range targets are compared by the dashboard comparison convention). Goals 2–4's 18-month column (I12, I19, I26) is headed “Target Check” rather than “18-Month Review Rating”. The grade span isn't stated in the sources.",
         "Annual targets. North Dakota - ND First Schools.pdf p.23 lists Oberon's annual Proficient-or-Advanced targets for the historical goal period 2018-19 through 2023-24 (ELA and math, including the alternate assessment). No targets are listed for later years."
       ]
     }

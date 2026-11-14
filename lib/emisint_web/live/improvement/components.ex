@@ -113,6 +113,24 @@ defmodule EmisintWeb.Improvement.Components do
   Explains a district participant's or building's scope (`Seeds.Participant`)
   and links the related records. Nothing for a single-building participant.
   """
+  # A school participant with a separate building (Cannon Ball, whose
+  # building is Solen High School).
+  def participant_scope_note(%{scope: %{kind: :participant, record_kind: :school}} = assigns) do
+    ~H"""
+    <div class="alert alert-info alert-soft text-sm" id="participant-scope" role="note">
+      <div>
+        <div class="font-medium">School participant with a separate building</div>
+        <div>
+          The ND First workbook goals, seasonal ratings and payment below are written for this participant.
+          The state results below are {@school.name}'s own published rows (InstitutionID {@school.state_entity_id}).
+          Workbook goals for grades this school doesn't publish are compared on the building's dashboard, with that building's own results:
+          <.related_links schools={@scope.buildings} />
+        </div>
+      </div>
+    </div>
+    """
+  end
+
   def participant_scope_note(%{scope: %{kind: :participant}} = assigns) do
     assigns =
       assign(assigns,
@@ -151,12 +169,21 @@ defmodule EmisintWeb.Improvement.Components do
       <div>
         <div class="font-medium">Building of an ND First participant</div>
         <div>
-          This dashboard shows {@school.name}'s own annual targets and published results. The ND First workbook goals, seasonal ratings and payment are
+          <span :if={!@scope[:participant_goals?]}>
+            This dashboard shows {@school.name}'s own annual targets and published results.
+          </span>
+          <span :if={@scope[:participant_goals?]}>
+            This dashboard shows {@school.name}'s own published results; the plan sets no annual targets for it.
+          </span>
+          The ND First workbook goals, seasonal ratings and payment are
           <span :if={!@provisional?}>written for</span>
           <span :if={@provisional?}>recorded provisionally on</span>
           <.related_links schools={[@scope.participant]} /> and are not repeated here.
           <span :if={@provisional?} id="building-scope-provisional">
             Whether they cover this building is not established by the sources.
+          </span>
+          <span :if={@scope[:participant_goals?]} id="building-scope-participant-goals">
+            Its workbook goals for this building's grades are compared below with this building's own published results, labeled by grade.
           </span>
         </div>
       </div>

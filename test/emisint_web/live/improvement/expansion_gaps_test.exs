@@ -12,7 +12,8 @@ defmodule EmisintWeb.Improvement.ExpansionGapsTest do
   Fixtures in `expansion/` are official 2024-25 rows (see
   `ExpansionSchoolsTest`).
   """
-  use EmisintWeb.ConnCase, async: true
+  # Never concurrent with other ND Insights imports (see Emisint.NdInsightsFixtures).
+  use EmisintWeb.ConnCase, async: true, group: :nd_insights_import
 
   import Emisint.ImprovementFixtures
   import Emisint.NdInsightsFixtures
@@ -166,10 +167,11 @@ defmodule EmisintWeb.Improvement.ExpansionGapsTest do
   end
 
   describe "Warwick's provisional workbook scope" do
-    test "is labeled on the district and buildings, and nothing depends on it", %{
-      conn: conn,
-      admin: admin
-    } do
+    test "is labeled on the district and buildings; comparisons with district rows are provisional",
+         %{
+           conn: conn,
+           admin: admin
+         } do
       assert Participant.provisional_scope?(Participant.scope(Seeds.Warwick.school()))
       assert Participant.provisional_scope?(Participant.scope(Seeds.WarwickHigh.school()))
       refute Participant.provisional_scope?(Participant.scope(Seeds.Drayton.school()))
@@ -187,10 +189,17 @@ defmodule EmisintWeb.Improvement.ExpansionGapsTest do
       refute has_element?(view, "#participant-scope", "are written for")
       assert has_element?(view, "#workbook-scope-evidence", "fit no single scope")
 
-      # No scope-dependent comparison or payment.
-      assert ResultGoals.config(Seeds.Warwick.school()).workbook == []
-      refute has_element?(view, "[data-goal][data-kind=workbook]")
-      assert has_element?(view, "#payment-card", "not configured")
+      # Provisional dashboard reference comparisons with the district's own
+      # rows (user decision, November 12, 2026); still no payment.
+      config = ResultGoals.config(Seeds.Warwick.school())
+      assert config.provisional |> Map.keys() |> Enum.sort() == ~w(G2-M6 G3-M1 G3-M2 G4-M1 G4-M2)
+      assert config.assumption_kind == "provisional assumption"
+
+      assert has_element?(
+               view,
+               "#payment-summary",
+               "36-month review payment allocation needs confirmation"
+             )
 
       {:ok, building, _} = page(conn, admin, "warwick-middle-school")
       assert has_element?(building, "#building-scope", "recorded provisionally on")
@@ -207,7 +216,9 @@ defmodule EmisintWeb.Improvement.ExpansionGapsTest do
       {:ok, district, _} = NdFirstSchoolPdf.build(scope, "warwick-public-school-district")
       assert district.scope.note =~ "recorded on Warwick Public School District provisionally"
       assert district.scope.provisional =~ "Workbook scope provisional"
-      assert district.payment.combined == "Not configured"
+
+      assert district.payment.combined ==
+               "Awaiting review; the 36-month review payment allocation needs confirmation"
 
       {:ok, building, _} = NdFirstSchoolPdf.build(scope, "warwick-high-school")
       assert building.scope.note =~ "recorded provisionally on Warwick Public School District"

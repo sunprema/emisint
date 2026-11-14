@@ -158,7 +158,7 @@ defmodule Emisint.Improvement.PaymentEstimateTest do
       refute Payment.status_text(c) =~ "$"
     end
 
-    test "not applicable or unavailable is not silently excluded" do
+    test "an explicit N/A is excluded from the average and the count; unavailable still withholds" do
       scores =
         @mixed
         |> ratings()
@@ -166,9 +166,27 @@ defmodule Emisint.Improvement.PaymentEstimateTest do
 
       c = plan() |> Payment.summary(@metrics, %{review_18m: scores}) |> checkpoint(:review_18m)
 
+      # The same as a plan without O3 (N/A rule, November 13, 2026).
+      without =
+        plan()
+        |> Payment.summary(Enum.reject(@metrics, &(&1.code == "O3")), %{review_18m: scores})
+        |> checkpoint(:review_18m)
+
+      assert c.status == :estimated
+      assert c.excluded_na == ["O3"]
+      assert c.estimate == without.estimate
+      assert Decimal.equal?(c.outcomes_average, without.outcomes_average)
+      assert Payment.coverage_text(c) =~ "applicable metrics rated · 1 N/A excluded"
+
+      unavailable =
+        Map.put(scores, "o3", %{id: "rating-o3", rating_state: :unavailable, score: nil})
+
+      c =
+        plan() |> Payment.summary(@metrics, %{review_18m: unavailable}) |> checkpoint(:review_18m)
+
       assert c.status == :awaiting_review
-      assert c.not_scored == [{"O3", :not_applicable}]
-      assert Payment.status_text(c) =~ "marked not applicable or unavailable (O3)"
+      assert c.not_scored == [{"O3", :unavailable}]
+      assert Payment.status_text(c) =~ "1 marked unavailable (O3)"
     end
 
     test "with one checkpoint complete, the combined line is a labeled subtotal" do
@@ -195,19 +213,21 @@ defmodule Emisint.Improvement.PaymentEstimateTest do
       assert Payment.terms_text(summary.terms) =~ "Not configured"
     end
 
-    test "provisional terms are worded as a working assumption, not contract terms" do
-      terms = Payment.terms(plan())
+    test "the workbook terms are worded as provisional, with the 36-month allocation unconfirmed" do
+      terms =
+        Payment.terms(plan(%{allocation_18m: Decimal.new("70000"), allocation_36m: nil}))
+
+      assert terms.configured?
       text = Payment.terms_summary(terms)
 
       assert text =~ "Working assumption, not confirmed contract terms"
-      assert text =~ "$70,000.00 total per school across both checkpoints"
-      assert text =~ "$35,000.00 to the 18-month review and $35,000.00 to the 36-month review"
+      assert text =~ "18-month review: up to $70,000.00"
+      assert text =~ "36-month review: payment allocation needs confirmation"
 
-      # The details give the provisional sentence once, without restating the summary.
       assert Payment.terms_text(terms) ==
-               "Provisional estimate based on an assumed $70,000 total per school, split equally between the 18-month and 36-month checkpoints. Final payment terms are pending confirmation."
+               "Provisional estimate, not confirmed contract terms. The 18-month amount follows the workbook's “Performance-Based Payment” sheet (rows 4–11, column I: weighted score ÷ 3 × $70,000). No source sets a 36-month payment allocation, so the 36-month review shows its weighted score and its payment allocation needs confirmation."
 
-      assert Payment.label() == "Estimated payment — provisional cap and split"
+      assert Payment.label() == "Estimated payment — provisional terms"
     end
   end
 
@@ -229,29 +249,29 @@ defmodule Emisint.Improvement.PaymentEstimateTest do
       }
     end
 
-    test "the seeds set the provisional $70,000 cap split $35,000 / $35,000", %{plan: plan} do
+    test "the seeds set the workbook's $70,000 18-month allocation; the 36-month one is unset",
+         %{plan: plan} do
       assert plan.payment_terms_status == :provisional
       assert Decimal.equal?(plan.payment_cap, "70000")
-      assert Decimal.equal?(plan.allocation_18m, "35000")
-      assert Decimal.equal?(plan.allocation_36m, "35000")
-      assert plan.payment_terms_note =~ "Ram authorized a best-estimate payment rule"
-
-      assert plan.payment_terms_note =~
-               "our selected provisional assumptions, not terms he specified"
+      assert Decimal.equal?(plan.allocation_18m, "70000")
+      assert plan.allocation_36m == nil
+      assert plan.payment_terms_note =~ "'Performance-Based Payment'!I2"
+      assert plan.payment_terms_note =~ "H*70000"
+      assert plan.payment_terms_note =~ "36-month allocation not set"
     end
 
-    test "allocations must sum to the cap", %{org: org, plan: plan} do
-      assert {:error, error} =
-               plan
-               |> Ash.Changeset.for_update(
-                 :set_payment_terms,
-                 %{allocation_18m: Decimal.new("40000")},
-                 tenant: org.id,
-                 authorize?: false
-               )
-               |> Ash.update()
+    test "an allocation can't exceed the cap or be negative", %{org: org, plan: plan} do
+      update = fn attrs ->
+        plan
+        |> Ash.Changeset.for_update(:set_payment_terms, attrs, tenant: org.id, authorize?: false)
+        |> Ash.update()
+      end
 
-      assert Exception.message(error) =~ "must sum to the payment cap"
+      assert {:error, error} = update.(%{allocation_36m: Decimal.new("80000")})
+      assert Exception.message(error) =~ "can't exceed the payment cap"
+
+      assert {:error, error} = update.(%{allocation_36m: Decimal.new("-1")})
+      assert Exception.message(error) =~ "must be more than or equal to"
     end
 
     test "no user can change the payment terms, not even an org admin", ctx do
@@ -350,43 +370,40 @@ defmodule Emisint.Improvement.PaymentEstimateTest do
       assert {:error, %Ash.Error.Forbidden{}} = record_estimate(ctx, ctx.contributor)
       assert {:ok, estimate} = record_estimate(ctx, ctx.admin)
 
-      # Systems 3, Outcomes 1: 3 × 0.70 + 1 × 0.30 = 2.4; 35,000 × 2.4 ÷ 3 = 28,000.
+      # Systems 3, Outcomes 1: 3 × 0.70 + 1 × 0.30 = 2.4; 70,000 × 2.4 ÷ 3 = 56,000.
       assert estimate.checkpoint == :review_18m
-      assert Decimal.equal?(estimate.amount, "28000.00")
-      assert Decimal.equal?(estimate.allocation, "35000")
+      assert Decimal.equal?(estimate.amount, "56000.00")
+      assert Decimal.equal?(estimate.allocation, "70000")
       assert Decimal.equal?(estimate.payment_cap, "70000")
       assert Decimal.equal?(estimate.weighted_score, "2.4")
       assert estimate.terms_status == :provisional
-      assert estimate.label == "Estimated payment — provisional cap and split"
+      assert estimate.label == "Estimated payment — provisional terms"
       assert length(estimate.inputs) == 18
 
       ctx.plan
       |> Ash.Changeset.for_update(
         :set_payment_terms,
-        %{
-          payment_cap: Decimal.new("80000"),
-          allocation_18m: Decimal.new("40000"),
-          allocation_36m: Decimal.new("40000")
-        },
+        %{payment_cap: Decimal.new("80000"), allocation_18m: Decimal.new("80000")},
         tenant: ctx.org.id,
         authorize?: false
       )
       |> Ash.update!()
 
       [stored] = Ash.read!(PaymentEstimate, tenant: ctx.org.id, authorize?: false)
-      assert Decimal.equal?(stored.amount, "28000.00")
-      assert Decimal.equal?(stored.allocation, "35000")
+      assert Decimal.equal?(stored.amount, "56000.00")
+      assert Decimal.equal?(stored.allocation, "70000")
       assert stored.terms_version == estimate.terms_version
 
       {:ok, again} = record_estimate(ctx, ctx.admin)
-      assert Decimal.equal?(again.amount, "32000.00")
+      # 80,000 × 2.4 ÷ 3 = 64,000.
+      assert Decimal.equal?(again.amount, "64000.00")
       assert again.terms_version == estimate.terms_version + 1
     end
 
     test "a corrected review rating replaces the original in the estimate", ctx do
       ratings = for m <- ctx.metrics, do: record_review!(ctx, m, 3)
       {:ok, full} = record_estimate(ctx, ctx.admin)
-      assert Decimal.equal?(full.amount, "35000.00")
+      assert Decimal.equal?(full.amount, "70000.00")
 
       systems =
         Enum.find(
@@ -410,8 +427,8 @@ defmodule Emisint.Improvement.PaymentEstimateTest do
 
       {:ok, corrected} = record_estimate(ctx, ctx.admin)
 
-      # Systems (3 × 7 + 0) ÷ 8 = 2.625; 2.625 × 0.70 + 3 × 0.30 = 2.7375; × 35,000 ÷ 3 = 31,937.50.
-      assert Decimal.equal?(corrected.amount, "31937.50")
+      # Systems (3 × 7 + 0) ÷ 8 = 2.625; 2.625 × 0.70 + 3 × 0.30 = 2.7375; × 70,000 ÷ 3 = 63,875.
+      assert Decimal.equal?(corrected.amount, "63875.00")
     end
   end
 

@@ -71,10 +71,14 @@ defmodule EmisintWeb.Improvement.NavigationTest do
            |> Enum.reject(&String.ends_with?(&1, "-provisional")) ==
              @participants
 
+    # Buildings aren't listed on the main dashboard (November 13, 2026).
     assert has_element?(
              view,
-             "#participant-warwick-public-school-district #school-warwick-middle-school"
+             ~s(#participant-warwick-public-school-district #school-warwick-public-school-district[href="/school-goals/warwick-public-school-district"])
            )
+
+    refute has_element?(view, "#school-warwick-middle-school")
+    refute html =~ ~s(href="/school-goals/warwick-middle-school")
 
     assert has_element?(view, "#participant-warwick-public-school-district-provisional")
     refute has_element?(view, "#participant-drayton-public-school-district-provisional")
@@ -199,11 +203,14 @@ defmodule EmisintWeb.Improvement.NavigationTest do
 
     {:ok, landing, _} = live(log_in(conn, member), "/school-goals")
 
+    # The card links to the one page this member can read, without listing buildings.
     assert has_element?(
              landing,
-             "#participant-drayton-public-school-district #school-drayton-elementary"
+             ~s(#participant-drayton-public-school-district #participant-link-drayton-public-school-district[href="/school-goals/drayton-elementary"]),
+             "Drayton"
            )
 
+    refute has_element?(landing, "#school-drayton-elementary")
     refute has_element?(landing, "#school-drayton-public-school-district")
     refute has_element?(landing, "#school-drayton-high-school")
   end

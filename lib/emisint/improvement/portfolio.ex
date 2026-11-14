@@ -49,10 +49,11 @@ defmodule Emisint.Improvement.Portfolio do
   (70%)` = score × 70%, `Outcomes Weighted (30%)` = score × 30%; `Overall
   Weighted Score` = their sum, only when both exist; `Performance %` =
   overall ÷ 3. The payout column is the existing payment estimate
-  (`Payment.summary/3`), not the workbook's `% × $70,000`: it uses each plan's
-  configured 18-month allocation and requires every metric's review rating.
-  It is "Not configured" when the plan has no payment terms and "Awaiting
-  review" until the ratings are complete. The workbook has no total row, so
+  (`Payment.summary/3`): the workbook's `% × $70,000` with the plan's
+  18-month allocation ($70,000 for every participant since November 13,
+  2026), but it requires every metric's review rating, so it is "Awaiting
+  review" until the ratings are complete (and "Not configured" for a plan
+  without terms). The workbook has no total row, so
   no portfolio payment total is calculated.
 
   Averages are exact decimals; rounding is for display only.
@@ -196,7 +197,11 @@ defmodule Emisint.Improvement.Portfolio do
     case Dashboard.load_plan(scope, school) do
       {:ok, defs} ->
         ratings = Dashboard.current_ratings(scope, school)
-        Map.merge(base, %{status: :loaded} |> Map.merge(figures(defs, ratings, weights)))
+        # `defs` and `ratings` are kept for the current-ratings payment
+        # preview (`PaymentPreview`), which reads the same data and writes nothing.
+        base
+        |> Map.merge(%{status: :loaded, defs: defs, ratings: ratings})
+        |> Map.merge(figures(defs, ratings, weights))
 
       {:error, :no_plan} ->
         Map.put(base, :status, :no_plan)
@@ -264,9 +269,15 @@ defmodule Emisint.Improvement.Portfolio do
     }
   end
 
-  # AVERAGEIF semantics: the mean of the scored ratings of the category's
-  # metrics (all metrics when `category` is nil); nil when none is scored.
-  defp average(metrics, ratings, category) do
+  @doc """
+  `AVERAGEIF` semantics: the mean of the scored ratings of the category's
+  metrics (all metrics when `category` is nil), as
+  `%{value, rated, total, na, applicable}`; `value` is nil when none is
+  scored. An explicit 0 counts; a missing, N/A or unavailable rating
+  doesn't. `na` counts metrics explicitly rated N/A (left out of
+  `applicable`); a missing rating stays applicable, never N/A.
+  """
+  def average(metrics, ratings, category) do
     in_scope = Enum.filter(metrics, &(category == nil or &1.category == category))
 
     scores =
@@ -275,7 +286,15 @@ defmodule Emisint.Improvement.Portfolio do
           score != nil,
           do: score
 
-    %{value: mean(scores), rated: length(scores), total: length(in_scope)}
+    na = Enum.count(in_scope, &match?(%{rating_state: :not_applicable}, ratings[&1.id]))
+
+    %{
+      value: mean(scores),
+      rated: length(scores),
+      total: length(in_scope),
+      na: na,
+      applicable: length(in_scope) - na
+    }
   end
 
   defp mean([]), do: nil

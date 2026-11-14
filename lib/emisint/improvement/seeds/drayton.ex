@@ -37,6 +37,11 @@ defmodule Emisint.Improvement.Seeds.Drayton do
     }
   end
 
+  @doc "Payment terms: the workbook's, shared by every participant (`Seeds.Participant.workbook_payment_terms/0`)."
+  defdelegate payment_terms,
+    to: Emisint.Improvement.Seeds.Participant,
+    as: :workbook_payment_terms
+
   def goal_plan do
     %{
       program: "nd_first_mou",
@@ -74,45 +79,50 @@ defmodule Emisint.Improvement.Seeds.Drayton do
 
   @doc """
   How the district's workbook goals are compared with the district's own
-  published ND Insights results (`Emisint.Improvement.ResultGoals`). G4-M1
-  ("Disengaged") is a candidate mapping to the district's Overall
-  Disengaged (`candidates`): its baseline match is evidence to investigate,
-  not a confirmation, so it is shown gray without a verdict. See `matching`
-  for the other metrics.
+  published ND Insights results (`Emisint.Improvement.ResultGoals`).
+  Confirmed by the user (November 12, 2026): G4-M1 ("Disengaged") counts
+  the district's Overall Disengaged and G4-M2 ("Engaged") its Overall
+  Committed. See `matching` for the other metrics.
   """
   def comparison do
     %{
       plan_start_year: plan_start_year(),
       workbook: [
         {"G4-M1", "% of students reporting as \"Disengaged\"", :engagement, :engagement_overall,
-         "Disengaged", "Overall Disengaged"}
+         "Disengaged", "Overall Disengaged"},
+        {"G4-M2", "% of students reporting as \"Engaged\"", :engagement, :engagement_overall,
+         "Committed", "Overall Committed"}
       ],
-      candidates: %{
+      # Confirmed by the user (November 12, 2026).
+      confirmed: %{engagement_population: :schoolwide},
+      confirmations: %{
         "G4-M1" =>
-          "G4-M1 doesn't name the survey category (Overall, Behavioral, Cognitive or Emotional). Its baseline (25%, Drayton Goals!D21) lies in the district's published Overall Disengaged range in both 2023-24 and 2024-25 (25%–29%), and in those years no other area's published range includes it (Emotional Disengaged was 25%–29% in 2022-23). Whether the baseline is a district or building figure is also unconfirmed. Confirming the category would enable a verdict. District rows only (InstitutionID 34019)."
+          "Confirmed by the user (November 12, 2026): “Disengaged” means the Engagement Survey's Overall Disengaged, the district's own published rows (InstitutionID 34019), all students.",
+        "G4-M2" =>
+          "Confirmed by the user (November 12, 2026): “Engaged” means the Engagement Survey's Overall Committed, the district's own published rows (InstitutionID 34019), all students."
       },
       assumptions: %{},
       grade_reference: nil,
       matching:
-        "G4-M1 (\"Disengaged\") is a candidate mapping to the district's Engagement Survey Overall Disengaged (lower is better), shown gray without a verdict until the survey category is confirmed: the workbook doesn't name it, and the baseline match (25% lies in the published Overall Disengaged range in 2023-24 and 2024-25) is evidence to investigate, not a confirmation. Its 18-month target is empty; its 36-month target “< 18%” would be compared as an inequality (below 18% meets). G1-M1 and G2-M1 count students in grades 3-10 meeting growth-or-proficiency criteria (interim at 18 months, summative ND A+ at 36 months), which Insights doesn't publish; G2-M3 uses interim assessments. G4-M2 counts \"Engaged\", which isn't an Insights level, so it isn't compared. The other metrics are local measures (NAVVY training, PBIS recognition records, Marzano rubric scores, low-income monitoring, staff efficacy). The state results on this page are the district's own published rows (InstitutionID 34019); building results are on each building's dashboard and are never averaged or combined here.",
+        "G4-M1 (\"Disengaged\") is matched to the district's Engagement Survey Overall Disengaged (lower is better) and G4-M2 (\"Engaged\") to its Overall Committed (higher is better), all students (confirmed by the user, November 12, 2026). Neither has an 18-month target (the cells are empty); the 36-month targets are “< 18%” and “> 39%”, compared as inequalities. G1-M1 and G2-M1 count students in grades 3-10 meeting growth-or-proficiency criteria (interim at 18 months, summative ND A+ at 36 months), which Insights doesn't publish; G2-M3 uses interim assessments. The other metrics are local measures (NAVVY training, PBIS recognition records, Marzano rubric scores, low-income monitoring, staff efficacy). The state results on this page are the district's own published rows (InstitutionID 34019); building results are on each building's dashboard and are never averaged or combined here.",
       assumptions_text:
-        "No assumptions are applied for Drayton Public School District. G4-M1's survey category is unconfirmed: Overall is a candidate because its baseline lies in the district's published Overall Disengaged range, so the comparison is shown gray, without a verdict. G4-M2 (\"Engaged\") stays uncompared: its baseline (29%) lies in the published Overall Committed range (25%–29% in 2024-25), but whether “Engaged” means Insights' Committed level needs confirmation.",
+        "No assumptions are applied for Drayton Public School District. Confirmed by the user (November 12, 2026): G4-M1 counts the district's Overall Disengaged and G4-M2 its Overall Committed.",
       assumptions_short:
-        "No assumptions for Drayton: G4-M1 → the district's Overall Disengaged is a candidate mapping awaiting confirmation (gray, no verdict); G4-M2 awaits confirmation that “Engaged” means Committed. Annual targets are compared on each building's dashboard.",
+        "Drayton: G4-M1 → the district's Overall Disengaged and G4-M2 → Overall Committed (confirmed, November 12, 2026). Annual targets are compared on each building's dashboard.",
       section_notes: %{
         achievement:
           "District results (InstitutionID 34019). No workbook goal is matched to them, and the plan sets annual targets per building, not for the district.",
         growth:
           "Drayton's growth goals (G1-M1, G2-M1) count individual growth-or-proficiency criteria, which Insights doesn't publish, so growth results have no school goal.",
         engagement:
-          "District Overall Disengaged is shown with G4-M1 as a candidate mapping, gray without a verdict until the survey category is confirmed (no 18-month target; 36-month target “< 18%”). Not compared: G4-M2 counts “Engaged”, which isn't an Insights level; its baseline (29%) lies in the Overall Committed range, but that reading needs confirmation."
+          "District Overall Disengaged is compared with G4-M1 (36-month target “< 18%”) and Overall Committed with G4-M2 (36-month target “> 39%”); neither has an 18-month target. Both mappings were confirmed by the user (November 12, 2026)."
       },
       annual_note:
         "The continuous improvement plan lists annual Proficient-or-Advanced targets per building (Drayton Elementary School pp.7-9, Drayton High School pp.9-10), not for the district. They are compared on each building's dashboard with that building's own results.",
       report_notes: [
         "Workbook provenance [W]. Baselines, targets and Spring/Summer '26 ratings were imported from “ND First School MOU Goal Overview.xlsx” (sheet “Drayton Goals”); the cell is shown with each value. The workbook does not record who entered each value. Values marked “as written” are shown exactly as in the workbook.",
         "Scope. The workbook goals are written for the district, so they appear only on this participant dashboard; they are not copied to the buildings. Building annual targets (Drayton Elementary School pp.7-9, Drayton High School pp.9-10) appear only on each building's dashboard.",
-        "Still to confirm. G4-M1's survey category (Overall is a candidate because its baseline lies in the district's published Overall Disengaged range; no verdict until confirmed) and whether its baseline (25%) is a district or building figure; G4-M2's \"Engaged\" definition; G2-M3's baseline \"< 10%\" and targets for the elementary low-income group; G4-M4's text targets (\"Monitored\"); the goal titles (the sheet gives none, so each goal's full text is its title)."
+        "Still to confirm. G2-M3's baseline \"< 10%\" and targets for the elementary low-income group; G4-M4's text targets (\"Monitored\"); the goal titles (the sheet gives none, so each goal's full text is its title)."
       ]
     }
   end
